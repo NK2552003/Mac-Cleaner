@@ -1,0 +1,182 @@
+"""
+Mac Deep Cleaner v1.0.0 — Scanner Module
+======================================
+Core scanning logic for orphan detection and general junk discovery.
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Set
+
+from constants import SEARCH_ROOTS
+from scanners.matching import match_to_app
+from config.models import AppInfo, JunkEntry, OrphanEntry
+from core.safety import (
+    is_system_cache,
+    is_system_safe,
+    resolve_group_container,
+)
+from utils import derive_display_name, iterdir_safe
+
+
+def _scan_roots(extra_roots: Optional[Iterable[Path]] = None) -> List[Path]:
+    """Return built-in scan roots plus configured custom roots, deduplicated."""
+    roots: List[Path] = []
+    seen: Set[Path] = set()
+    for root in list(SEARCH_ROOTS) + list(extra_roots or []):
+        try:
+            resolved = root.expanduser().resolve()
+        except OSError:
+            resolved = root.expanduser()
+        if resolved not in seen:
+            seen.add(resolved)
+            roots.append(resolved)
+    return roots
+
+
+def classify_root(root: Path) -> str:
+    """Classify a search root into a human-readable category."""
+    s = str(root).lower()
+    if "application support" in s:
+        return "App Support"
+    if "caches" in s:
+        return "Caches"
+    if "preferences" in s:
+        return "Preferences"
+    if "containers" in s or "groups" in s:
+        return "Containers"
+    if "logs" in s:
+        return "Logs"
+    if "Trash" in s or ".Trash" in s:
+        return "Trash"
+    return "Other"
+
+
+def scan_orphans(
+    apps: List[AppInfo],
+    whitelist_set: Set[Path],
+    running_bids: Set[str],
+    roots: Optional[Iterable[Path]] = None,
+    enabled: bool = True,
+) -> Dict[str, List[OrphanEntry]]:
+    """Scan for orphaned app leftovers."""
+    if not enabled:
+        return {}
+
+    matched_paths: Dict[Path, str] = {}
+    scan_roots = _scan_roots(roots)
+
+    # Match search roots to known apps
+    for root in scan_roots:
+        if not root.is_dir():
+            continue
+        for item in iterdir_safe(root):
+            if not item.name.endswith((".plist", ".lproj", ".savedState")):
+                continue
+            display = derive_display_name(item)
+            matched = match_to_app(display, apps)
+            if matched:
+                matched_paths[item] = matched
+
+    # Scan orphan leftovers (items not matched to any installed app)
+    orphans: Dict[str, List[OrphanEntry]] = defaultdict(list)
+    seen: Set[Path] = set()
+
+    for root in scan_roots:
+        if not root.is_dir():
+            continue
+        category = classify_root(root)
+        for item in iterdir_safe(root):
+            if item in seen:
+                continue
+            seen.add(item)
+
+            # Skip whitelisted paths
+            if item in whitelist_set or any(wl in item.parents for wl in whitelist_set):
+                continue
+
+            display = derive_display_name(item)
+            matched = match_to_app(display, apps)
+
+            # Skip items matched to running bundle IDs
+            if matched and matched.bundle_id in running_bids:
+                continue
+
+            if not matched:
+                # Confirm it's an orphan
+                try:
+                    fsize = item.stat().st_size
+                except OSError:
+                    continue
+                if fsize == 0:
+                    continue
+                leaf = OrphanEntry(
+                    path=item,
+                    size=fsize,
+                    reason=category,
+                    category=category,
+                    app_name=display or item.stem,
+                    bundle_id="",
+                    vendor="Unknown",
+                )
+                orphans[leaf.app_name].append(leaf)
+
+    return dict(orphans)
+
+
+def scan_junk(
+    whitelist_set: Set[Path],
+    roots: Optional[Iterable[Path]] = None,
+    skip_categories: Optional[Set[str]] = None,
+    enabled: bool = True,
+) -> List[JunkEntry]:
+    """Scan for user junk: caches, logs, .Trash items, etc."""
+    if not enabled:
+        return []
+
+    junk: List[JunkEntry] = []
+    seen: Set[Path] = set()
+    skip_categories = skip_categories or set()
+
+    for root in _scan_roots(roots):
+        if not root.is_dir():
+            continue
+        category = classify_root(root)
+        if category in skip_categories:
+            continue
+        for item in iterdir_safe(root):
+            if item in seen:
+                continue
+            seen.add(item)
+
+            # Skip whitelisted
+            if item in whitelist_set or any(wl in item.parents for wl in whitelist_set):
+                continue
+
+            try:
+                is_candidate = item.is_file() or item.is_symlink()
+            except OSError:
+                continue
+            if not is_candidate:
+                continue
+            try:
+                fsize = item.stat().st_size
+            except OSError:
+                continue
+            if fsize == 0:
+                continue
+
+            # Determine if system-owned
+            is_system = str(item).startswith("/System")
+
+            junk.append(JunkEntry(
+                path=item,
+                size=fsize,
+                category=category,
+                is_system=is_system,
+                bundle_id="",
+            ))
+
+    return junk
