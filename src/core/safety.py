@@ -188,36 +188,50 @@ def is_apple_owned_pref(name: str) -> bool:
     return False
 
 
-def is_apple_user_library_path(path: Path) -> Tuple[bool, str]:
+def _library_relative(path: Path) -> Optional[str]:
     """
-    Check if a path under ~/Library/ is an Apple-owned system file that must
-    NOT be deleted.
-
-    Returns:
-        (is_protected, reason) — is_protected=True means the path must NOT be deleted.
+    Extract the relative path within a Library directory.
+    Supports both ~/Library/ and /Library/.
+    Returns None if the path is not inside any Library directory.
     """
     path_str = str(path).lower()
     home_str = str(HOME).lower()
 
-    # Only applies to paths under the user's Library
-    if not path_str.startswith(home_str + "/library/"):
+    # Check user's Library (~/Library/)
+    user_prefix = home_str + "/library/"
+    if path_str.startswith(user_prefix):
+        return path_str[len(user_prefix):]
+
+    # Check system Library (/Library/)
+    if path_str.startswith("/library/"):
+        relative = path_str[len("/library/"):]
+        return relative
+
+    return None
+
+
+def is_apple_user_library_path(path: Path) -> Tuple[bool, str]:
+    """
+    Check if a path under a Library directory is an Apple-owned system file
+    that must NOT be deleted.
+
+    Supports both ~/Library/ and /Library/ paths.
+
+    Returns:
+        (is_protected, reason) — is_protected=True means the path must NOT be deleted.
+    """
+    relative = _library_relative(path)
+    if relative is None:
         return False, ""
 
-    # Get the relative path within ~/Library/
-    lib_prefix = home_str + "/library/"
-    relative = path_str[len(lib_prefix):]
-
     # ── ByHost directory — contains per-host preferences ──────────────────
-    # e.g. ~/Library/Preferences/ByHost/com.apple.loginwindow.*
+    # e.g. Library/Preferences/ByHost/com.apple.loginwindow.*
     if "byhost" in relative:
-        # The ByHost directory itself is system-managed
         if path.name.lower() == "byhost":
             return True, "ByHost preferences directory"
-        # Items inside ByHost directory
         name_part = path.name.lower()
         if "com.apple" in name_part:
             return True, "Apple per-host preference (ByHost)"
-        # All .plist files in ByHost are system-managed
         if path.suffix == ".plist":
             return True, "ByHost preference"
 
@@ -225,19 +239,21 @@ def is_apple_user_library_path(path: Path) -> Tuple[bool, str]:
     relative_lower = relative.lower()
     if relative_lower.startswith("preferences/"):
         pref_name = path.name.lower()
-        # Match against protected Apple preference stems
         if is_apple_owned_pref(pref_name):
             return True, f"Protected Apple preference: {path.name}"
-        # Any com.apple.* pref is system-owned unless matched to an installed app
-        if pref_name.startswith("com.apple.") and pref_name.endswith(".plist"):
-            return True, f"Apple system preference: {path.name}"
+        if pref_name.endswith(".plist"):
+            # Any .plist pref containing "com.apple." anywhere is Apple-owned
+            if "com.apple." in pref_name:
+                return True, f"Apple system preference: {path.name}"
+            # systemgroup.com.apple. patterns
+            if pref_name.startswith("systemgroup.com.apple."):
+                return True, f"Apple system group preference: {path.name}"
 
     # ── Caches/ directory — Apple-owned cache entries ─────────────────────
     if relative_lower.startswith("caches/"):
         cache_name = path.name.lower()
         if is_system_cache(cache_name):
             return True, f"Apple system cache: {cache_name}"
-        # Cache directories matching com.apple.*
         if cache_name.startswith("com.apple.") and path.is_dir():
             return True, f"Apple cache directory: {cache_name}"
 
@@ -282,6 +298,28 @@ def is_apple_user_library_path(path: Path) -> Tuple[bool, str]:
         cookie_name = path.name.lower()
         if cookie_name.startswith("com.apple."):
             return True, f"Apple cookie: {cookie_name}"
+
+    # ── LaunchAgents/ and LaunchDaemons/ — Apple plists ───────────────────
+    if relative_lower.startswith("launchagents/") or relative_lower.startswith("launchdaemons/"):
+        launch_name = path.name.lower()
+        if "com.apple." in launch_name:
+            return True, f"Apple launch plist: {path.name}"
+
+    # ── PrivilegedHelperTools/ — Apple helpers ────────────────────────────
+    if relative_lower.startswith("privilegedhelpertools/"):
+        helper_name = path.name.lower()
+        if "com.apple." in helper_name:
+            return True, f"Apple privileged helper: {path.name}"
+
+    # ── Logs/ — Apple logs ────────────────────────────────────────────────
+    if relative_lower.startswith("logs/"):
+        log_name = path.name.lower()
+        if log_name.startswith("com.apple."):
+            return True, f"Apple log: {log_name}"
+
+    # ── WebKit/ — Apple webkit data ───────────────────────────────────────
+    if relative_lower.startswith("webkit/"):
+        return True, "WebKit system data"
 
     return False, ""
 

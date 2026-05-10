@@ -185,6 +185,12 @@ def scan_junk(
             # Determine if system-owned
             is_system = str(item).startswith("/System")
 
+            # Also mark Apple-owned files in user Library as system junk
+            if not is_system:
+                apple_protected, _ = is_apple_user_library_path(item)
+                if apple_protected:
+                    is_system = True
+
             junk.append(JunkEntry(
                 path=item,
                 size=fsize,
