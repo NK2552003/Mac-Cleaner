@@ -14,9 +14,11 @@ from constants import SEARCH_ROOTS
 from scanners.matching import match_to_app
 from config.models import AppInfo, JunkEntry, OrphanEntry
 from core.safety import (
+    is_apple_user_library_path,
     is_system_cache,
     is_system_safe,
     resolve_group_container,
+    validate_path_for_deletion,
 )
 from utils import derive_display_name, iterdir_safe
 
@@ -55,7 +57,7 @@ def classify_root(root: Path) -> str:
 
 
 def scan_orphans(
-    apps: List[AppInfo],
+    apps: Dict[str, AppInfo],
     whitelist_set: Set[Path],
     running_bids: Set[str],
     roots: Optional[Iterable[Path]] = None,
@@ -65,7 +67,7 @@ def scan_orphans(
     if not enabled:
         return {}
 
-    matched_paths: Dict[Path, str] = {}
+    matched_paths: Dict[Path, AppInfo] = {}
     scan_roots = _scan_roots(roots)
 
     # Match search roots to known apps
@@ -75,7 +77,7 @@ def scan_orphans(
         for item in iterdir_safe(root):
             if not item.name.endswith((".plist", ".lproj", ".savedState")):
                 continue
-            display = derive_display_name(item)
+            display = derive_display_name(str(item))
             matched = match_to_app(display, apps)
             if matched:
                 matched_paths[item] = matched
@@ -97,7 +99,7 @@ def scan_orphans(
             if item in whitelist_set or any(wl in item.parents for wl in whitelist_set):
                 continue
 
-            display = derive_display_name(item)
+            display = derive_display_name(str(item))
             matched = match_to_app(display, apps)
 
             # Skip items matched to running bundle IDs
@@ -105,6 +107,18 @@ def scan_orphans(
                 continue
 
             if not matched:
+                # Safety check: skip Apple-owned system files
+                # (e.g. com.apple.SetupAssistant.plist, ByHost prefs, etc.)
+                if is_system_safe(item.name):
+                    continue
+                protected, _ = is_apple_user_library_path(item)
+                if protected:
+                    continue
+                # Also reject items that fail the final deletion validation
+                safe, _ = validate_path_for_deletion(item)
+                if not safe:
+                    continue
+
                 # Confirm it's an orphan
                 try:
                     fsize = item.stat().st_size

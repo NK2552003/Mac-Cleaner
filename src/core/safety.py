@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Dict, Optional, Set, Tuple
 
 from constants import (
+    PROTECTED_APPLE_PREF_STEMS,
     SYSTEM_CACHE_PREFIXES,
     SYSTEM_EXACT_SAFELIST,
     SYSTEM_GROUP_PREFIXES,
@@ -20,6 +21,8 @@ from constants import (
     SYSTEM_PREF_PATTERNS,
     TEAM_ID_MAP,
 )
+
+HOME = Path.home()
 
 
 def is_system_safe(name: str) -> bool:
@@ -154,6 +157,135 @@ def running_bundle_ids() -> Set[str]:
     return result
 
 
+def is_apple_owned_pref(name: str) -> bool:
+    """
+    Returns True if a preference filename stem is an Apple system preference
+    that must never be treated as orphan junk.
+
+    This covers com.apple.* pref files whose corresponding .app is NOT
+    discoverable via the standard APP_SEARCH_DIRS (e.g. SetupAssistant,
+    loginwindow, etc.).
+    """
+    n = name.lower().strip()
+    stem = Path(name).stem.lower().strip()
+
+    # Fast check: if "com.apple." is not present, it's likely not Apple-owned
+    if "com.apple." not in n:
+        return False
+
+    # Check against the protected pref stems table
+    for protected_stem in PROTECTED_APPLE_PREF_STEMS:
+        # Exact match
+        if stem == protected_stem:
+            return True
+        # Stem starts with protected prefix (e.g. "com.apple.siri" matches "com.apple.siri.suggestions")
+        if stem.startswith(protected_stem + "."):
+            return True
+        # Stem starts with protected stem (e.g. protected "com.apple.security" matches "com.apple.security.csp")
+        if protected_stem.startswith(stem + "."):
+            return True
+
+    return False
+
+
+def is_apple_user_library_path(path: Path) -> Tuple[bool, str]:
+    """
+    Check if a path under ~/Library/ is an Apple-owned system file that must
+    NOT be deleted.
+
+    Returns:
+        (is_protected, reason) — is_protected=True means the path must NOT be deleted.
+    """
+    path_str = str(path).lower()
+    home_str = str(HOME).lower()
+
+    # Only applies to paths under the user's Library
+    if not path_str.startswith(home_str + "/library/"):
+        return False, ""
+
+    # Get the relative path within ~/Library/
+    lib_prefix = home_str + "/library/"
+    relative = path_str[len(lib_prefix):]
+
+    # ── ByHost directory — contains per-host preferences ──────────────────
+    # e.g. ~/Library/Preferences/ByHost/com.apple.loginwindow.*
+    if "byhost" in relative:
+        # The ByHost directory itself is system-managed
+        if path.name.lower() == "byhost":
+            return True, "ByHost preferences directory"
+        # Items inside ByHost directory
+        name_part = path.name.lower()
+        if "com.apple" in name_part:
+            return True, "Apple per-host preference (ByHost)"
+        # All .plist files in ByHost are system-managed
+        if path.suffix == ".plist":
+            return True, "ByHost preference"
+
+    # ── Preferences/ directory ────────────────────────────────────────────
+    relative_lower = relative.lower()
+    if relative_lower.startswith("preferences/"):
+        pref_name = path.name.lower()
+        # Match against protected Apple preference stems
+        if is_apple_owned_pref(pref_name):
+            return True, f"Protected Apple preference: {path.name}"
+        # Any com.apple.* pref is system-owned unless matched to an installed app
+        if pref_name.startswith("com.apple.") and pref_name.endswith(".plist"):
+            return True, f"Apple system preference: {path.name}"
+
+    # ── Caches/ directory — Apple-owned cache entries ─────────────────────
+    if relative_lower.startswith("caches/"):
+        cache_name = path.name.lower()
+        if is_system_cache(cache_name):
+            return True, f"Apple system cache: {cache_name}"
+        # Cache directories matching com.apple.*
+        if cache_name.startswith("com.apple.") and path.is_dir():
+            return True, f"Apple cache directory: {cache_name}"
+
+    # ── Application Support/ — Apple-owned support dirs ───────────────────
+    if relative_lower.startswith("application support/"):
+        support_name = path.name.lower()
+        if support_name.startswith("com.apple."):
+            return True, f"Apple application support: {support_name}"
+
+    # ── Saved Application State/ — Apple saved states ─────────────────────
+    if relative_lower.startswith("saved application state/"):
+        state_name = path.name.lower()
+        if state_name.startswith("com.apple."):
+            return True, f"Apple saved state: {state_name}"
+
+    # ── Containers/ — Apple-owned containers ──────────────────────────────
+    if relative_lower.startswith("containers/"):
+        container_name = path.name.lower()
+        if container_name.startswith("com.apple."):
+            return True, f"Apple container: {container_name}"
+
+    # ── Group Containers/ — Apple-owned group containers ──────────────────
+    if relative_lower.startswith("group containers/"):
+        safe, owner = resolve_group_container(path.name)
+        if safe:
+            return True, f"System group container: {owner}"
+
+    # ── SyncedPreferences/ — Apple iCloud sync prefs ──────────────────────
+    if relative_lower.startswith("syncedpreferences/"):
+        sync_name = path.name.lower()
+        if sync_name.startswith("com.apple."):
+            return True, f"Apple synced preference: {sync_name}"
+
+    # ── HTTPStorages/ — Apple HTTP storage ────────────────────────────────
+    if relative_lower.startswith("httpstorages/"):
+        storage_name = path.name.lower()
+        if storage_name.startswith("com.apple."):
+            return True, f"Apple HTTP storage: {storage_name}"
+
+    # ── Cookies/ — Apple cookies ──────────────────────────────────────────
+    if relative_lower.startswith("cookies/"):
+        cookie_name = path.name.lower()
+        if cookie_name.startswith("com.apple."):
+            return True, f"Apple cookie: {cookie_name}"
+
+    return False, ""
+
+
 def validate_path_for_deletion(path: Path) -> Tuple[bool, str]:
     """
     Final safety gate before any deletion.
@@ -175,11 +307,16 @@ def validate_path_for_deletion(path: Path) -> Tuple[bool, str]:
             return False, f"Protected {protected} directory"
 
     # Never delete the Library directory itself
-    if path_str.rstrip("/") in ("/library", str(Path.home() / "Library").lower()):
+    if path_str.rstrip("/") in ("/library", str(HOME / "Library").lower()):
         return False, "Library root directory"
 
     # Never delete Home directory
-    if path == Path.home():
+    if path == HOME:
         return False, "Home directory"
+
+    # Check for Apple-owned files in user's Library
+    apple_protected, reason = is_apple_user_library_path(path)
+    if apple_protected:
+        return False, reason
 
     return True, ""
