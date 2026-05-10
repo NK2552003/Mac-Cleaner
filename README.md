@@ -85,21 +85,6 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-### Via Homebrew (tap)
-```bash
-brew tap yourname/tap
-brew install yourname/tap/mac-deep-cleaner
-```
-
-### Build a distributable wheel
-```bash
-bash build.sh          # wheel + sdist
-bash build.sh venv     # create .venv and install
-bash build.sh test     # compile + CLI smoke checks
-bash build.sh pkg      # build unsigned local .pkg installer
-bash build.sh all      # venv + build + install into venv
-```
-
 ---
 
 ## Usage
@@ -223,16 +208,6 @@ mac-cleaner schedule status
 mac-cleaner schedule remove
 ```
 
-### Package installer
-```bash
-# Builds dist/mac-deep-cleaner-1.0.0.pkg after explaining installer access
-bash scripts/build_pkg.sh
-```
-
-The `.pkg` installs a launcher in `/usr/local/bin` and an isolated runtime under
-`/Library/Application Support/mac-deep-cleaner`. macOS asks for administrator
-approval for those locations. Full Disk Access is still user-controlled in
-System Settings and is not granted by the package.
 
 ### Self-update
 ```bash
@@ -314,30 +289,3 @@ profiles:
 ## License
 
 Apache 2.0
-
-## Installing it in Venv for testing purpose
-
-```shell
-# Unzip/copy the project folder, then:
-cd mac_deep_cleaner
-bash scripts/build.sh venv          # creates .venv + editable install
-source .venv/bin/activate
-
-# Safe read-only scan — touches nothing
-mac-cleaner scan
-```
-
-
-
-
-## Installing It Globally 
-
-```shell
-cd mac_deep_cleaner
-bash scripts/build.sh build      # builds dist/*.whl
-bash scripts/build.sh install    # installs for your user
-
-mac-cleaner --version
-mac-cleaner info         # shows safety guarantees, never touches files
-mac-cleaner scan         # full preview scan — 100% safe, deletes nothing
-```
