@@ -23,6 +23,24 @@ from core.safety import (
 from utils import derive_display_name, iterdir_safe
 
 
+def _is_app_owned_junk(item: Path, apps: Dict[str, AppInfo]) -> bool:
+    """Check whether a file/directory belongs to an installed app.
+
+    Returns True if the item's name matches a known installed app,
+    meaning it should not be reported as general junk.
+    """
+    display = derive_display_name(str(item))
+    matched = match_to_app(display, apps)
+    if matched:
+        return True
+    # Also try matching on the raw filename (stem) for plist files
+    raw_stem = item.stem.lower()
+    matched = match_to_app(raw_stem, apps)
+    if matched:
+        return True
+    return False
+
+
 def _scan_roots(extra_roots: Optional[Iterable[Path]] = None) -> List[Path]:
     """Return built-in scan roots plus configured custom roots, deduplicated."""
     roots: List[Path] = []
@@ -142,11 +160,16 @@ def scan_orphans(
 
 def scan_junk(
     whitelist_set: Set[Path],
+    apps: Optional[Dict[str, AppInfo]] = None,
     roots: Optional[Iterable[Path]] = None,
     skip_categories: Optional[Set[str]] = None,
     enabled: bool = True,
 ) -> List[JunkEntry]:
-    """Scan for user junk: caches, logs, .Trash items, etc."""
+    """Scan for user junk: caches, logs, .Trash items, etc.
+
+    Files that belong to installed applications (matched via `apps`) are
+    skipped so they don't appear as general junk.
+    """
     if not enabled:
         return []
 
@@ -182,6 +205,10 @@ def scan_junk(
             if fsize == 0:
                 continue
 
+            # Skip files that belong to installed apps (e.g. iTerm2 plist)
+            if apps and _is_app_owned_junk(item, apps):
+                continue
+
             # Determine if system-owned
             is_system = str(item).startswith("/System")
 
@@ -189,6 +216,11 @@ def scan_junk(
             if not is_system:
                 apple_protected, _ = is_apple_user_library_path(item)
                 if apple_protected:
+                    is_system = True
+
+            # Mark any other system-safe files as system junk
+            if not is_system:
+                if is_system_safe(item.name):
                     is_system = True
 
             junk.append(JunkEntry(

@@ -241,6 +241,8 @@ def is_apple_user_library_path(path: Path) -> Tuple[bool, str]:
         pref_name = path.name.lower()
         if is_apple_owned_pref(pref_name):
             return True, f"Protected Apple preference: {path.name}"
+        if is_system_preference(pref_name):
+            return True, f"Apple system preference: {path.name}"
         if pref_name.endswith(".plist"):
             # Any .plist pref containing "com.apple." anywhere is Apple-owned
             if "com.apple." in pref_name:

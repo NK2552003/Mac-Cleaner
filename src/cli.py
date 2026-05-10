@@ -246,6 +246,7 @@ def cmd_dashboard(profile: Optional[str], custom_roots: Tuple[str, ...]) -> None
         state["status"] = "Scanning caches, logs, and trash..."
         junk = scan_junk(
             whitelist_set,
+            apps=apps,
             roots=cfg.custom_scan_roots,
             skip_categories=cfg.skip_categories,
             enabled=cfg.scan_junk,
@@ -1316,6 +1317,7 @@ def _run(
             "Scanning caches, logs, trash…",
             lambda: scan_junk(
                 whitelist_set,
+                apps=apps,
                 roots=cfg.custom_scan_roots,
                 skip_categories=cfg.skip_categories,
                 enabled=cfg.scan_junk,

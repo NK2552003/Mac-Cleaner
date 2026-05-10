@@ -486,6 +486,8 @@ SYSTEM_KEYWORD_SAFELIST: Set[str] = {
     # Dev tools (system-bundled)
     "homebrew", "git", "node", "ruby", "python", "pip", "cargo",
     "java", "openjdk", "llvm", "clang", "docker", "kubectl",
+    # CUPS / printing
+    "cups", "org.cups",
     # Crash / diagnostics
     "crashreporter", "diagnosticreports", "savedapplicationstate",
     "containermanagerd", "addressbook", "dataaccessd",
