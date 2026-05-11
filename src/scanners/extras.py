@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — iOS Backup & Language Pack Scanner
+Mac Deep Cleaner v1.2.0 — iOS Backup & Language Pack Scanner
 ==========================================================
 
 iOS Backup Finder
@@ -25,6 +25,7 @@ and lproj removal) is handled by cleaner.py using the entries returned here.
 from __future__ import annotations
 
 import locale
+import logging
 import plistlib
 import subprocess
 from dataclasses import dataclass, field
@@ -34,6 +35,8 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from constants import HOME
 from utils import bytes_human, iterdir_safe, size_of
+
+logger = logging.getLogger(__name__)
 
 # ── iOS Backup ─────────────────────────────────────────────────────────────────
 
@@ -116,7 +119,8 @@ def _parse_backup(path: Path) -> Optional[IOSBackup]:
                 ios_version=str(ios_version),
                 last_backup_date=last_backup,
             )
-        except (plistlib.InvalidFileException, OSError, KeyError, ValueError):
+        except (plistlib.InvalidFileException, OSError, KeyError, ValueError) as exc:
+            logger.debug("Failed to read backup plist %s: %s", plist_path, exc)
             continue
 
     # No readable plist — still report the directory
@@ -175,8 +179,8 @@ def _system_preferred_locales() -> Set[str]:
             keep.add(lang.replace("-", "_"))
             keep.add(lang.split("-")[0])
             keep.add(lang.split("_")[0])
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Failed to read AppleLanguages: %s", exc)
 
     # Fallback: Python locale
     try:
@@ -184,8 +188,8 @@ def _system_preferred_locales() -> Set[str]:
         if lc:
             keep.add(lc)
             keep.add(lc.split("_")[0])
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Failed to read default locale: %s", exc)
 
     return keep
 
@@ -237,8 +241,8 @@ def _lprojs_in_bundle(app_path: Path) -> List[Path]:
                 for child in candidate.iterdir():
                     if child.suffix == ".lproj" and child.is_dir():
                         lprojs.append(child)
-            except (PermissionError, OSError):
-                pass
+            except (PermissionError, OSError) as exc:
+                logger.debug("Language pack scan failed for %s: %s", item, exc)
     return lprojs
 
 

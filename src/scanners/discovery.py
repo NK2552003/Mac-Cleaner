@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — App Discovery
+Mac Deep Cleaner v1.2.0 — App Discovery
 =====================================
 Discovers all installed applications by scanning standard macOS
 app directories and reading Info.plist files.
@@ -7,12 +7,15 @@ app directories and reading Info.plist files.
 
 from __future__ import annotations
 
+import logging
 import plistlib
 from pathlib import Path
 from typing import Dict
 
 from constants import APP_SEARCH_DIRS
 from config.models import AppInfo
+
+logger = logging.getLogger(__name__)
 
 
 def _ingest_app(app_path: Path, apps: Dict[str, AppInfo]) -> None:
@@ -43,8 +46,8 @@ def _ingest_app(app_path: Path, apps: Dict[str, AppInfo]) -> None:
             bundle_id=bid,
             path=app_path,
         )
-    except (plistlib.InvalidFileException, KeyError, OSError, ValueError):
-        pass
+    except (plistlib.InvalidFileException, KeyError, OSError, ValueError) as exc:
+        logger.debug("Failed to read Info.plist %s: %s", info_plist, exc)
 
 
 def _scan_directory(root: Path, apps: Dict[str, AppInfo], depth: int = 0) -> None:
@@ -59,8 +62,8 @@ def _scan_directory(root: Path, apps: Dict[str, AppInfo], depth: int = 0) -> Non
                 # Don't descend into .app bundles
                 if item.suffix != ".app":
                     _scan_directory(item, apps, depth + 1)
-    except PermissionError:
-        pass
+    except PermissionError as exc:
+        logger.debug("Permission denied scanning %s: %s", root, exc)
 
 
 def discover_installed_apps() -> Dict[str, AppInfo]:
@@ -83,7 +86,7 @@ def discover_installed_apps() -> Dict[str, AppInfo]:
                 for cask in cask_dir.iterdir():
                     if cask.is_dir():
                         _scan_directory(cask, apps, depth=1)
-            except PermissionError:
-                pass
+            except PermissionError as exc:
+                logger.debug("Permission denied scanning cask %s: %s", cask_dir, exc)
 
     return apps

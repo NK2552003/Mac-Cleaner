@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Universal Binary Thinner
+Mac Deep Cleaner v1.2.0 — Universal Binary Thinner
 ================================================
 Detects fat (universal) Mach-O binaries that contain both arm64 and x86_64
 slices, and optionally thins them to keep only the slice matching the current
@@ -28,6 +28,7 @@ Safety
 
 from __future__ import annotations
 
+import logging
 import platform
 import shutil
 import subprocess
@@ -37,6 +38,8 @@ from pathlib import Path
 from typing import Callable, List, Optional, Set, Tuple
 
 from utils import bytes_human, size_of
+
+logger = logging.getLogger(__name__)
 
 # ── Architecture detection ─────────────────────────────────────────────────────
 
@@ -124,7 +127,8 @@ def _is_universal(path: Path) -> bool:
         return "universal binary" in out and (
             "arm64" in out and "x86_64" in out
         )
-    except (subprocess.TimeoutExpired, OSError):
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.debug("file command failed for %s: %s", path, exc)
         return False
 
 
@@ -143,8 +147,8 @@ def _walk_executables(root: Path) -> List[Path]:
                     results.append(item)
             except OSError:
                 pass
-    except (PermissionError, OSError):
-        pass
+    except (PermissionError, OSError) as exc:
+        logger.debug("walk executables failed for %s: %s", root, exc)
     return results
 
 

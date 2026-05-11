@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — System Inspector
+Mac Deep Cleaner v1.2.0 — System Inspector
 ========================================
 Three sub-features bundled together because they share macOS system queries:
 
@@ -21,6 +21,7 @@ Three sub-features bundled together because they share macOS system queries:
 
 from __future__ import annotations
 
+import logging
 import plistlib
 import re
 import subprocess
@@ -30,6 +31,8 @@ from typing import List, Optional, Tuple
 
 from constants import HOME
 from utils import iterdir_safe
+
+logger = logging.getLogger(__name__)
 
 # ── LaunchAgent / LaunchDaemon ─────────────────────────────────────────────────
 
@@ -72,7 +75,8 @@ def _parse_launch_plist(path: Path, source: str, is_daemon: bool) -> Optional[La
     try:
         with open(path, "rb") as f:
             pl = plistlib.load(f)
-    except (plistlib.InvalidFileException, OSError, ValueError):
+    except (plistlib.InvalidFileException, OSError, ValueError) as exc:
+        logger.debug("Failed to parse launch plist %s: %s", path, exc)
         return None
 
     label = pl.get("Label", path.stem)
@@ -138,6 +142,7 @@ def disable_launch_item(item: LaunchItem) -> Tuple[bool, str]:
             return True, f"Disabled {item.label}"
         return False, result.stderr.strip() or "launchctl unload failed"
     except (subprocess.TimeoutExpired, OSError) as e:
+        logger.debug("launchctl unload failed for %s: %s", item.path, e)
         return False, str(e)
 
 
@@ -155,6 +160,7 @@ def enable_launch_item(item: LaunchItem) -> Tuple[bool, str]:
             return True, f"Enabled {item.label}"
         return False, result.stderr.strip() or "launchctl load failed"
     except (subprocess.TimeoutExpired, OSError) as e:
+        logger.debug("launchctl load failed for %s: %s", item.path, e)
         return False, str(e)
 
 
@@ -215,7 +221,8 @@ def list_login_items() -> List[LoginItem]:
             ))
         if items:
             return items
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+        logger.debug("sfltool login items failed: %s", exc)
         pass
 
     # Method 2: Legacy LoginItems plist (macOS < 13)
@@ -235,7 +242,8 @@ def list_login_items() -> List[LoginItem]:
                         enabled=True,
                         source="Legacy",
                     ))
-        except (plistlib.InvalidFileException, OSError, KeyError):
+        except (plistlib.InvalidFileException, OSError, KeyError) as exc:
+            logger.debug("Legacy login items parse failed: %s", exc)
             pass
 
     return items
@@ -285,7 +293,8 @@ def check_system_health() -> SystemHealth:
         sip_enabled = "enabled" in out.lower() and "disabled" not in out.lower()
         if not sip_enabled:
             warnings.append("System Integrity Protection (SIP) is DISABLED")
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+        logger.debug("csrutil status failed: %s", exc)
         sip_detail = "Unable to determine SIP status"
 
     # macOS version
@@ -295,7 +304,8 @@ def check_system_health() -> SystemHealth:
             ["sw_vers", "-productVersion"],
             capture_output=True, text=True, timeout=5,
         ).stdout.strip()
-    except (subprocess.TimeoutExpired, OSError):
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.debug("sw_vers failed: %s", exc)
         pass
 
     # Full Disk Access heuristic

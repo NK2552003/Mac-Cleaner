@@ -1,4 +1,4 @@
-# Mac Deep Cleaner — Features (v1.0.0)
+# Mac Deep Cleaner — Features (v1.2.0)
 
 **Mac Deep Cleaner** is a professional macOS cleanup tool that safely detects and helps you remove leftover data from uninstalled apps, along with general junk that accumulates over time. It is designed to be **safe by default**, with **preview-first** workflows and **undo/restore support**.
 
@@ -25,6 +25,11 @@ Finds common junk categories such as:
 - Xcode derived data / device support artifacts
 - Package manager caches (npm/pip/yarn/pnpm/gradle/maven/cargo/go/cocoapods)
 - Browser caches (Chrome/Firefox)
+
+### 2b) Developer Junk Scanner (opt-in)
+Finds project build output and dependency directories such as:
+- `node_modules`, `venv`, `__pycache__`, `target`, `bin/obj`, `dist`, `coverage`
+Optionally includes global caches (e.g., `~/.npm`, `~/.gradle`, `~/.m2`, `~/.cargo`, `~/.nuget`).
 
 ### 3) Duplicate File Finder (by hash)
 Identifies duplicates using **two-phase hashing** for speed and accuracy, allowing you to:

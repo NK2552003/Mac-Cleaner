@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mac Deep Cleaner v1.0.0 — CLI Entry Point
+Mac Deep Cleaner v1.2.0 — CLI Entry Point
 =======================================
 All subcommands, new and updated.
 
@@ -25,6 +25,7 @@ Subcommands
 
 from __future__ import annotations
 
+import logging
 import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -70,7 +71,9 @@ from reporting.reporter import (
 from core.safety import running_bundle_ids
 from core.scanner import scan_junk, scan_orphans
 from core.undo import list_sessions, new_session, restore_session, stage_file
-from utils import bytes_human
+from utils import bytes_human, configure_logging
+
+logger = logging.getLogger(__name__)
 
 
 # ── Shared progress helper ─────────────────────────────────────────────────────
@@ -134,9 +137,17 @@ def _ensure_first_run_profile(profile: Optional[str], ci: bool) -> Optional[str]
 
 @click.group(invoke_without_command=True)
 @click.version_option(version=__version__, prog_name="Mac Deep Cleaner")
+@click.option("--verbose", is_flag=True, default=False,
+              help="Enable debug logging to file.")
+@click.option("--log-file", type=click.Path(), default=None,
+              help="Write logs to a file (default: ~/.config/mac-cleaner/mac-cleaner.log).")
 @click.pass_context
-def main(ctx: click.Context) -> None:
-    """Mac Deep Cleaner v1.0.0 — Professional macOS cleanup tool."""
+def main(ctx: click.Context, verbose: bool, log_file: Optional[str]) -> None:
+    """Mac Deep Cleaner v1.2.0 — Professional macOS cleanup tool."""
+    configure_logging(
+        verbose=verbose,
+        log_file=Path(log_file) if log_file else None,
+    )
     if ctx.invoked_subcommand is None:
         ctx.invoke(scan)
 
@@ -154,6 +165,8 @@ def main(ctx: click.Context) -> None:
 @click.option("--profile", default=None, help="Config profile to use.")
 @click.option("--dev-junk", is_flag=True, default=False,
               help="Scan developer junk (node_modules, venv, build dirs).")
+@click.option("--dev-junk-global", is_flag=True, default=False,
+              help="Include global caches (~/.npm, ~/.gradle, etc).")
 @click.option("--dev-root", "dev_roots", multiple=True, type=click.Path(exists=True),
               help="Additional developer roots to scan for dev junk.")
 @click.option("--root", "custom_roots", multiple=True, type=click.Path(exists=True),
@@ -175,6 +188,7 @@ def scan(
     show_apps: bool,
     profile: Optional[str],
     dev_junk: bool,
+    dev_junk_global: bool,
     dev_roots: Tuple[str, ...],
     custom_roots: Tuple[str, ...],
     notify: bool,
@@ -190,7 +204,6 @@ def scan(
     --profile developer|minimal|aggressive applies preset settings.
     """
     profile = _ensure_first_run_profile(profile=profile, ci=ci)
-    profile = _ensure_first_run_profile(profile=profile, ci=False)
     cfg = load_config(profile=profile)
 
     # CLI whitelist overrides config whitelist
@@ -212,6 +225,7 @@ def scan(
         save_history=save_history,
         cfg=cfg,
         dev_junk=dev_junk,
+        dev_junk_global=dev_junk_global,
         ci=ci,
         threshold_mb=threshold_mb,
     )
@@ -225,6 +239,8 @@ def scan(
 @click.option("--profile", default=None, help="Config profile to use.")
 @click.option("--dev-junk", is_flag=True, default=False,
               help="Scan developer junk (node_modules, venv, build dirs).")
+@click.option("--dev-junk-global", is_flag=True, default=False,
+              help="Include global caches (~/.npm, ~/.gradle, etc).")
 @click.option("--dev-root", "dev_roots", multiple=True, type=click.Path(exists=True),
               help="Additional developer roots to scan for dev junk.")
 @click.option("--root", "custom_roots", multiple=True, type=click.Path(exists=True),
@@ -232,6 +248,7 @@ def scan(
 def cmd_dashboard(
     profile: Optional[str],
     dev_junk: bool,
+    dev_junk_global: bool,
     dev_roots: Tuple[str, ...],
     custom_roots: Tuple[str, ...],
 ) -> None:
@@ -244,6 +261,7 @@ def cmd_dashboard(
     cfg.custom_scan_roots.extend(Path(p).expanduser().resolve() for p in custom_roots)
     cfg.dev_junk_roots.extend(Path(p).expanduser().resolve() for p in dev_roots)
     cfg.scan_dev_junk = bool(cfg.scan_dev_junk or dev_junk)
+    cfg.scan_dev_junk_global = bool(getattr(cfg, "scan_dev_junk_global", False) or dev_junk_global)
     whitelist_set = cfg.whitelist_set
 
     layout = Layout()
@@ -374,6 +392,7 @@ def cmd_dashboard(
             dev_junk_entries = find_dev_junk(
                 roots=cfg.dev_junk_roots or None,
                 max_depth=cfg.dev_junk_max_depth,
+                include_global=bool(getattr(cfg, "scan_dev_junk_global", False)),
             )
             if whitelist_set:
                 dev_junk_entries = [
@@ -409,6 +428,8 @@ def cmd_dashboard(
 @click.option("--profile", default=None)
 @click.option("--dev-junk", is_flag=True, default=False,
               help="Scan and clean developer junk (node_modules, venv, build dirs).")
+@click.option("--dev-junk-global", is_flag=True, default=False,
+              help="Include global caches (~/.npm, ~/.gradle, etc).")
 @click.option("--dev-root", "dev_roots", multiple=True, type=click.Path(exists=True),
               help="Additional developer roots to scan for dev junk.")
 @click.option("--root", "custom_roots", multiple=True, type=click.Path(exists=True),
@@ -423,6 +444,7 @@ def clean(
     export_path: Optional[str],
     profile: Optional[str],
     dev_junk: bool,
+    dev_junk_global: bool,
     dev_roots: Tuple[str, ...],
     custom_roots: Tuple[str, ...],
     notify: bool,
@@ -457,6 +479,7 @@ def clean(
         cfg=cfg,
         undo_mode=undo_mode,
         dev_junk=dev_junk,
+        dev_junk_global=dev_junk_global,
     )
 
 
@@ -1391,6 +1414,7 @@ def _run(
     cfg,
     undo_mode: bool = True,
     dev_junk: bool = False,
+    dev_junk_global: bool = False,
     ci: bool = False,
     threshold_mb: int = 0,
 ) -> None:
@@ -1412,7 +1436,8 @@ def _run(
             prog.update(task, completed=100, total=100)
             return value
 
-    dev_junk_enabled = bool(cfg.scan_dev_junk or dev_junk)
+    dev_junk_enabled = bool(cfg.scan_dev_junk or dev_junk or dev_junk_global)
+    dev_junk_global_enabled = bool(getattr(cfg, "scan_dev_junk_global", False) or dev_junk_global)
     total_steps = 5 if dev_junk_enabled else 4
 
     # Step 1: discover apps
@@ -1495,6 +1520,7 @@ def _run(
             lambda: find_dev_junk(
                 roots=cfg.dev_junk_roots or None,
                 max_depth=cfg.dev_junk_max_depth,
+                include_global=dev_junk_global_enabled,
             ),
         )
         if whitelist_set:
@@ -1561,8 +1587,8 @@ def _run(
             from config.history import build_scan_record
             record = build_scan_record(orphans, junk, dev_junk=dev_junk_entries, profile=profile)
             record.save()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to save scan history: %s", exc)
 
     # Export
     if export_path:
@@ -1573,6 +1599,7 @@ def _run(
                 export_html(orphans, junk, dev_junk_entries, export_path)
                 console.print(f"  [green]✓ HTML report: {export_path}[/green]")
             except Exception as e:
+                logger.debug("HTML export failed: %s", e)
                 console.print(f"  [red]✗ HTML export failed: {e}[/red]")
         else:
             export_json(orphans, junk, dev_junk_entries, export_path)
@@ -1592,8 +1619,8 @@ def _run(
                     f"Dev: {bytes_human(dev_junk_total)}"
                 ),
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to send notification: %s", exc)
 
     if grand == 0:
         console.print("\n[bold green]✓ Your Mac is spotless! Nothing to clean.[/bold green]\n")
@@ -1610,8 +1637,8 @@ def _run(
                     f"  [dim]↑ {len(diff.new_orphans)} new orphan(s) since last scan. "
                     f"Run 'mac-cleaner diff' to see details.[/dim]"
                 )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Diff hint failed: %s", exc)
 
     if delete:
         if auto:

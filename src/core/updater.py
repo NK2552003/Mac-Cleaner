@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Self-Update
+Mac Deep Cleaner v1.2.0 — Self-Update
 ===================================
 Checks PyPI for a newer version and upgrades the package in-place using pip.
 
@@ -20,11 +20,14 @@ Design
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 import urllib.error
 import urllib.request
 from typing import Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 PYPI_URL = "https://pypi.org/pypi/mac-deep-cleaner/json"
 PACKAGE_NAME = "mac-deep-cleaner"
@@ -70,7 +73,8 @@ def fetch_latest_version() -> Optional[str]:
         with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
             data = json.loads(resp.read().decode())
         return data["info"]["version"]
-    except (urllib.error.URLError, KeyError, ValueError, OSError):
+    except (urllib.error.URLError, KeyError, ValueError, OSError) as exc:
+        logger.debug("PyPI request failed: %s", exc)
         return None
 
 
@@ -117,6 +121,8 @@ def perform_upgrade(latest_version: Optional[str] = None) -> Tuple[bool, str]:
             return True, result.stdout.strip() or f"Successfully upgraded to {latest_version}"
         return False, result.stderr.strip() or "pip upgrade failed"
     except subprocess.TimeoutExpired:
+        logger.debug("pip upgrade timed out")
         return False, "Upgrade timed out after 120 seconds"
     except OSError as e:
+        logger.debug("pip upgrade failed: %s", e)
         return False, str(e)

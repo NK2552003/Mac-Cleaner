@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Reporter Module
+Mac Deep Cleaner v1.2.0 — Reporter Module
 =======================================
 Beautiful terminal output using Rich library.
 Tables, trees, panels, and progress indicators.
@@ -92,6 +92,14 @@ DEV_JUNK_ICONS: Dict[str, str] = {
     "PHP Vendor": "■",
     "Build Output": "◆",
     "Coverage": "◇",
+    "Global Cache (Node)": "◇",
+    "Global Cache (Python)": "◇",
+    "Global Cache (Java)": "◇",
+    "Global Cache (Go)": "◇",
+    "Global Cache (Rust)": "◇",
+    "Global Cache (Dotnet)": "◇",
+    "Global Cache (Ruby)": "◇",
+    "Global Cache (PHP)": "◇",
 }
 
 
@@ -99,7 +107,7 @@ def print_banner() -> None:
     """Print the application banner."""
     banner = Text()
     banner.append("Mac Deep Cleaner", style="bold cyan")
-    banner.append("  v1.0.0", style="dim cyan")
+    banner.append("  v1.2.0", style="dim cyan")
     banner.append("  —  Professional Edition", style="dim")
 
     console.print()
@@ -374,13 +382,14 @@ def print_instructions() -> None:
     table.add_row("mac-cleaner scan --export results.json", "Export to JSON")
     table.add_row("mac-cleaner clean --whitelist PATH", "Protect a path")
     table.add_row("mac-cleaner scan --dev-junk", "Scan developer modules (node_modules, venv)")
+    table.add_row("mac-cleaner scan --dev-junk-global", "Include global caches (~/.npm, ~/.gradle)")
 
     console.print(table)
     console.print()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# v1.0.0 Additions (merged from reporter_v5.py)
+# v1.2.0 Additions (merged from reporter_v5.py)
 # ═════════════════════════════════════════════════════════════════════════════
 
 from typing import Any

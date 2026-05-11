@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Configuration Manager
+Mac Deep Cleaner v1.2.0 — Configuration Manager
 =============================================
 Reads and writes a YAML config file at ~/.config/mac-cleaner/config.yaml.
 
@@ -18,6 +18,7 @@ dev_junk_roots:
     - ~/Code
 
 scan_dev_junk: false
+scan_dev_junk_global: false
 dev_junk_max_depth: 6
 
 custom_scan_roots:
@@ -51,9 +52,12 @@ Usage
 from __future__ import annotations
 
 import copy
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
+
+logger = logging.getLogger(__name__)
 
 try:
     import yaml
@@ -146,6 +150,7 @@ class Config:
     scan_orphans: bool = True
     scan_junk: bool = True
     scan_dev_junk: bool = False
+    scan_dev_junk_global: bool = False
     undo_mode: bool = True
     retention_days: int = 30
     notify_after_scan: bool = False
@@ -195,6 +200,7 @@ class Config:
             "scan_orphans": self.scan_orphans,
             "scan_junk": self.scan_junk,
             "scan_dev_junk": self.scan_dev_junk,
+            "scan_dev_junk_global": self.scan_dev_junk_global,
             "undo_mode": self.undo_mode,
             "retention_days": self.retention_days,
             "notify_after_scan": self.notify_after_scan,
@@ -218,6 +224,7 @@ class Config:
             "scan_orphans": self.scan_orphans,
             "scan_junk": self.scan_junk,
             "scan_dev_junk": self.scan_dev_junk,
+            "scan_dev_junk_global": self.scan_dev_junk_global,
             "undo_mode": self.undo_mode,
             "retention_days": self.retention_days,
             "large_file_threshold_mb": self.large_file_threshold_mb,
@@ -236,8 +243,8 @@ def _expand(paths: List[Any]) -> List[Path]:
     for p in paths:
         try:
             result.append(Path(str(p)).expanduser().resolve())
-        except (TypeError, ValueError):
-            pass
+        except (TypeError, ValueError) as exc:
+            logger.debug("Invalid config path entry: %s", exc)
     return result
 
 
@@ -271,8 +278,8 @@ def load_config(
                 loaded = yaml.safe_load(f) or {}
             if isinstance(loaded, dict):
                 raw = loaded
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to load config %s: %s", config_path, exc)
 
     # Resolve active profile
     active_profile = profile or raw.get("profile")
@@ -298,6 +305,7 @@ def load_config(
         scan_orphans=bool(effective.get("scan_orphans", True)),
         scan_junk=bool(effective.get("scan_junk", True)),
         scan_dev_junk=bool(effective.get("scan_dev_junk", False)),
+        scan_dev_junk_global=bool(effective.get("scan_dev_junk_global", False)),
         undo_mode=bool(effective.get("undo_mode", True)),
         retention_days=int(effective.get("retention_days", 30)),
         notify_after_scan=bool(effective.get("notify_after_scan", False)),

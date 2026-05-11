@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Undo / Restore (Staged Deletion)
+Mac Deep Cleaner v1.2.0 — Undo / Restore (Staged Deletion)
 ========================================================
 Instead of permanently deleting files, mac-cleaner moves them to a staging
 area (~/.mac_cleaner_trash/) with a JSON manifest so they can be restored.
@@ -18,6 +18,7 @@ Thread safety: manifest writes are not concurrent; the CLI is single-threaded.
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -27,6 +28,8 @@ from typing import Dict, List, Optional, Tuple
 
 from constants import HOME
 from utils import bytes_human, size_of
+
+logger = logging.getLogger(__name__)
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
@@ -168,8 +171,8 @@ def _purge_session(session: DeletionSession) -> None:
                     shutil.rmtree(staged)
                 else:
                     staged.unlink()
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("Failed to purge staged file %s: %s", staged, exc)
     session.manifest_path.unlink(missing_ok=True)
 
 
@@ -195,7 +198,8 @@ def stage_file(
 
     try:
         shutil.move(str(path), str(staging_path))
-    except (shutil.Error, OSError):
+    except (shutil.Error, OSError) as exc:
+        logger.debug("Failed to move to staging for %s: %s", path, exc)
         # Fallback: copy then delete
         try:
             if path.is_dir():
@@ -205,6 +209,7 @@ def stage_file(
                 shutil.copy2(path, staging_path)
                 path.unlink()
         except (shutil.Error, OSError) as e:
+            logger.debug("Failed staging fallback for %s: %s", path, e)
             return False, 0
 
     session.files.append(StagedFile(
@@ -259,6 +264,7 @@ def restore_session(session: DeletionSession) -> RestoreResult:
             result.restored += 1
             result.bytes_restored += f.size
         except (shutil.Error, OSError) as e:
+            logger.debug("Restore failed for %s: %s", f.original_path, e)
             result.failed += 1
             result.errors.append(f"{f.original_path}: {e}")
 

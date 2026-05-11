@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Large File Scanner
+Mac Deep Cleaner v1.2.0 — Large File Scanner
 ==========================================
 Finds files above a configurable size threshold anywhere on disk
 (or within user-specified roots). Results are sorted by size and
@@ -16,6 +16,7 @@ Design notes
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,6 +24,8 @@ from typing import Callable, Generator, List, Optional, Set
 
 from constants import HOME
 from utils import bytes_human
+
+logger = logging.getLogger(__name__)
 
 # Default threshold
 DEFAULT_MIN_BYTES: int = 100 * 1024 * 1024  # 100 MB
@@ -151,8 +154,8 @@ def _walk(root: Path) -> Generator[os.DirEntry, None, None]:  # type: ignore[typ
                         yield from _walk(Path(entry.path))
                 elif entry.is_file(follow_symlinks=False):
                     yield entry
-    except (PermissionError, OSError):
-        pass
+    except (PermissionError, OSError) as exc:
+        logger.debug("walk failed for %s: %s", root, exc)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -188,7 +191,8 @@ def find_large_files(
                 progress_callback(scanned)
             try:
                 st = entry.stat(follow_symlinks=False)
-            except OSError:
+            except OSError as exc:
+                logger.debug("stat failed for %s: %s", entry.path, exc)
                 continue
             if st.st_size >= min_bytes:
                 results.append(LargeFileEntry(

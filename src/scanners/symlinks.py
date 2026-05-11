@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Broken Symlink Detector
+Mac Deep Cleaner v1.2.0 — Broken Symlink Detector
 ===============================================
 Finds dangling symbolic links in developer-relevant directories
 (e.g. /usr/local, ~/bin, ~/.local/bin, Homebrew prefixes).
@@ -16,6 +16,7 @@ Safety
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +24,8 @@ from typing import Callable, Generator, List, Optional, Set
 
 from constants import HOME
 from utils import bytes_human
+
+logger = logging.getLogger(__name__)
 
 # Default roots for broken-symlink scanning
 DEFAULT_ROOTS: List[Path] = [
@@ -93,8 +96,8 @@ def _walk_symlinks(
                     yield Path(entry.path)
                 elif entry.is_dir(follow_symlinks=False):
                     yield from _walk_symlinks(Path(entry.path), depth + 1)
-    except (PermissionError, OSError):
-        pass
+    except (PermissionError, OSError) as exc:
+        logger.debug("walk symlinks failed for %s: %s", root, exc)
 
 
 def _is_broken(path: Path) -> bool:
@@ -142,7 +145,8 @@ def find_broken_symlinks(
 
             try:
                 real = link_path.resolve()
-            except (OSError, ValueError):
+            except (OSError, ValueError) as exc:
+                logger.debug("resolve failed for %s: %s", link_path, exc)
                 real = link_path
 
             if real in seen:

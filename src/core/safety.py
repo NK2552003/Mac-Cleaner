@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Safety Module
+Mac Deep Cleaner v1.2.0 — Safety Module
 =====================================
 All safety checks, safelist lookups, and system-file protection logic.
 Ensures that system-critical files are NEVER deleted.
@@ -7,6 +7,7 @@ Ensures that system-critical files are NEVER deleted.
 
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 from pathlib import Path
@@ -23,6 +24,7 @@ from constants import (
 )
 
 HOME = Path.home()
+logger = logging.getLogger(__name__)
 
 
 def is_system_safe(name: str) -> bool:
@@ -140,7 +142,8 @@ def is_process_running(name_fragment: str) -> bool:
             capture_output=True, timeout=5,
         )
         return result.returncode == 0
-    except Exception:
+    except Exception as exc:
+        logger.debug("pgrep failed for %s: %s", name_fragment, exc)
         return False
 
 
@@ -156,7 +159,8 @@ def running_bundle_ids() -> Set[str]:
             m = re.search(r'"bundleID"\s*=\s*"([^"]+)"', line)
             if m:
                 result.add(m.group(1).lower())
-    except Exception:
+    except Exception as exc:
+        logger.debug("lsappinfo failed: %s", exc)
         pass
     return result
 

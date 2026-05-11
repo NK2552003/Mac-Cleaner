@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Developer Junk Scanner
+Mac Deep Cleaner v1.2.0 — Developer Junk Scanner
 ==============================================
 Finds language-specific build output and dependency directories
 (e.g., node_modules, venv, target, bin/obj) inside project folders.
@@ -10,13 +10,19 @@ when nearby project marker files are detected.
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 from typing import Iterable, List, Optional, Set, Tuple
 
 from constants import DEFAULT_DEV_JUNK_ROOTS, DEV_JUNK_MARKER_DEPTH, DEV_JUNK_SKIP_DIRS
 from config.models import DevJunkEntry
 from utils import iterdir_safe, size_of
+
+logger = logging.getLogger(__name__)
+
+HOME = Path.home()
 
 
 @dataclass(frozen=True)
@@ -75,6 +81,28 @@ _RULES: List[DevJunkRule] = [
     DevJunkRule("Coverage", {"coverage", ".coverage", ".nyc_output"}, _GENERIC_MARKERS),
 ]
 
+_GLOBAL_CACHE_DIRS: List[Tuple[str, Path]] = [
+    ("Global Cache (Node)", HOME / ".npm"),
+    ("Global Cache (Node)", HOME / ".yarn"),
+    ("Global Cache (Node)", HOME / ".pnpm-store"),
+    ("Global Cache (Node)", HOME / ".pnpm"),
+    ("Global Cache (Node)", HOME / ".node-gyp"),
+    ("Global Cache (Python)", HOME / ".cache" / "pip"),
+    ("Global Cache (Python)", HOME / ".cache" / "pypoetry"),
+    ("Global Cache (Python)", HOME / ".cache" / "uv"),
+    ("Global Cache (Python)", HOME / ".virtualenvs"),
+    ("Global Cache (Java)", HOME / ".gradle" / "caches"),
+    ("Global Cache (Java)", HOME / ".m2" / "repository"),
+    ("Global Cache (Java)", HOME / ".ivy2" / "cache"),
+    ("Global Cache (Java)", HOME / ".sbt"),
+    ("Global Cache (Go)", HOME / "go" / "pkg" / "mod"),
+    ("Global Cache (Rust)", HOME / ".cargo" / "registry"),
+    ("Global Cache (Rust)", HOME / ".cargo" / "git"),
+    ("Global Cache (Dotnet)", HOME / ".nuget" / "packages"),
+    ("Global Cache (Ruby)", HOME / ".bundle" / "cache"),
+    ("Global Cache (PHP)", HOME / ".composer" / "cache"),
+]
+
 
 def _resolve_roots(roots: Optional[Iterable[Path]]) -> List[Path]:
     resolved: List[Path] = []
@@ -82,7 +110,8 @@ def _resolve_roots(roots: Optional[Iterable[Path]]) -> List[Path]:
     for root in roots or DEFAULT_DEV_JUNK_ROOTS:
         try:
             r = root.expanduser().resolve()
-        except OSError:
+        except OSError as exc:
+            logger.debug("Failed to resolve dev junk root %s: %s", root, exc)
             r = root.expanduser()
         if r not in seen and r.exists():
             seen.add(r)
@@ -123,18 +152,31 @@ def _match_rule(path: Path) -> Optional[DevJunkRule]:
     return None
 
 
+def _global_cache_entries(seen: Set[Path]) -> List[DevJunkEntry]:
+    entries: List[DevJunkEntry] = []
+    for category, path in _GLOBAL_CACHE_DIRS:
+        if not path.exists() or path in seen:
+            continue
+        sz = size_of(path)
+        if sz > 0:
+            entries.append(DevJunkEntry(path=path, category=category, size=sz))
+            seen.add(path)
+    return entries
+
+
 def find_dev_junk(
     roots: Optional[Iterable[Path]] = None,
     max_depth: int = 6,
     limit: Optional[int] = None,
+    include_global: bool = False,
 ) -> List[DevJunkEntry]:
     """Return dev junk directories found under the given roots."""
     entries: List[DevJunkEntry] = []
     seen: Set[Path] = set()
 
-    queue: List[Tuple[Path, int]] = [(r, 0) for r in _resolve_roots(roots)]
+    queue = deque((r, 0) for r in _resolve_roots(roots))
     while queue:
-        current, depth = queue.pop(0)
+        current, depth = queue.popleft()
         if current in seen:
             continue
         seen.add(current)
@@ -159,4 +201,8 @@ def find_dev_junk(
                     queue.append((child, depth + 1))
 
     entries.sort(key=lambda e: e.size, reverse=True)
+
+    if include_global:
+        entries.extend(_global_cache_entries(seen))
+        entries.sort(key=lambda e: e.size, reverse=True)
     return entries

@@ -1,10 +1,10 @@
 """
-Mac Deep Cleaner v1.0.0 — Cleaner Module
+Mac Deep Cleaner v1.2.0 — Cleaner Module
 ======================================
 Handles deletion of orphan and junk files with safety checks,
 audit logging, and optional staged-deletion (undo) support.
 
-Changes from v1.0.0
+Changes from v1.2.0
 ---------------
 - do_cleanup() now accepts an optional `session` parameter.
   When provided, files are moved to the staging area (undo.stage_file)
@@ -16,6 +16,7 @@ Changes from v1.0.0
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -28,6 +29,8 @@ from config.models import JunkEntry, OrphanEntry
 from core.safety import validate_path_for_deletion
 from utils import bytes_human, safe_remove
 
+logger = logging.getLogger(__name__)
+
 console = Console()
 
 
@@ -38,7 +41,7 @@ def write_deletion_log(entries: List[Tuple[str, int]]) -> None:
     try:
         with open(LOG_FILE, "a") as f:
             f.write(f"\n{'=' * 60}\n")
-            f.write(f"Mac Deep Cleaner v1.0.0 — Deletion Log\n")
+            f.write(f"Mac Deep Cleaner v1.2.0 — Deletion Log\n")
             f.write(f"Timestamp: {datetime.now().isoformat()}\n")
             f.write(f"Items deleted: {len(entries)}\n")
             f.write(f"Total freed: {bytes_human(sum(s for _, s in entries))}\n")
@@ -46,8 +49,8 @@ def write_deletion_log(entries: List[Tuple[str, int]]) -> None:
             for path_str, size in entries:
                 f.write(f"  {bytes_human(size):>10}  {path_str}\n")
             f.write("\n")
-    except OSError:
-        pass
+    except OSError as exc:
+        logger.debug("Failed to write deletion log: %s", exc)
 
 
 def do_cleanup(
