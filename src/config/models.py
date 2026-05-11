@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Data Models
+Mac Deep Cleaner v1.2.0 — Data Models
 ==================================
 Immutable data classes for apps, orphan entries, and junk entries.
 """
@@ -111,5 +111,24 @@ class JunkEntry:
             "category": self.category,
             "is_system": self.is_system,
             "bundle_id": self.bundle_id,
+            "size": self.size,
+        }
+
+
+@dataclass
+class DevJunkEntry:
+    """Developer junk directory (build output, venv, node_modules, etc.)."""
+    path: Path
+    category: str = "Other"
+    size: int = 0
+
+    def __post_init__(self) -> None:
+        if self.size <= 0:
+            self.size = size_of(self.path)
+
+    def to_dict(self) -> dict:
+        return {
+            "path": str(self.path),
+            "category": self.category,
             "size": self.size,
         }

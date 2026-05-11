@@ -1,9 +1,9 @@
 """
-Mac Deep Cleaner v1.0.0 — Constants & Configuration
+Mac Deep Cleaner v1.2.0 — Constants & Configuration
 =================================================
 All safelists, alias tables, search roots, and configuration constants.
 
-Changes from v1.0.0
+Changes from v1.2.0
 ---------------
 - Added CONFIG_DIR (used by config.py, history.py, scheduler.py)
 - Expanded APP_DIR_ALIASES: legacy aliases retained, ~30 new entries added
@@ -21,7 +21,7 @@ from typing import Dict, List, Set
 
 HOME = Path.home()
 LOG_FILE = HOME / ".mac_cleaner_deleted.log"
-CONFIG_DIR = HOME / ".config" / "mac-cleaner"          # NEW in v1.0.0
+CONFIG_DIR = HOME / ".config" / "mac-cleaner"          # NEW in v1.2.0
 
 # ── Scan roots ────────────────────────────────────────────────────────────────
 
@@ -79,7 +79,7 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "microsoft teams":                  "com.microsoft.teams",
     "microsoft teams (work or school)": "com.microsoft.teams2",
     "microsoft teams classic":          "com.microsoft.teams",
-    # v1.0.0: short-form aliases for Microsoft apps
+    # v1.2.0: short-form aliases for Microsoft apps
     "excel":                            "com.microsoft.excel",
     "word":                             "com.microsoft.word",
     "powerpoint":                       "com.microsoft.powerpoint",
@@ -97,7 +97,7 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "google chrome canary":             "com.google.chrome.canary",
     "google drive":                     "com.google.drivefs",
     "google earth pro":                 "com.google.googleearthpro",
-    # v1.0.0
+    # v1.2.0
     "googledrive":                      "com.google.drivefs",
 
     # ── JetBrains ─────────────────────────────────────────────────────────
@@ -116,7 +116,7 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "appcode":                          "com.jetbrains.appcode",
     "fleet":                            "com.jetbrains.fleet",
     "jetbrains toolbox":                "com.jetbrains.toolbox",
-    # v1.0.0
+    # v1.2.0
     "jetbrains toolbox app":            "com.jetbrains.toolbox",
 
     # ── Browsers ──────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "tor browser":                      "org.torproject.torbrowser",
     "waterfox":                         "net.nickolaj.nickelodeon",
     "sidekick":                         "com.nicklodeon.nickelodeon",
-    # v1.0.0: extra short-form browser aliases
+    # v1.2.0: extra short-form browser aliases
     "brave":                            "com.brave.browser",
     "edge":                             "com.microsoft.edgemac",
 
@@ -184,7 +184,7 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "ia writer":                        "pro.writer.mac",
     "devonthink 3":                     "com.devon-technologies.think3",
     "devonthink":                       "com.devon-technologies.think3",
-    # v1.0.0
+    # v1.2.0
     "linear":                           "com.linear.linear",
     "superhuman":                       "com.superhuman.desktop",
 
@@ -204,7 +204,7 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "gimp":                             "org.gimp.gimp-2.10",
     "canva":                            "com.canva.canva",
     "principle":                        "com.principleformac.principle",
-    # v1.0.0
+    # v1.2.0
     "pixelmator":                       "com.pixelmatorteam.pixelmator",
 
     # ── Dev tools ─────────────────────────────────────────────────────────
@@ -236,7 +236,7 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "coderunner":                       "com.krill.coderunner",
     "coteditor":                        "com.coteditor.coteditor",
     "textedit":                         "com.apple.textedit",
-    # v1.0.0
+    # v1.2.0
     "simulator":                        "com.apple.iphonesimulator",
     "xcode":                            "com.apple.dt.xcode",
     "textmate":                         "com.macromates.textmate",
@@ -353,7 +353,7 @@ APP_DIR_ALIASES: Dict[str, str] = {
 # ── Apple Developer Team ID → owner name ─────────────────────────────────────
 
 TEAM_ID_MAP: Dict[str, str] = {
-    # ── v1.0.0 original entries (verbatim) ────────────────────────────────────
+    # ── v1.2.0 original entries (verbatim) ────────────────────────────────────
     "ubf8t346g9": "Microsoft Office",
     "2bua8c4s2c": "1Password",
     "7pkpll4vld": "Dropbox",
@@ -393,7 +393,7 @@ TEAM_ID_MAP: Dict[str, str] = {
     "t9um3f5r6t": "Spark / Readdle",
     "w5364u7y5r": "Canva",
 
-    # ── v1.0.0 additions ──────────────────────────────────────────────────────
+    # ── v1.2.0 additions ──────────────────────────────────────────────────────
     "ug75gva3v9": "Microsoft (general)",
     "jq525l2msd": "Adobe",
     "g7hh3359t7": "Dropbox",
@@ -500,7 +500,7 @@ SYSTEM_KEYWORD_SAFELIST: Set[str] = {
 # ── Exact-stem safelist — the stem (lowercased) matches exactly ───────────────
 
 SYSTEM_EXACT_SAFELIST: Set[str] = {
-    # ── v1.0.0 original entries (verbatim) ────────────────────────────────────
+    # ── v1.2.0 original entries (verbatim) ────────────────────────────────────
 
     # Networking / directory
     "systemconfiguration", "opendirectory", "directoryservice",
@@ -526,6 +526,7 @@ SYSTEM_EXACT_SAFELIST: Set[str] = {
     "proapps",          # Final Cut ecosystem
     "livefsd",
     "knowledge",        # Siri on-device intelligence
+    "desktop pictures",
     "baseband",
     # Dev artefacts (not apps)
     "typescript",       # VS Code language server cache
@@ -597,7 +598,7 @@ SYSTEM_EXACT_SAFELIST: Set[str] = {
     "storedownloadd",
     "commerced",
 
-    # ── v1.0.0 additions ──────────────────────────────────────────────────────
+    # ── v1.2.0 additions ──────────────────────────────────────────────────────
     "apsd",
     "appleid",
     "airplay",
@@ -689,6 +690,51 @@ SYSTEM_PREF_PATTERNS: Set[str] = {
     "nsglobal",
 }
 
+# ── Shared components to never treat as orphan/junk ─────────────────────────
+
+ORPHAN_ALWAYS_SKIP_PREFIXES: Set[str] = {
+    "com.plausiblelabs.crashreporter",
+    "com.telemetrydeck",
+    "telemetrysignalcache",
+}
+
+ORPHAN_ALWAYS_SKIP_NAMES: Set[str] = {
+    "default.store",
+    "default.store-shm",
+    "default.store-wal",
+}
+
+# ── Vendor-owned shared components (skip only if owner app is installed) ────
+
+MICROSOFT_SUITE_PREFIXES: Set[str] = {
+    "com.microsoft.office",
+    "com.microsoft.word",
+    "com.microsoft.excel",
+    "com.microsoft.powerpoint",
+    "com.microsoft.outlook",
+    "com.microsoft.onenote",
+    "com.microsoft.onenote.mac",
+    "com.microsoft.teams",
+    "com.microsoft.teams2",
+    "com.microsoft.onedrive",
+    "com.microsoft.edgemac",
+}
+
+VENDOR_COMPONENT_OWNERS: Dict[str, Set[str]] = {
+    "com.microsoft.office": MICROSOFT_SUITE_PREFIXES,
+    "com.microsoft.office.licensing": MICROSOFT_SUITE_PREFIXES,
+    "com.microsoft.office.licensingv2": MICROSOFT_SUITE_PREFIXES,
+    "com.microsoft.autoupdate": MICROSOFT_SUITE_PREFIXES,
+    "com.microsoft.autoupdate2": MICROSOFT_SUITE_PREFIXES,
+    "com.microsoft.onedriveupdater": {"com.microsoft.onedrive"},
+    "com.microsoft.onedrivestandaloneupdater": {"com.microsoft.onedrive"},
+    "com.microsoft.syncreporter": {"com.microsoft.onedrive", "com.microsoft.teams"},
+    "com.microsoft.sharepoint": {"com.microsoft.onedrive", "com.microsoft.outlook", "com.microsoft.teams"},
+    "com.microsoft.shared": MICROSOFT_SUITE_PREFIXES,
+    "com.google.keystone": {"com.google"},
+    "com.google.googleupdater": {"com.google"},
+}
+
 # ── Production scanner defaults ──────────────────────────────────────────────
 
 DEFAULT_DUPLICATE_ROOTS: List[Path] = [
@@ -710,6 +756,23 @@ DEFAULT_SYMLINK_ROOTS: List[Path] = [
     HOME / ".config",
     HOME / "Library" / "LaunchAgents",
 ]
+
+# ── Developer junk scan defaults ─────────────────────────────────────────────
+
+DEFAULT_DEV_JUNK_ROOTS: List[Path] = [
+    HOME / "Projects",
+    HOME / "Development",
+    HOME / "Code",
+    HOME / "Workspace",
+    HOME / "Documents",
+]
+
+DEV_JUNK_SKIP_DIRS: Set[str] = {
+    ".git", ".hg", ".svn", ".idea", ".vscode", ".cache", ".DS_Store",
+    "Library", "System", ".Trash",
+}
+
+DEV_JUNK_MARKER_DEPTH: int = 3
 
 JUNK_CATEGORY_DESCRIPTIONS: Dict[str, str] = {
     "App Support": "Application support leftovers and orphaned app state",
@@ -761,6 +824,35 @@ APP_DIR_ALIASES.update({
     "istat menus": "com.bjango.istatmenus",
     "cleanmymac": "com.macpaw.CleanMyMac",
     "little snitch": "at.obdev.LittleSnitch",
+    "adobe photoshop": "com.adobe.photoshop",
+    "adobe illustrator": "com.adobe.illustrator",
+    "adobe indesign": "com.adobe.indesign",
+    "adobe acrobat": "com.adobe.acrobat",
+    "adobe audition": "com.adobe.audition",
+    "adobe bridge": "com.adobe.bridge",
+    "lightroom classic": "com.adobe.lightroomclassic",
+    "capture one": "com.captureone.captureone",
+    "capture one pro": "com.captureone.captureone",
+    "photomator": "com.pixelmatorteam.photomator",
+    "luminar neo": "com.skylum.luminarneo",
+    "luminar ai": "com.skylum.luminarai",
+    "skylum luminar": "com.skylum.luminar",
+    "final cut pro": "com.apple.finalcut",
+    "logic pro": "com.apple.logic",
+    "garageband": "com.apple.garageband",
+    "imovie": "com.apple.imovie",
+    "capcut": "com.bytedance.capcut",
+    "obsidian": "md.obsidian",
+    "notion": "notion.id",
+    "canva": "com.canva.canva",
+    "microsoft 365": "com.microsoft.office",
+    "office": "com.microsoft.office",
+    "autodesk maya": "com.autodesk.maya",
+    "autodesk fusion": "com.autodesk.fusion360",
+    "figjam": "com.figma.desktop",
+    "ableton live": "com.ableton.live",
+    "fl studio": "com.image-line.flstudio",
+    "reaper": "com.cockos.reaper",
 })
 
 TEAM_ID_MAP.update({

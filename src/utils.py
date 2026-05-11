@@ -1,16 +1,77 @@
 """
-Mac Deep Cleaner v1.0.0 — Utilities
+Mac Deep Cleaner v1.2.0 — Utilities
 ================================
 Shared helper functions for filesystem operations, formatting, etc.
 """
 
 from __future__ import annotations
 
+import logging
+from logging.handlers import RotatingFileHandler
 import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
+
+from constants import CONFIG_DIR
+
+logger = logging.getLogger(__name__)
+
+_LOGGER_CONFIGURED = False
+_LOG_PATH: Optional[Path] = None
+_DEFAULT_LOG_FILE = CONFIG_DIR / "mac-cleaner.log"
+
+
+def configure_logging(
+    verbose: bool = False,
+    log_file: Optional[Path] = None,
+) -> Optional[Path]:
+    """Configure app-wide logging. Returns the log file path or None."""
+    global _LOGGER_CONFIGURED
+    global _LOG_PATH
+    if _LOGGER_CONFIGURED:
+        return _LOG_PATH
+
+    level = logging.DEBUG if verbose else logging.INFO
+    target = log_file or _DEFAULT_LOG_FILE
+    handler: logging.Handler
+    resolved: Optional[Path]
+
+    try:
+        resolved = Path(target).expanduser().resolve()
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        handler = RotatingFileHandler(
+            str(resolved),
+            maxBytes=1_000_000,
+            backupCount=3,
+            encoding="utf-8",
+        )
+    except OSError:
+        resolved = None
+        handler = logging.StreamHandler()
+
+    formatter = logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+    handler.setFormatter(formatter)
+
+    root = logging.getLogger()
+    root.setLevel(level)
+    if isinstance(handler, RotatingFileHandler):
+        exists = any(
+            isinstance(h, RotatingFileHandler)
+            and getattr(h, "baseFilename", "") == handler.baseFilename
+            for h in root.handlers
+        )
+        if not exists:
+            root.addHandler(handler)
+    else:
+        root.addHandler(handler)
+
+    _LOG_PATH = resolved
+    _LOGGER_CONFIGURED = True
+    return _LOG_PATH
 
 
 def bytes_human(n: int) -> str:
@@ -50,8 +111,8 @@ def actual_disk_usage(path: Path) -> int:
                         total += child.stat().st_size
                     except OSError:
                         pass
-    except (PermissionError, OSError):
-        pass
+    except (PermissionError, OSError) as exc:
+        logger.debug("actual_disk_usage failed for %s: %s", path, exc)
     return total
 
 
@@ -66,7 +127,8 @@ def iterdir_safe(path: Path) -> List[Path]:
         return []
     try:
         return sorted(path.iterdir())
-    except (PermissionError, OSError):
+    except (PermissionError, OSError) as exc:
+        logger.debug("iterdir_safe failed for %s: %s", path, exc)
         return []
 
 
@@ -83,10 +145,12 @@ def rm_rf(path: Path) -> Tuple[bool, str]:
         )
         if result.returncode == 0:
             return True, ""
+        logger.debug("rm_rf failed for %s: %s", path, result.stderr.strip())
         return False, result.stderr.strip()
     except subprocess.TimeoutExpired:
         return False, "Deletion timed out after 60 seconds"
     except Exception as e:
+        logger.debug("rm_rf exception for %s: %s", path, e)
         return False, str(e)
 
 
@@ -104,13 +168,15 @@ def safe_remove(path: Path) -> Tuple[bool, int]:
         else:
             path.unlink(missing_ok=True)
         return True, sz
-    except PermissionError:
+    except PermissionError as exc:
+        logger.debug("safe_remove permission error for %s: %s", path, exc)
         # Fallback: subprocess rm -rf (for sandboxed containers)
         ok, _err = rm_rf(path)
         if ok:
             return True, sz
         return False, 0
-    except OSError:
+    except OSError as exc:
+        logger.debug("safe_remove os error for %s: %s", path, exc)
         ok, _err = rm_rf(path)
         if ok:
             return True, sz
@@ -153,6 +219,6 @@ def count_files_recursive(path: Path) -> int:
         for child in path.rglob("*"):
             if child.is_file():
                 count += 1
-    except (PermissionError, OSError):
-        pass
+    except (PermissionError, OSError) as exc:
+        logger.debug("count_files_recursive failed for %s: %s", path, exc)
     return count

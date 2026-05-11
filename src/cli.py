@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mac Deep Cleaner v1.0.0 — CLI Entry Point
+Mac Deep Cleaner v1.2.0 — CLI Entry Point
 =======================================
 All subcommands, new and updated.
 
@@ -25,6 +25,7 @@ Subcommands
 
 from __future__ import annotations
 
+import logging
 import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -62,6 +63,7 @@ from reporting.reporter import (
     print_banner,
     print_installed_apps,
     print_instructions,
+    print_dev_junk_report,
     print_junk_report,
     print_orphan_report,
     print_summary,
@@ -69,7 +71,9 @@ from reporting.reporter import (
 from core.safety import running_bundle_ids
 from core.scanner import scan_junk, scan_orphans
 from core.undo import list_sessions, new_session, restore_session, stage_file
-from utils import bytes_human
+from utils import bytes_human, configure_logging
+
+logger = logging.getLogger(__name__)
 
 
 # ── Shared progress helper ─────────────────────────────────────────────────────
@@ -85,13 +89,65 @@ def _progress() -> Progress:
     )
 
 
+def _ensure_first_run_profile(profile: Optional[str], ci: bool) -> Optional[str]:
+    """Prompt for a profile on first run when no config exists."""
+    if ci or profile:
+        return profile
+
+    cfg_path = config_file_path()
+    if cfg_path.exists():
+        return profile
+
+    choices = ["beginner", "developer", "professional", "designer", "student", "children"]
+    descriptions = {
+        "beginner": "Safe defaults, skips dev caches",
+        "developer": "Includes dev junk scanning",
+        "professional": "Aggressive dev cleanup, lower thresholds",
+        "designer": "Larger file focus, no dev junk by default",
+        "student": "Safe defaults for school devices",
+        "children": "Minimal, safest defaults",
+    }
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Profile", style="bold")
+    table.add_column("Focus")
+    for name in choices:
+        table.add_row(name, descriptions.get(name, ""))
+
+    console.print()
+    console.print(Panel(
+        "[bold cyan]First-time setup[/bold cyan]\nChoose a profile to start with.",
+        border_style="cyan",
+        padding=(0, 2),
+    ))
+    console.print(table)
+
+    choice = click.prompt(
+        "Profile",
+        type=click.Choice(choices, case_sensitive=False),
+        default="beginner",
+        show_default=True,
+    ).lower()
+
+    init_default_config(profile=choice)
+    return choice
+
+
 # ── Root group ─────────────────────────────────────────────────────────────────
 
 @click.group(invoke_without_command=True)
 @click.version_option(version=__version__, prog_name="Mac Deep Cleaner")
+@click.option("--verbose", is_flag=True, default=False,
+              help="Enable debug logging to file.")
+@click.option("--log-file", type=click.Path(), default=None,
+              help="Write logs to a file (default: ~/.config/mac-cleaner/mac-cleaner.log).")
 @click.pass_context
-def main(ctx: click.Context) -> None:
-    """Mac Deep Cleaner v1.0.0 — Professional macOS cleanup tool."""
+def main(ctx: click.Context, verbose: bool, log_file: Optional[str]) -> None:
+    """Mac Deep Cleaner v1.2.0 — Professional macOS cleanup tool."""
+    configure_logging(
+        verbose=verbose,
+        log_file=Path(log_file) if log_file else None,
+    )
     if ctx.invoked_subcommand is None:
         ctx.invoke(scan)
 
@@ -107,6 +163,12 @@ def main(ctx: click.Context) -> None:
 @click.option("--whitelist", multiple=True, type=click.Path())
 @click.option("--show-apps", is_flag=True, default=False)
 @click.option("--profile", default=None, help="Config profile to use.")
+@click.option("--dev-junk", is_flag=True, default=False,
+              help="Scan developer junk (node_modules, venv, build dirs).")
+@click.option("--dev-junk-global", is_flag=True, default=False,
+              help="Include global caches (~/.npm, ~/.gradle, etc).")
+@click.option("--dev-root", "dev_roots", multiple=True, type=click.Path(exists=True),
+              help="Additional developer roots to scan for dev junk.")
 @click.option("--root", "custom_roots", multiple=True, type=click.Path(exists=True),
               help="Additional directory to scan. Can be passed multiple times.")
 @click.option("--notify", is_flag=True, default=False,
@@ -125,6 +187,9 @@ def scan(
     whitelist: Tuple[str, ...],
     show_apps: bool,
     profile: Optional[str],
+    dev_junk: bool,
+    dev_junk_global: bool,
+    dev_roots: Tuple[str, ...],
     custom_roots: Tuple[str, ...],
     notify: bool,
     dry_run: bool,
@@ -138,6 +203,7 @@ def scan(
     --dry-run is an explicit alias for scan behaviour.
     --profile developer|minimal|aggressive applies preset settings.
     """
+    profile = _ensure_first_run_profile(profile=profile, ci=ci)
     cfg = load_config(profile=profile)
 
     # CLI whitelist overrides config whitelist
@@ -145,6 +211,7 @@ def scan(
         Path(p).expanduser().resolve() for p in whitelist
     }
     cfg.custom_scan_roots.extend(Path(p).expanduser().resolve() for p in custom_roots)
+    cfg.dev_junk_roots.extend(Path(p).expanduser().resolve() for p in dev_roots)
 
     _run(
         delete=False,
@@ -157,6 +224,8 @@ def scan(
         notify=notify,
         save_history=save_history,
         cfg=cfg,
+        dev_junk=dev_junk,
+        dev_junk_global=dev_junk_global,
         ci=ci,
         threshold_mb=threshold_mb,
     )
@@ -168,9 +237,21 @@ def scan(
 
 @main.command("dashboard")
 @click.option("--profile", default=None, help="Config profile to use.")
+@click.option("--dev-junk", is_flag=True, default=False,
+              help="Scan developer junk (node_modules, venv, build dirs).")
+@click.option("--dev-junk-global", is_flag=True, default=False,
+              help="Include global caches (~/.npm, ~/.gradle, etc).")
+@click.option("--dev-root", "dev_roots", multiple=True, type=click.Path(exists=True),
+              help="Additional developer roots to scan for dev junk.")
 @click.option("--root", "custom_roots", multiple=True, type=click.Path(exists=True),
               help="Additional directory to scan. Can be passed multiple times.")
-def cmd_dashboard(profile: Optional[str], custom_roots: Tuple[str, ...]) -> None:
+def cmd_dashboard(
+    profile: Optional[str],
+    dev_junk: bool,
+    dev_junk_global: bool,
+    dev_roots: Tuple[str, ...],
+    custom_roots: Tuple[str, ...],
+) -> None:
     """Run a live Rich dashboard scan."""
     from rich.align import Align
     from rich.layout import Layout
@@ -178,6 +259,9 @@ def cmd_dashboard(profile: Optional[str], custom_roots: Tuple[str, ...]) -> None
 
     cfg = load_config(profile=profile)
     cfg.custom_scan_roots.extend(Path(p).expanduser().resolve() for p in custom_roots)
+    cfg.dev_junk_roots.extend(Path(p).expanduser().resolve() for p in dev_roots)
+    cfg.scan_dev_junk = bool(cfg.scan_dev_junk or dev_junk)
+    cfg.scan_dev_junk_global = bool(getattr(cfg, "scan_dev_junk_global", False) or dev_junk_global)
     whitelist_set = cfg.whitelist_set
 
     layout = Layout()
@@ -195,6 +279,11 @@ def cmd_dashboard(profile: Optional[str], custom_roots: Tuple[str, ...]) -> None
         "orphan_size": 0,
         "junk": 0,
         "junk_size": 0,
+        "dev_junk": 0,
+        "dev_junk_size": 0,
+        "orphans_top": [],
+        "junk_top": [],
+        "dev_junk_top": [],
         "status": "Starting scan...",
     }
 
@@ -210,16 +299,46 @@ def cmd_dashboard(profile: Optional[str], custom_roots: Tuple[str, ...]) -> None
         left.add_row("Running apps protected", str(state["running"]))
         left.add_row("Orphan groups", str(state["orphans"]))
         left.add_row("General junk items", str(state["junk"]))
+        left.add_row("Dev junk items", str(state["dev_junk"]))
         layout["left"].update(Panel(left, title="Detection", border_style="cyan"))
 
-        right = Table.grid(padding=(0, 2))
+        right = Table.grid(padding=(0, 1))
         right.add_column(style="bold")
         right.add_column(justify="right")
-        total = state["orphan_size"] + state["junk_size"]
+        total = state["orphan_size"] + state["junk_size"] + state["dev_junk_size"]
         right.add_row("Orphan data", bytes_human(state["orphan_size"]))
         right.add_row("General junk", bytes_human(state["junk_size"]))
+        right.add_row("Dev junk", bytes_human(state["dev_junk_size"]))
         right.add_row("Total reclaimable", f"[yellow]{bytes_human(total)}[/yellow]")
-        layout["right"].update(Panel(right, title="Space", border_style="yellow"))
+
+        top = Table.grid(padding=(0, 1))
+        top.add_column(style="bold")
+        top.add_column(justify="right", style="yellow")
+        if state["orphans_top"]:
+            top.add_row("Top orphans", "")
+            for name, sz in state["orphans_top"][:5]:
+                top.add_row(f"  {name}", bytes_human(sz))
+        else:
+            top.add_row("Top orphans", "-")
+
+        if state["junk_top"]:
+            top.add_row("Top junk", "")
+            for name, sz in state["junk_top"][:5]:
+                top.add_row(f"  {name}", bytes_human(sz))
+        else:
+            top.add_row("Top junk", "-")
+
+        if state["dev_junk_top"]:
+            top.add_row("Top dev junk", "")
+            for name, sz in state["dev_junk_top"][:5]:
+                top.add_row(f"  {name}", bytes_human(sz))
+        else:
+            top.add_row("Top dev junk", "-")
+
+        right_panel = Table.grid(padding=(0, 1))
+        right_panel.add_row(Panel(right, title="Space", border_style="yellow"))
+        right_panel.add_row(Panel(top, title="Top Findings", border_style="dim"))
+        layout["right"].update(right_panel)
         layout["footer"].update(Panel(state["status"], border_style="dim"))
         return layout
 
@@ -242,6 +361,14 @@ def cmd_dashboard(profile: Optional[str], custom_roots: Tuple[str, ...]) -> None
         )
         state["orphans"] = len(orphans)
         state["orphan_size"] = sum(sum(e.size for e in v) for v in orphans.values())
+        state["orphans_top"] = [
+            (name, sum(e.size for e in entries))
+            for name, entries in sorted(
+                orphans.items(),
+                key=lambda kv: sum(e.size for e in kv[1]),
+                reverse=True,
+            )
+        ]
 
         state["status"] = "Scanning caches, logs, and trash..."
         junk = scan_junk(
@@ -254,11 +381,36 @@ def cmd_dashboard(profile: Optional[str], custom_roots: Tuple[str, ...]) -> None
         user_junk = [j for j in junk if not j.is_system]
         state["junk"] = len(user_junk)
         state["junk_size"] = sum(j.size for j in user_junk)
+        state["junk_top"] = [
+            (j.path.name, j.size)
+            for j in sorted(user_junk, key=lambda x: x.size, reverse=True)[:10]
+        ]
+
+        if cfg.scan_dev_junk:
+            from scanners.dev_junk import find_dev_junk
+            state["status"] = "Scanning developer modules..."
+            dev_junk_entries = find_dev_junk(
+                roots=cfg.dev_junk_roots or None,
+                max_depth=cfg.dev_junk_max_depth,
+                include_global=bool(getattr(cfg, "scan_dev_junk_global", False)),
+            )
+            if whitelist_set:
+                dev_junk_entries = [
+                    e for e in dev_junk_entries
+                    if e.path not in whitelist_set and not any(wl in e.path.parents for wl in whitelist_set)
+                ]
+            state["dev_junk"] = len(dev_junk_entries)
+            state["dev_junk_size"] = sum(e.size for e in dev_junk_entries)
+            state["dev_junk_top"] = [
+                (e.path.name, e.size)
+                for e in sorted(dev_junk_entries, key=lambda x: x.size, reverse=True)[:10]
+            ]
         state["status"] = "Scan complete. Use mac-cleaner scan for the full report."
 
     print_summary(
         orphan_total=state["orphan_size"],
         junk_total=state["junk_size"],
+        dev_junk_total=state["dev_junk_size"],
         running_count=state["running"],
         whitelist_count=len(whitelist_set),
     )
@@ -274,6 +426,12 @@ def cmd_dashboard(profile: Optional[str], custom_roots: Tuple[str, ...]) -> None
 @click.option("--whitelist", multiple=True, type=click.Path())
 @click.option("--export", "export_path", type=click.Path(), default=None)
 @click.option("--profile", default=None)
+@click.option("--dev-junk", is_flag=True, default=False,
+              help="Scan and clean developer junk (node_modules, venv, build dirs).")
+@click.option("--dev-junk-global", is_flag=True, default=False,
+              help="Include global caches (~/.npm, ~/.gradle, etc).")
+@click.option("--dev-root", "dev_roots", multiple=True, type=click.Path(exists=True),
+              help="Additional developer roots to scan for dev junk.")
 @click.option("--root", "custom_roots", multiple=True, type=click.Path(exists=True),
               help="Additional directory to scan. Can be passed multiple times.")
 @click.option("--notify", is_flag=True, default=False)
@@ -285,6 +443,9 @@ def clean(
     whitelist: Tuple[str, ...],
     export_path: Optional[str],
     profile: Optional[str],
+    dev_junk: bool,
+    dev_junk_global: bool,
+    dev_roots: Tuple[str, ...],
     custom_roots: Tuple[str, ...],
     notify: bool,
     no_undo: bool,
@@ -296,11 +457,13 @@ def clean(
     and can be restored with: mac-cleaner undo
     Pass --no-undo to permanently delete (faster, no recovery).
     """
+    profile = _ensure_first_run_profile(profile=profile, ci=False)
     cfg = load_config(profile=profile)
     wl = cfg.whitelist_set | {
         Path(p).expanduser().resolve() for p in whitelist
     }
     cfg.custom_scan_roots.extend(Path(p).expanduser().resolve() for p in custom_roots)
+    cfg.dev_junk_roots.extend(Path(p).expanduser().resolve() for p in dev_roots)
     undo_mode = cfg.undo_mode and not no_undo
 
     _run(
@@ -315,6 +478,8 @@ def clean(
         save_history=True,
         cfg=cfg,
         undo_mode=undo_mode,
+        dev_junk=dev_junk,
+        dev_junk_global=dev_junk_global,
     )
 
 
@@ -1214,7 +1379,7 @@ def cmd_config(init: bool, show: bool, profile: Optional[str]) -> None:
 
     if init:
         from config.config import init_default_config
-        cfg = init_default_config()
+        cfg = init_default_config(profile=profile)
         console.print(f"  [green]✓ Config written to {cfg_path}[/green]")
         return
 
@@ -1248,6 +1413,8 @@ def _run(
     save_history: bool,
     cfg,
     undo_mode: bool = True,
+    dev_junk: bool = False,
+    dev_junk_global: bool = False,
     ci: bool = False,
     threshold_mb: int = 0,
 ) -> None:
@@ -1269,12 +1436,16 @@ def _run(
             prog.update(task, completed=100, total=100)
             return value
 
+    dev_junk_enabled = bool(cfg.scan_dev_junk or dev_junk or dev_junk_global)
+    dev_junk_global_enabled = bool(getattr(cfg, "scan_dev_junk_global", False) or dev_junk_global)
+    total_steps = 5 if dev_junk_enabled else 4
+
     # Step 1: discover apps
     apps = _run_step("Scanning installed applications…", discover_installed_apps)
 
     if not ci:
         console.print(
-            f"  [green]■[/green]  [bold]Step 1/4[/bold]  "
+            f"  [green]■[/green]  [bold]Step 1/{total_steps}[/bold]  "
             f"Found [green]{len(apps)}[/green] installed applications"
         )
     if show_apps and not ci:
@@ -1285,7 +1456,7 @@ def _run(
 
     if not ci:
         console.print(
-            f"  [cyan]■[/cyan]  [bold]Step 2/4[/bold]  "
+            f"  [cyan]■[/cyan]  [bold]Step 2/{total_steps}[/bold]  "
             f"[cyan]{len(running_bids)}[/cyan] app(s) currently running (protected)"
         )
 
@@ -1305,7 +1476,7 @@ def _run(
     oc = "red" if orphans else "green"
     if not ci:
         console.print(
-            f"  [{oc}]■[/{oc}]  [bold]Step 3/4[/bold]  "
+            f"  [{oc}]■[/{oc}]  [bold]Step 3/{total_steps}[/bold]  "
             f"[{oc}]{len(orphans)}[/{oc}] orphaned app(s) "
             f"• [{oc}]{bytes_human(orphan_size)}[/{oc}]"
         )
@@ -1328,21 +1499,48 @@ def _run(
         junk_size = sum(j.size for j in user_junk)
         if not ci:
             console.print(
-                f"  [yellow]■[/yellow]  [bold]Step 4/4[/bold]  "
+                f"  [yellow]■[/yellow]  [bold]Step 4/{total_steps}[/bold]  "
                 f"[yellow]{len(user_junk)}[/yellow] user junk item(s) "
                 f"• [yellow]{bytes_human(junk_size)}[/yellow]"
             )
     elif not ci:
         console.print(
-            "  [dim]■[/dim]  [bold]Step 4/4[/bold]  "
+            f"  [dim]■[/dim]  [bold]Step 4/{total_steps}[/bold]  "
             "[dim]Junk scan skipped (--skip-junk)[/dim]"
         )
+
+    # Step 5: dev junk (optional)
+    dev_junk_entries: list = []
+    dev_junk_size = 0
+    if dev_junk_enabled:
+        from scanners.dev_junk import find_dev_junk
+
+        dev_junk_entries = _run_step(
+            "Scanning developer modules…",
+            lambda: find_dev_junk(
+                roots=cfg.dev_junk_roots or None,
+                max_depth=cfg.dev_junk_max_depth,
+                include_global=dev_junk_global_enabled,
+            ),
+        )
+        if whitelist_set:
+            dev_junk_entries = [
+                e for e in dev_junk_entries
+                if e.path not in whitelist_set and not any(wl in e.path.parents for wl in whitelist_set)
+            ]
+        dev_junk_size = sum(e.size for e in dev_junk_entries)
+        if not ci:
+            console.print(
+                f"  [cyan]■[/cyan]  [bold]Step 5/{total_steps}[/bold]  "
+                f"[cyan]{len(dev_junk_entries)}[/cyan] dev junk item(s) "
+                f"• [cyan]{bytes_human(dev_junk_size)}[/cyan]"
+            )
 
     if ci:
         import json
         user_junk = [j for j in junk if not j.is_system]
         junk_size = sum(j.size for j in user_junk)
-        grand = orphan_size + junk_size
+        grand = orphan_size + junk_size + dev_junk_size
         payload = {
             "version": __version__,
             "profile": profile,
@@ -1350,6 +1548,8 @@ def _run(
             "orphan_bytes": orphan_size,
             "junk_count": len(user_junk),
             "junk_bytes": junk_size,
+            "dev_junk_count": len(dev_junk_entries),
+            "dev_junk_bytes": dev_junk_size,
             "total_bytes": grand,
             "total_human": bytes_human(grand),
             "threshold_mb": threshold_mb,
@@ -1369,9 +1569,14 @@ def _run(
     console.rule("[bold]General Junk", style="yellow")
     junk_total = print_junk_report(junk)
 
+    console.print()
+    console.rule("[bold]Developer Junk", style="cyan")
+    dev_junk_total = print_dev_junk_report(dev_junk_entries)
+
     print_summary(
         orphan_total=orphan_total,
         junk_total=junk_total,
+        dev_junk_total=dev_junk_total,
         running_count=len(running_bids),
         whitelist_count=len(whitelist_set),
     )
@@ -1380,25 +1585,26 @@ def _run(
     if save_history:
         try:
             from config.history import build_scan_record
-            record = build_scan_record(orphans, junk, profile=profile)
+            record = build_scan_record(orphans, junk, dev_junk=dev_junk_entries, profile=profile)
             record.save()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to save scan history: %s", exc)
 
     # Export
     if export_path:
         if export_path.endswith((".yaml", ".yml")):
-            export_yaml(orphans, junk, export_path)
+            export_yaml(orphans, junk, dev_junk_entries, export_path)
         elif export_path.endswith(".html"):
             try:
-                export_html(orphans, junk, export_path)
+                export_html(orphans, junk, dev_junk_entries, export_path)
                 console.print(f"  [green]✓ HTML report: {export_path}[/green]")
             except Exception as e:
+                logger.debug("HTML export failed: %s", e)
                 console.print(f"  [red]✗ HTML export failed: {e}[/red]")
         else:
-            export_json(orphans, junk, export_path)
+            export_json(orphans, junk, dev_junk_entries, export_path)
 
-    grand = orphan_total + junk_total
+    grand = orphan_total + junk_total + dev_junk_total
 
     # Notification
     if notify and grand > 0:
@@ -1407,10 +1613,14 @@ def _run(
             from utils import bytes_human
             post_notification(
                 f"Found {bytes_human(grand)} to clean",
-                subtitle=f"Orphans: {bytes_human(orphan_total)} · Junk: {bytes_human(junk_total)}",
+                subtitle=(
+                    f"Orphans: {bytes_human(orphan_total)} · "
+                    f"Junk: {bytes_human(junk_total)} · "
+                    f"Dev: {bytes_human(dev_junk_total)}"
+                ),
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to send notification: %s", exc)
 
     if grand == 0:
         console.print("\n[bold green]✓ Your Mac is spotless! Nothing to clean.[/bold green]\n")
@@ -1427,8 +1637,8 @@ def _run(
                     f"  [dim]↑ {len(diff.new_orphans)} new orphan(s) since last scan. "
                     f"Run 'mac-cleaner diff' to see details.[/dim]"
                 )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Diff hint failed: %s", exc)
 
     if delete:
         if auto:
@@ -1482,6 +1692,24 @@ def _run(
                             if ok:
                                 freed += sz
 
+            if dev_junk_entries:
+                do_del = auto
+                if not do_del:
+                    from rich.prompt import Confirm
+                    do_del = Confirm.ask(
+                        f"  Stage all developer junk "
+                        f"([yellow]{bytes_human(sum(e.size for e in dev_junk_entries))}[/yellow])?",
+                        default=False,
+                    )
+                if do_del:
+                    for e in dev_junk_entries:
+                        from core.safety import validate_path_for_deletion
+                        safe, _ = validate_path_for_deletion(e.path)
+                        if safe:
+                            ok, sz = stage_file(e.path, session, category="Dev Junk")
+                            if ok:
+                                freed += sz
+
             session.save()
 
             # Log
@@ -1498,6 +1726,27 @@ def _run(
             )
         else:
             freed = do_cleanup(orphans, junk, auto=auto)
+            if dev_junk_entries:
+                from rich.prompt import Confirm
+                do_del = auto or Confirm.ask(
+                    f"  Delete all developer junk "
+                    f"([yellow]{bytes_human(sum(e.size for e in dev_junk_entries))}[/yellow])?",
+                    default=False,
+                )
+                if do_del:
+                    from utils import safe_remove
+                    from core.cleaner import write_deletion_log
+                    deleted = []
+                    for e in dev_junk_entries:
+                        from core.safety import validate_path_for_deletion
+                        safe, _ = validate_path_for_deletion(e.path)
+                        if safe:
+                            ok, sz = safe_remove(e.path)
+                            if ok:
+                                freed += sz
+                                deleted.append((str(e.path), sz))
+                    if deleted:
+                        write_deletion_log(deleted)
             console.print(f"\n[bold green]✓ Done! Freed {bytes_human(freed)}[/bold green]")
             console.print(f"[dim]Deletion log: {LOG_FILE}[/dim]")
 

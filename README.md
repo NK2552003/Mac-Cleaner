@@ -1,4 +1,4 @@
-# Mac Deep Cleaner v1.0.0
+# Mac Deep Cleaner v1.2.0
 
 **Professional macOS cleanup tool — Smart App Orphan Detector**
 
@@ -12,7 +12,7 @@ mdc scan
 
 ---
 
-## What's New in v1.0.0
+## What's New in v1.2.0
 
 | Feature | Command |
 |---|---|
@@ -32,7 +32,10 @@ mdc scan
 | Weekly auto-scan scheduler | `mac-cleaner schedule install` |
 | macOS notifications | `--notify` flag |
 | CI mode / JSON threshold gate | `mac-cleaner scan --ci --threshold-mb 500` |
-| Live TUI dashboard | `mac-cleaner dashboard` |
+| Live TUI dashboard (expanded panels) | `mac-cleaner dashboard` |
+| Developer junk scanner (project caches) | `mac-cleaner scan --dev-junk` |
+| Global dev caches (opt-in) | `mac-cleaner scan --dev-junk-global` |
+| First-run profile selection | `mac-cleaner scan` |
 | Custom scan roots | `mac-cleaner scan --root ~/Projects` |
 | Self-update from PyPI | `mac-cleaner update` |
 | Homebrew formula + .pkg builder | `Formula/mac-deep-cleaner.rb`, `bash scripts/build.sh pkg` |
@@ -46,6 +49,8 @@ mdc scan
 
 - **Smart orphan detection** — finds leftover app data after uninstalling apps
 - **General junk scan** — caches, logs, crash reports, Trash, `.DS_Store`, Xcode artefacts, package manager caches
+- **Developer junk scan** — `node_modules`, `venv`, build outputs, coverage dirs (opt-in)
+- **Global dev caches** — `~/.npm`, `~/.gradle`, `~/.m2`, `~/.cargo`, `~/.nuget` (opt-in)
 - **Duplicate finder** — SHA-256 content hashing, two-phase (head + full), sorted by wasted space
 - **Large file scanner** — finds files ≥100 MB (configurable), categorised by type
 - **Broken symlink detector** — walks `/usr/local`, `/opt/homebrew`, `~/bin`, etc.
@@ -98,6 +103,12 @@ mdc scan
 # Live dashboard scan
 mac-cleaner dashboard
 
+# Developer junk scan
+mac-cleaner scan --dev-junk
+
+# Developer junk + global caches
+mac-cleaner scan --dev-junk --dev-junk-global
+
 # Interactive cleanup (files staged for undo by default)
 mac-cleaner clean
 
@@ -132,6 +143,15 @@ mac-cleaner scan --ci --threshold-mb 500
 
 # Post macOS notification when done
 mac-cleaner scan --notify
+```
+
+### Logging
+```bash
+# Enable debug logging (writes to ~/.config/mac-cleaner/mac-cleaner.log)
+mac-cleaner scan --verbose
+
+# Use a custom log file
+mac-cleaner scan --log-file ~/mac-cleaner.log
 ```
 
 ### New scanners
@@ -248,6 +268,12 @@ large_file_threshold_mb: 100
 duplicate_min_size_kb: 4
 
 profile: developer    # active profile
+
+scan_dev_junk: false
+scan_dev_junk_global: false
+dev_junk_roots:
+  - ~/Projects
+dev_junk_max_depth: 6
 
 profiles:
   minimal:

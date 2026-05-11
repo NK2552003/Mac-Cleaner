@@ -2,6 +2,27 @@
 
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
+## Unreleased
+### Added
+- Debug logging flags (`--verbose`, `--log-file`) with file rotation
+- Basic test coverage for utilities and matching
+
+### Changed
+- Improved error handling with debug logs across filesystem and subprocess paths
+- Dev junk scanner traversal now uses a deque for better performance
+
+## v1.2.0 (2026-05-11)
+### Added
+- Developer junk scanner for project caches (node_modules, venv, build outputs)
+- Global dev cache opt-in via `--dev-junk-global` (e.g., ~/.npm, ~/.gradle)
+- First-run profile selection for new installs
+- Expanded app aliases for photography, editors, and common tools
+
+### Changed
+- Live dashboard now shows top findings and dev junk totals
+- Scan history schema extended with developer junk totals
+- Version bump to v1.2.0 across docs and UI
+
 ## v1.0.0 (2026-05-10)
 ### Added
 - Full CLI command set and scan/clean workflow documentation

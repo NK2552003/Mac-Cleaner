@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Configuration Manager
+Mac Deep Cleaner v1.2.0 — Configuration Manager
 =============================================
 Reads and writes a YAML config file at ~/.config/mac-cleaner/config.yaml.
 
@@ -12,6 +12,14 @@ whitelist:
 skip_categories:
   - "System Cache"
   - "Log File"
+
+dev_junk_roots:
+    - ~/Projects
+    - ~/Code
+
+scan_dev_junk: false
+scan_dev_junk_global: false
+dev_junk_max_depth: 6
 
 custom_scan_roots:
   - ~/Projects/tools
@@ -44,9 +52,12 @@ Usage
 from __future__ import annotations
 
 import copy
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
+
+logger = logging.getLogger(__name__)
 
 try:
     import yaml
@@ -62,6 +73,14 @@ _CONFIG_FILE = _CONFIG_DIR / "config.yaml"
 # ── Built-in profiles ─────────────────────────────────────────────────────────
 
 _BUILTIN_PROFILES: Dict[str, Dict[str, Any]] = {
+    "beginner": {
+        "skip_categories": [
+            "Xcode Junk", "npm Cache", "Yarn Cache", "pnpm Cache",
+            "Gradle Cache", "Maven Cache", "Cargo Cache", "Go Build Cache",
+            "CocoaPods Cache", "pip Cache",
+        ],
+        "scan_dev_junk": False,
+    },
     "minimal": {
         "skip_categories": [
             "Xcode Junk", "npm Cache", "Yarn Cache", "pnpm Cache",
@@ -74,12 +93,42 @@ _BUILTIN_PROFILES: Dict[str, Dict[str, Any]] = {
         "custom_scan_roots": [],
         "large_file_threshold_mb": 50,
         "duplicate_min_size_kb": 4,
+        "scan_dev_junk": True,
+    },
+    "professional": {
+        "skip_categories": [],
+        "large_file_threshold_mb": 50,
+        "duplicate_min_size_kb": 4,
+        "scan_dev_junk": True,
+    },
+    "designer": {
+        "skip_categories": [],
+        "large_file_threshold_mb": 80,
+        "duplicate_min_size_kb": 8,
+        "scan_dev_junk": False,
+    },
+    "student": {
+        "skip_categories": [
+            "Xcode Junk", "npm Cache", "Yarn Cache", "pnpm Cache",
+            "Gradle Cache", "Maven Cache", "Cargo Cache", "Go Build Cache",
+            "CocoaPods Cache", "pip Cache",
+        ],
+        "scan_dev_junk": False,
+    },
+    "children": {
+        "skip_categories": [
+            "Xcode Junk", "npm Cache", "Yarn Cache", "pnpm Cache",
+            "Gradle Cache", "Maven Cache", "Cargo Cache", "Go Build Cache",
+            "CocoaPods Cache", "pip Cache",
+        ],
+        "scan_dev_junk": False,
     },
     "aggressive": {
         "skip_categories": [],
         "large_file_threshold_mb": 25,
         "duplicate_min_size_kb": 1,
         "undo_mode": False,
+        "scan_dev_junk": True,
     },
 }
 
@@ -100,10 +149,16 @@ class Config:
     # Behaviour
     scan_orphans: bool = True
     scan_junk: bool = True
+    scan_dev_junk: bool = False
+    scan_dev_junk_global: bool = False
     undo_mode: bool = True
     retention_days: int = 30
     notify_after_scan: bool = False
     profile: Optional[str] = None
+
+    # Dev junk scan
+    dev_junk_roots: List[Path] = field(default_factory=list)
+    dev_junk_max_depth: int = 6
 
     # Thresholds
     large_file_threshold_mb: int = 100
@@ -144,11 +199,15 @@ class Config:
             "custom_scan_roots": [str(p) for p in self.custom_scan_roots],
             "scan_orphans": self.scan_orphans,
             "scan_junk": self.scan_junk,
+            "scan_dev_junk": self.scan_dev_junk,
+            "scan_dev_junk_global": self.scan_dev_junk_global,
             "undo_mode": self.undo_mode,
             "retention_days": self.retention_days,
             "notify_after_scan": self.notify_after_scan,
             "large_file_threshold_mb": self.large_file_threshold_mb,
             "duplicate_min_size_kb": self.duplicate_min_size_kb,
+            "dev_junk_roots": [str(p) for p in self.dev_junk_roots],
+            "dev_junk_max_depth": self.dev_junk_max_depth,
             "profiles": self._raw_profiles,
         }
         if self.profile:
@@ -164,10 +223,14 @@ class Config:
             "custom_scan_roots": [str(p) for p in self.custom_scan_roots],
             "scan_orphans": self.scan_orphans,
             "scan_junk": self.scan_junk,
+            "scan_dev_junk": self.scan_dev_junk,
+            "scan_dev_junk_global": self.scan_dev_junk_global,
             "undo_mode": self.undo_mode,
             "retention_days": self.retention_days,
             "large_file_threshold_mb": self.large_file_threshold_mb,
             "duplicate_min_size_kb": self.duplicate_min_size_kb,
+            "dev_junk_roots": [str(p) for p in self.dev_junk_roots],
+            "dev_junk_max_depth": self.dev_junk_max_depth,
             "profile": self.profile,
         }
 
@@ -180,8 +243,8 @@ def _expand(paths: List[Any]) -> List[Path]:
     for p in paths:
         try:
             result.append(Path(str(p)).expanduser().resolve())
-        except (TypeError, ValueError):
-            pass
+        except (TypeError, ValueError) as exc:
+            logger.debug("Invalid config path entry: %s", exc)
     return result
 
 
@@ -215,8 +278,8 @@ def load_config(
                 loaded = yaml.safe_load(f) or {}
             if isinstance(loaded, dict):
                 raw = loaded
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to load config %s: %s", config_path, exc)
 
     # Resolve active profile
     active_profile = profile or raw.get("profile")
@@ -241,12 +304,16 @@ def load_config(
         skip_categories=set(effective.get("skip_categories", [])),
         scan_orphans=bool(effective.get("scan_orphans", True)),
         scan_junk=bool(effective.get("scan_junk", True)),
+        scan_dev_junk=bool(effective.get("scan_dev_junk", False)),
+        scan_dev_junk_global=bool(effective.get("scan_dev_junk_global", False)),
         undo_mode=bool(effective.get("undo_mode", True)),
         retention_days=int(effective.get("retention_days", 30)),
         notify_after_scan=bool(effective.get("notify_after_scan", False)),
         large_file_threshold_mb=int(effective.get("large_file_threshold_mb", 100)),
         duplicate_min_size_kb=int(effective.get("duplicate_min_size_kb", 4)),
         profile=active_profile,
+        dev_junk_roots=_expand(effective.get("dev_junk_roots", [])),
+        dev_junk_max_depth=int(effective.get("dev_junk_max_depth", 6)),
     )
     cfg._raw_profiles = all_profiles
     return cfg
@@ -268,11 +335,13 @@ def ensure_config_dir() -> Path:
     return _CONFIG_DIR
 
 
-def init_default_config() -> Config:
+def init_default_config(profile: Optional[str] = None) -> Config:
     """
     Write a default config file if none exists, then load and return it.
     """
     if not _CONFIG_FILE.exists():
         cfg = default_config()
+        if profile:
+            cfg.profile = profile
         cfg.save()
-    return load_config()
+    return load_config(profile=profile)

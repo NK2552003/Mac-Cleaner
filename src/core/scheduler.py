@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Notifications & Scheduler
+Mac Deep Cleaner v1.2.0 — Notifications & Scheduler
 =================================================
 
 Notifications
@@ -22,12 +22,15 @@ Also supports:
 
 from __future__ import annotations
 
+import logging
 import plistlib
 import subprocess
 from pathlib import Path
 from typing import Optional, Tuple
 
 from constants import HOME
+
+logger = logging.getLogger(__name__)
 
 # ── Notification ───────────────────────────────────────────────────────────────
 
@@ -64,7 +67,8 @@ def post_notification(
             capture_output=True, timeout=10,
         )
         return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+        logger.debug("osascript notification failed: %s", exc)
         return False
 
 
@@ -98,7 +102,8 @@ def _find_mac_cleaner_binary() -> str:
         )
         if result.returncode == 0:
             return result.stdout.strip()
-    except (subprocess.TimeoutExpired, OSError):
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.debug("which mac-cleaner failed: %s", exc)
         pass
     # Common fallback locations
     for candidate in [
@@ -161,6 +166,7 @@ def install_schedule(notify: bool = True) -> Tuple[bool, str]:
             err = result.stderr.strip() or "launchctl load failed"
             return False, f"Plist written but could not load agent: {err}"
     except (subprocess.TimeoutExpired, OSError) as e:
+        logger.debug("launchctl load failed: %s", e)
         return False, f"Plist written but launchctl failed: {e}"
 
     return True, (
@@ -182,7 +188,8 @@ def remove_schedule() -> Tuple[bool, str]:
             ["launchctl", "unload", "-w", str(_AGENT_PLIST)],
             capture_output=True, timeout=10,
         )
-    except (subprocess.TimeoutExpired, OSError):
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.debug("launchctl unload failed: %s", exc)
         pass  # Already unloaded — still delete the plist
 
     try:
@@ -210,7 +217,8 @@ def schedule_status() -> Tuple[bool, Optional[str]]:
         )
         if result.returncode == 0:
             return True, result.stdout.strip()
-    except (subprocess.TimeoutExpired, OSError):
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.debug("launchctl list failed: %s", exc)
         pass
 
     return False, "Plist exists but agent is not loaded"

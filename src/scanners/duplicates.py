@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Duplicate File Finder
+Mac Deep Cleaner v1.2.0 — Duplicate File Finder
 =============================================
 Finds identical files by content hash across user-specified or default
 directories. Groups duplicates, computes wasted space, and returns a
@@ -16,12 +16,15 @@ Strategy
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Generator, List, Optional, Set, Tuple
 
 from constants import HOME
 from utils import bytes_human, size_of
+
+logger = logging.getLogger(__name__)
 
 # Default roots to scan when the user doesn't specify paths
 DEFAULT_SCAN_ROOTS: List[Path] = [
@@ -54,7 +57,8 @@ def _head_hash(path: Path) -> Optional[str]:
         with open(path, "rb") as f:
             chunk = f.read(HEAD_BYTES)
         return hashlib.sha256(chunk).hexdigest()
-    except OSError:
+    except OSError as exc:
+        logger.debug("head hash failed for %s: %s", path, exc)
         return None
 
 
@@ -66,7 +70,8 @@ def _full_hash(path: Path) -> Optional[str]:
             for chunk in iter(lambda: f.read(65536), b""):
                 h.update(chunk)
         return h.hexdigest()
-    except OSError:
+    except OSError as exc:
+        logger.debug("full hash failed for %s: %s", path, exc)
         return None
 
 
@@ -86,8 +91,8 @@ def _walk(root: Path) -> Generator[Path, None, None]:
                 yield from _walk(item)
             elif item.is_file():
                 yield item
-    except (PermissionError, OSError):
-        pass
+    except (PermissionError, OSError) as exc:
+        logger.debug("walk failed for %s: %s", root, exc)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────

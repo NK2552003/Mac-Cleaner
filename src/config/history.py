@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.0.0 — Scan History & Diff
+Mac Deep Cleaner v1.2.0 — Scan History & Diff
 ==========================================
 Stores past scan results in ~/.config/mac-cleaner/history/ as JSON files.
 Allows comparing two scans to show what's new or resolved since the last run.
@@ -22,11 +22,16 @@ Each scan is stored as <timestamp>_<uuid8>.json with this schema:
   "junk": [
     {"path": "...", "category": "User Cache", "size": 123}
   ],
+    "dev_junk": [
+        {"path": "...", "category": "Node Modules", "size": 123}
+    ],
   "summary": {
     "orphan_count": 3,
     "orphan_bytes": 456789,
-    "junk_count": 12,
-    "junk_bytes": 987654
+        "junk_count": 12,
+        "junk_bytes": 987654,
+        "dev_junk_count": 5,
+        "dev_junk_bytes": 55555
   }
 }
 """
@@ -45,7 +50,7 @@ from utils import bytes_human
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
 HISTORY_DIR = Path.home() / ".config" / "mac-cleaner" / "history"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 MAX_HISTORY_ENTRIES = 100   # prune oldest beyond this
 
 
@@ -63,6 +68,7 @@ class ScanRecord:
     profile: Optional[str]
     orphans: Dict[str, Any]   # name → {total_size, items:[]}
     junk: List[Dict[str, Any]]
+    dev_junk: List[Dict[str, Any]]
     summary: Dict[str, Any]
 
     @property
@@ -79,8 +85,12 @@ class ScanRecord:
         return int(self.summary.get("junk_bytes", 0))
 
     @property
+    def dev_junk_bytes(self) -> int:
+        return int(self.summary.get("dev_junk_bytes", 0))
+
+    @property
     def total_bytes(self) -> int:
-        return self.orphan_bytes + self.junk_bytes
+        return self.orphan_bytes + self.junk_bytes + self.dev_junk_bytes
 
     def to_dict(self) -> dict:
         return {
@@ -90,6 +100,7 @@ class ScanRecord:
             "profile": self.profile,
             "orphans": self.orphans,
             "junk": self.junk,
+            "dev_junk": self.dev_junk,
             "summary": self.summary,
         }
 
@@ -107,6 +118,7 @@ class ScanRecord:
             profile=d.get("profile"),
             orphans=d.get("orphans", {}),
             junk=d.get("junk", []),
+            dev_junk=d.get("dev_junk", []),
             summary=d.get("summary", {}),
         )
 
@@ -132,6 +144,7 @@ class ScanRecord:
 def build_scan_record(
     orphans: Dict,
     junk: List,
+    dev_junk: Optional[List] = None,
     profile: Optional[str] = None,
 ) -> ScanRecord:
     """
@@ -157,6 +170,9 @@ def build_scan_record(
     user_junk = [j for j in junk if not j.is_system]
     junk_bytes = sum(j.size for j in user_junk)
 
+    dev_junk = dev_junk or []
+    dev_junk_bytes = sum(j.size for j in dev_junk)
+
     summary = {
         "orphan_count": len(orphans),
         "orphan_bytes": orphan_bytes,
@@ -164,6 +180,9 @@ def build_scan_record(
         "junk_count": len(user_junk),
         "junk_bytes": junk_bytes,
         "junk_size_human": bytes_human(junk_bytes),
+        "dev_junk_count": len(dev_junk),
+        "dev_junk_bytes": dev_junk_bytes,
+        "dev_junk_size_human": bytes_human(dev_junk_bytes),
     }
 
     return ScanRecord(
@@ -172,6 +191,7 @@ def build_scan_record(
         profile=profile,
         orphans=orphan_data,
         junk=[j.to_dict() for j in user_junk],
+        dev_junk=[j.to_dict() for j in dev_junk],
         summary=summary,
     )
 
@@ -223,6 +243,7 @@ class ScanDiff:
 
     # Junk bytes
     junk_delta_bytes: int = 0     # positive = more junk, negative = less
+    dev_junk_delta_bytes: int = 0
 
     def __post_init__(self) -> None:
         older_names: Set[str] = set(self.older.orphans.keys())
@@ -232,6 +253,7 @@ class ScanDiff:
         self.resolved_orphans = sorted(older_names - newer_names)
         self.persistent_orphans = sorted(older_names & newer_names)
         self.junk_delta_bytes = self.newer.junk_bytes - self.older.junk_bytes
+        self.dev_junk_delta_bytes = self.newer.dev_junk_bytes - self.older.dev_junk_bytes
 
     @property
     def size_delta_bytes(self) -> int:
@@ -250,6 +272,7 @@ class ScanDiff:
             "size_delta_bytes": self.size_delta_bytes,
             "size_delta_human": bytes_human(abs(self.size_delta_bytes)),
             "junk_delta_bytes": self.junk_delta_bytes,
+            "dev_junk_delta_bytes": self.dev_junk_delta_bytes,
         }
 
 
