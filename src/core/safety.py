@@ -32,6 +32,10 @@ def is_system_safe(name: str) -> bool:
     """
     n = name.lower().strip()
     stem = Path(name).stem.lower().strip()
+    if n.startswith("."):
+        n = n[1:]
+    if stem.startswith("."):
+        stem = stem[1:]
 
     # 1. Exact match on stem
     if stem in SYSTEM_EXACT_SAFELIST or n in SYSTEM_EXACT_SAFELIST:

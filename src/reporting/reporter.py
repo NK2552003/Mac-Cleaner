@@ -16,7 +16,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
 
-from config.models import JunkEntry, OrphanEntry
+from config.models import DevJunkEntry, JunkEntry, OrphanEntry
 from utils import bytes_human
 
 console = Console()
@@ -78,6 +78,20 @@ JUNK_ICONS: Dict[str, str] = {
     "Chrome Cache":     "◆",
     "Firefox Cache":    "◆",
     "Package Cache":    "◆",
+}
+
+DEV_JUNK_ICONS: Dict[str, str] = {
+    "Node Modules": "◆",
+    "Python Venv": "■",
+    "Python Cache": "◇",
+    "Java Build": "■",
+    "Go Build": "■",
+    "Rust Target": "■",
+    "Dotnet Build": "■",
+    "Ruby Bundle": "■",
+    "PHP Vendor": "■",
+    "Build Output": "◆",
+    "Coverage": "◇",
 }
 
 
@@ -258,14 +272,67 @@ def print_junk_report(junk: List[JunkEntry]) -> int:
     return grand
 
 
+def print_dev_junk_report(entries: List[DevJunkEntry]) -> int:
+    """
+    Print developer junk report.
+    Returns total bytes of detected entries.
+    """
+    if not entries:
+        console.print(
+            Panel(
+                "[green]✓ No developer junk found![/green]",
+                border_style="green",
+                padding=(0, 2),
+            )
+        )
+        return 0
+
+    from collections import defaultdict
+
+    by_cat: Dict[str, List[DevJunkEntry]] = defaultdict(list)
+    for e in entries:
+        by_cat[e.category].append(e)
+
+    total = sum(e.size for e in entries)
+
+    table = Table(
+        title=f"Developer Junk  ({bytes_human(total)} total)",
+        show_header=True,
+        header_style="bold yellow",
+        border_style="dim",
+        title_style="bold",
+        padding=(0, 1),
+    )
+    table.add_column("Category", style="bold", min_width=18)
+    table.add_column("Items", justify="right", style="cyan", width=8)
+    table.add_column("Size", justify="right", style="yellow", width=12)
+    table.add_column("Top Item", style="dim", min_width=30)
+
+    for cat in sorted(by_cat.keys()):
+        items = by_cat[cat]
+        cat_total = sum(e.size for e in items)
+        icon = DEV_JUNK_ICONS.get(cat, "○")
+        largest = max(items, key=lambda x: x.size)
+        table.add_row(
+            f"{icon} {cat}",
+            str(len(items)),
+            bytes_human(cat_total),
+            largest.path.name,
+        )
+
+    console.print(table)
+    return total
+
+
 def print_summary(
     orphan_total: int,
     junk_total: int,
+    dev_junk_total: int,
     running_count: int,
     whitelist_count: int,
 ) -> None:
     """Print the final summary panel."""
-    grand = orphan_total + junk_total
+    grand = orphan_total + junk_total + dev_junk_total
 
     summary_lines = []
     summary_lines.append(f"[bold]Recoverable space:[/bold]  [bold green]{bytes_human(grand)}[/bold green]")
@@ -273,6 +340,8 @@ def print_summary(
         summary_lines.append(f"  [red]■[/red] Orphan leftovers:  [yellow]{bytes_human(orphan_total)}[/yellow]")
     if junk_total:
         summary_lines.append(f"  [yellow]◆[/yellow] General junk:      [yellow]{bytes_human(junk_total)}[/yellow]")
+    if dev_junk_total:
+        summary_lines.append(f"  [cyan]◆[/cyan] Developer junk:   [yellow]{bytes_human(dev_junk_total)}[/yellow]")
     if running_count:
         summary_lines.append(f"  [dim]▶ {running_count} running app(s) protected[/dim]")
     if whitelist_count:
@@ -304,6 +373,7 @@ def print_instructions() -> None:
     table.add_row("mac-cleaner scan --skip-junk", "Orphans only, skip junk scan")
     table.add_row("mac-cleaner scan --export results.json", "Export to JSON")
     table.add_row("mac-cleaner clean --whitelist PATH", "Protect a path")
+    table.add_row("mac-cleaner scan --dev-junk", "Scan developer modules (node_modules, venv)")
 
     console.print(table)
     console.print()

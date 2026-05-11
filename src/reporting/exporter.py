@@ -9,11 +9,11 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from rich.console import Console
 
-from config.models import JunkEntry, OrphanEntry
+from config.models import DevJunkEntry, JunkEntry, OrphanEntry
 from utils import bytes_human
 
 console = Console()
@@ -22,6 +22,7 @@ console = Console()
 def export_json(
     orphans: Dict[str, List[OrphanEntry]],
     junk: List[JunkEntry],
+    dev_junk: Optional[List[DevJunkEntry]],
     output_path: str,
 ) -> None:
     """Export full scan results to JSON."""
@@ -40,6 +41,7 @@ def export_json(
             "user_junk": [j.to_dict() for j in junk if not j.is_system],
             "system_caches": [j.to_dict() for j in junk if j.is_system],
         },
+        "dev_junk": [j.to_dict() for j in (dev_junk or [])],
         "summary": {
             "orphan_app_count": len(orphans),
             "orphan_item_count": sum(len(v) for v in orphans.values()),
@@ -54,6 +56,9 @@ def export_json(
             ),
             "system_cache_count": sum(1 for j in junk if j.is_system),
             "system_cache_bytes": sum(j.size for j in junk if j.is_system),
+            "dev_junk_count": sum(1 for _ in (dev_junk or [])),
+            "dev_junk_bytes": sum(j.size for j in (dev_junk or [])),
+            "dev_junk_size_human": bytes_human(sum(j.size for j in (dev_junk or []))),
         },
     }
 
@@ -68,6 +73,7 @@ def export_json(
 def export_yaml(
     orphans: Dict[str, List[OrphanEntry]],
     junk: List[JunkEntry],
+    dev_junk: Optional[List[DevJunkEntry]],
     output_path: str,
 ) -> None:
     """Export full scan results to YAML (requires pyyaml)."""
@@ -85,6 +91,7 @@ def export_yaml(
             for name, entries in orphans.items()
         },
         "junk": [j.to_dict() for j in junk],
+        "dev_junk": [j.to_dict() for j in (dev_junk or [])],
     }
 
     try:

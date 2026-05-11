@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from config.models import JunkEntry, OrphanEntry
+from config.models import DevJunkEntry, JunkEntry, OrphanEntry
 from utils import bytes_human
 
 
@@ -115,6 +115,10 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="big" style="color:var(--yellow)">{junk_total}</div>
     </div>
     <div class="card">
+      <h3>Developer Junk</h3>
+      <div class="big" style="color:var(--accent)">{dev_junk_total}</div>
+    </div>
+    <div class="card">
       <h3>Unique Orphaned Apps</h3>
       <div class="big">{orphan_count}</div>
     </div>
@@ -134,6 +138,9 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
   <!-- Junk section -->
   {junk_section}
+
+  <!-- Developer junk section -->
+  {dev_junk_section}
 
 </div>
 
@@ -257,6 +264,52 @@ def _junk_section(junk: List[JunkEntry]) -> str:
 </div>"""
 
 
+def _dev_junk_section(entries: List[DevJunkEntry]) -> str:
+    if not entries:
+        return ""
+
+    from collections import defaultdict
+    by_cat: Dict[str, List[DevJunkEntry]] = defaultdict(list)
+    for e in entries:
+        by_cat[e.category].append(e)
+
+    rows = ""
+    for cat in sorted(by_cat):
+        items = by_cat[cat]
+        cat_total = sum(j.size for j in items)
+        rows += (
+            f"<tr>"
+            f"<td>{_tag(cat, 'yellow')}</td>"
+            f"<td>{len(items)} items</td>"
+            f"<td class='size'>{bytes_human(cat_total)}</td>"
+            f"</tr>"
+        )
+        for j in sorted(items, key=lambda x: x.size, reverse=True)[:5]:
+            rows += (
+                f"<tr>"
+                f"<td></td>"
+                f"<td class='path'>{j.path}</td>"
+                f"<td class='size'>{bytes_human(j.size)}</td>"
+                f"</tr>"
+            )
+
+    total = sum(j.size for j in entries)
+    return f"""
+<div class="section">
+  <div class="section-header">
+    <h2>◆ Developer Junk</h2>
+    <span class="badge">{bytes_human(total)}</span>
+    <span class="toggle">▼</span>
+  </div>
+  <div class="section-body">
+    <table>
+      <thead><tr><th>Category</th><th>Items</th><th>Size</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </div>
+</div>"""
+
+
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 _CHART_COLORS = [
@@ -266,9 +319,10 @@ _CHART_COLORS = [
 
 
 def export_html(
-    orphans: Dict[str, List[OrphanEntry]],
-    junk: List[JunkEntry],
-    output_path: str,
+  orphans: Dict[str, List[OrphanEntry]],
+  junk: List[JunkEntry],
+  dev_junk: Optional[List[DevJunkEntry]],
+  output_path: str,
 ) -> None:
     """
     Generate a self-contained HTML scan report.
@@ -288,7 +342,9 @@ def export_html(
     orphan_total_bytes = sum(sum(e.size for e in v) for v in orphans.values())
     user_junk = [j for j in junk if not j.is_system]
     junk_total_bytes = sum(j.size for j in user_junk)
-    grand_total_bytes = orphan_total_bytes + junk_total_bytes
+    dev_junk = dev_junk or []
+    dev_junk_total_bytes = sum(j.size for j in dev_junk)
+    grand_total_bytes = orphan_total_bytes + junk_total_bytes + dev_junk_total_bytes
 
     # Build chart data (top 8 orphans + "Other" + Junk)
     chart_labels: List[str] = []
@@ -319,6 +375,12 @@ def export_html(
         chart_human.append(bytes_human(junk_total_bytes))
         chart_colors.append("#ffd54f")
 
+    if dev_junk_total_bytes > 0:
+      chart_labels.append("Developer Junk")
+      chart_values.append(dev_junk_total_bytes)
+      chart_human.append(bytes_human(dev_junk_total_bytes))
+      chart_colors.append("#26c6da")
+
     chart_data = {
         "labels": chart_labels,
         "values": chart_values,
@@ -336,10 +398,12 @@ def export_html(
         grand_total=bytes_human(grand_total_bytes),
         orphan_total=bytes_human(orphan_total_bytes),
         junk_total=bytes_human(junk_total_bytes),
+      dev_junk_total=bytes_human(dev_junk_total_bytes),
         orphan_count=len(orphans),
         orphan_sections=orphan_sections,
         junk_section=_junk_section(junk),
         chart_data=json.dumps(chart_data),
+        dev_junk_section=_dev_junk_section(dev_junk),
     )
 
     try:

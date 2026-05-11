@@ -8,9 +8,14 @@ from __future__ import annotations
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
-from constants import SEARCH_ROOTS
+from constants import (
+    ORPHAN_ALWAYS_SKIP_NAMES,
+    ORPHAN_ALWAYS_SKIP_PREFIXES,
+    SEARCH_ROOTS,
+    VENDOR_COMPONENT_OWNERS,
+)
 from scanners.matching import match_to_app
 from config.models import AppInfo, JunkEntry, OrphanEntry
 from core.safety import (
@@ -38,6 +43,46 @@ def _is_app_owned_junk(item: Path, apps: Dict[str, AppInfo]) -> bool:
     matched = match_to_app(raw_stem, apps)
     if matched:
         return True
+    return False
+
+
+def _normalized_name_parts(name: str) -> Tuple[str, str]:
+    n = name.lower().strip()
+    stem = Path(name).stem.lower().strip()
+    if n.startswith("."):
+        n = n[1:]
+    if stem.startswith("."):
+        stem = stem[1:]
+    return n, stem
+
+
+def _matches_prefix(name: str, stem: str, prefixes: Set[str]) -> bool:
+    for prefix in prefixes:
+        if name.startswith(prefix) or stem.startswith(prefix):
+            return True
+    return False
+
+
+def _is_always_skip_component(name: str) -> bool:
+    n, stem = _normalized_name_parts(name)
+    if n in ORPHAN_ALWAYS_SKIP_NAMES or stem in ORPHAN_ALWAYS_SKIP_NAMES:
+        return True
+    return _matches_prefix(n, stem, ORPHAN_ALWAYS_SKIP_PREFIXES)
+
+
+def _is_vendor_component_for_installed_apps(
+    name: str,
+    installed_bids: Set[str],
+) -> bool:
+    if not installed_bids:
+        return False
+    n, stem = _normalized_name_parts(name)
+    for comp_prefix, owner_prefixes in VENDOR_COMPONENT_OWNERS.items():
+        if n.startswith(comp_prefix) or stem.startswith(comp_prefix):
+            for bid in installed_bids:
+                for owner_prefix in owner_prefixes:
+                    if bid.startswith(owner_prefix):
+                        return True
     return False
 
 
@@ -86,6 +131,7 @@ def scan_orphans(
         return {}
 
     matched_paths: Dict[Path, AppInfo] = {}
+    installed_bids: Set[str] = {a.bundle_id for a in apps.values()}
     scan_roots = _scan_roots(roots)
 
     # Match search roots to known apps
@@ -115,6 +161,12 @@ def scan_orphans(
 
             # Skip whitelisted paths
             if item in whitelist_set or any(wl in item.parents for wl in whitelist_set):
+                continue
+
+            # Skip shared components and vendor services tied to installed apps
+            if _is_always_skip_component(item.name):
+                continue
+            if _is_vendor_component_for_installed_apps(item.name, installed_bids):
                 continue
 
             display = derive_display_name(str(item))
@@ -176,6 +228,7 @@ def scan_junk(
     junk: List[JunkEntry] = []
     seen: Set[Path] = set()
     skip_categories = skip_categories or set()
+    installed_bids: Set[str] = {a.bundle_id for a in apps.values()} if apps else set()
 
     for root in _scan_roots(roots):
         if not root.is_dir():
@@ -190,6 +243,12 @@ def scan_junk(
 
             # Skip whitelisted
             if item in whitelist_set or any(wl in item.parents for wl in whitelist_set):
+                continue
+
+            # Skip shared components and vendor services tied to installed apps
+            if _is_always_skip_component(item.name):
+                continue
+            if _is_vendor_component_for_installed_apps(item.name, installed_bids):
                 continue
 
             try:
