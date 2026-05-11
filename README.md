@@ -78,7 +78,7 @@ mdc scan
 
 ### From PyPI (recommended)
 ```bash
-pip install mac-deep-cleaner #will be available soon
+pip install mac-deep-cleaner
 ```
 
 ### From source (venv)
