@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint & Type Check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: pip install ruff mypy types-PyYAML
+
+      - name: Ruff lint
+        run: ruff check src/ tests/
+
+      - name: Ruff format check
+        run: ruff format --check src/ tests/
+
+      - name: Mypy type check
+        run: mypy src/ --ignore-missing-imports
+
+  test:
+    name: Test / Python ${{ matrix.python-version }} / ${{ matrix.os }}
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        os: [macos-13, macos-14, macos-latest]
+        exclude:
+          # Python 3.9 not available on macos-14 (arm64 runner)
+          - os: macos-14
+            python-version: "3.9"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package (editable) + dev extras
+        run: pip install -e ".[dev]"
+
+      - name: Run pytest with coverage
+        run: |
+          pytest tests/ \
+            --tb=short \
+            --cov=src \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            -v
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.11' && matrix.os == 'macos-latest'
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          flags: unittests
+          fail_ci_if_error: false
+
+  build-check:
+    name: Build Distribution Check
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Build wheel + sdist
+        run: python -m build
+
+      - name: Check distribution with twine
+        run: twine check dist/*
+
+      - name: Verify CLI entry points exist in wheel
+        run: |
+          pip install dist/*.whl
+          mac-cleaner --help
+          mdc --help
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-packages
+          path: dist/
+          retention-days: 7
