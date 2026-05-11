@@ -9,37 +9,6 @@ Use either command name:
 mac-cleaner scan
 mdc scan
 ```
-
----
-
-## What's New in v1.2.0
-
-| Feature | Command |
-|---|---|
-| Duplicate file finder (by hash) | `mac-cleaner duplicates` |
-| Large file scanner (sortable) | `mac-cleaner large-files` |
-| Broken symlink detector | `mac-cleaner symlinks` |
-| iOS/iPhone backup finder | `mac-cleaner extras --ios-backups` |
-| Language pack stripper | `mac-cleaner extras --language-packs` |
-| Universal binary thinner | `mac-cleaner binary` |
-| Undo / restore staged deletions | `mac-cleaner undo` |
-| YAML config + profiles | `~/.config/mac-cleaner/config.yaml` |
-| Scan history & diff | `mac-cleaner history` / `mac-cleaner diff` |
-| HTML report export | `--export report.html` |
-| Launch item manager | `mac-cleaner system --launch-items` |
-| Login items viewer | `mac-cleaner system --login-items` |
-| SIP & permission health check | `mac-cleaner system --health` |
-| Weekly auto-scan scheduler | `mac-cleaner schedule install` |
-| macOS notifications | `--notify` flag |
-| CI mode / JSON threshold gate | `mac-cleaner scan --ci --threshold-mb 500` |
-| Live TUI dashboard (expanded panels) | `mac-cleaner dashboard` |
-| Developer junk scanner (project caches) | `mac-cleaner scan --dev-junk` |
-| Global dev caches (opt-in) | `mac-cleaner scan --dev-junk-global` |
-| First-run profile selection | `mac-cleaner scan` |
-| Custom scan roots | `mac-cleaner scan --root ~/Projects` |
-| Self-update from PyPI | `mac-cleaner update` |
-| Homebrew formula + .pkg builder | `Formula/mac-deep-cleaner.rb`, `bash scripts/build.sh pkg` |
-
 `mdc` is a shorter alias for every command, for example `mdc dashboard`,
 `mdc clean`, and `mdc scan --ci --threshold-mb 500`.
 
@@ -78,7 +47,7 @@ mdc scan
 
 ### From PyPI (recommended)
 ```bash
-pip install mac-deep-cleaner #will be available soon
+pip install mac-deep-cleaner
 ```
 
 ### From source (venv)
