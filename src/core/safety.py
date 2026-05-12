@@ -1,6 +1,4 @@
 """
-Mac Deep Cleaner v1.5.0 — Safety Module
-=====================================
 All safety checks, safelist lookups, and system-file protection logic.
 Ensures that system-critical files are NEVER deleted.
 """

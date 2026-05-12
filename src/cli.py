@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """
-Mac Deep Cleaner v1.5.0 — CLI Entry Point
-=======================================
 All subcommands, new and updated.
 
 Subcommands
@@ -184,7 +182,7 @@ def main(
     log_file: Optional[str],
     dry_run: bool,
 ) -> None:
-    """Mac Deep Cleaner v1.5.0 — Professional macOS cleanup tool."""
+    """Mac Deep Cleaner v2.0.0 — Professional macOS cleanup tool."""
     from core.dry_run import set_dry_run
     configure_logging(
         verbose=verbose,

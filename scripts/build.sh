@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Mac Deep Cleaner v1.5.0 — Build & Install Script
+# Mac Deep Cleaner v2.0.0 — Build & Install Script
 # =============================================================================
 # Usage:
 #   bash build.sh            → default: build wheel + sdist

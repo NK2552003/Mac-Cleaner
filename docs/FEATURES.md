@@ -1,4 +1,4 @@
-# Mac Deep Cleaner — Features (v1.5.0)
+# Mac Deep Cleaner — Features (v2.0.0)
 
 **Mac Deep Cleaner** is a professional macOS cleanup tool that safely detects and helps you remove leftover data from uninstalled apps, along with general junk that accumulates over time. It is designed to be **safe by default**, with **preview-first** workflows and **undo/restore support**.
 

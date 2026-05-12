@@ -2,33 +2,61 @@
 
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
-## Unreleased
+## v2.0.0 (2026-05-15)
+
+### Added
+
+## Cross-cutting Work
+- Add new CLI subcommands and options in src/cli.py
+- Extend config schema in src/config/config.py for new features
+- Add logging and safe-path validation in src/core/safety.py where needed
+- Expand reporting exports in src/reporting for new outputs
+- Add tests for parsers and non-destructive scanners in tests/
+
+## External Dependencies (tentative)
+- textual or prompt_toolkit for interactive TUI picker
+- rumps for menu bar companion
+- requests or urllib for HIBP API (prefer urllib to avoid new deps)
+- pandas/pyarrow NOT planned (keep lightweight)
+
+## Safety Gates
+- All destructive operations honor --dry-run and undo staging.
+- Time Machine guard before bulk deletes.
+- APFS snapshot support behind explicit flags.
+- Restore checksum verification for staged files.
+
+## Open Decisions (needs confirmation)
+- Preferred TUI library (textual vs prompt_toolkit)
+- Whether to add optional dependencies vs strict core only
+- Handling sudo-required operations (auto prompt vs printed instructions)
+- HIBP API key provisioning and storage
+- Minimum supported macOS version for system commands
+- CI mode via `mdc uninstall-cli` ti uninstall this package
+
+### Changed 
+- CLI wiring for new feature commands
+- Added reporting utilities
+- Updated Readme for new features
+- Version bump to v2.0.0 across docs and UI
 
 ## v1.5.0 (2026-05-12)
 ### Added
-#### P0 (baseline UX and safety)
-- [x] Global --dry-run flag (src/core/dry_run.py)
-- [x] Shell completion command (src/core/completions.py)
-- [x] Full app uninstaller (src/core/uninstaller.py)
-
-#### P1 (highest demand data and visibility)
-- [x] Browser data cleaner (src/scanners/browser_data.py)
-- [x] Visual disk space map (src/scanners/space_map.py)
-- [x] Photo library analyzer (src/scanners/photos_analyzer.py)
-- [x] iOS simulator deep cleaner (src/scanners/simulators.py)
-
-#### P2 (system utilities and maintenance)
-- [x] Memory pressure reliever (src/core/memory_pressure.py)
-- [x] Homebrew deep manager (src/core/brew_manager.py)
-- [x] Storage trend tracker (src/reporting/storage_trend.py)
-- [x] Recent files and activity cleaner (src/scanners/recent_activity.py)
-
-#### P3 (advanced and higher risk features)
-- [x] Permissions auditor (src/core/permissions_auditor.py)
-- [x] APFS snapshot guard (src/core/apfs_snapshots.py)
-- [x] Menu bar companion (src/core/menubar.py)
-- [x] Data breach monitor (src/core/breach_monitor.py)
-- [x] Cloud storage junk scanner (src/scanners/cloud_junk.py)
+- Global --dry-run flag (src/core/dry_run.py)
+- Shell completion command (src/core/completions.py)
+- Full app uninstaller (src/core/uninstaller.py)
+- Browser data cleaner (src/scanners/browser_data.py)
+- Visual disk space map (src/scanners/space_map.py)
+- Photo library analyzer (src/scanners/photos_analyzer.py)
+- iOS simulator deep cleaner (src/scanners/simulators.py)
+- Memory pressure reliever (src/core/memory_pressure.py)
+- Homebrew deep manager (src/core/brew_manager.py)
+- Storage trend tracker (src/reporting/storage_trend.py)
+- Recent files and activity cleaner (src/scanners/recent_activity.py)
+- Permissions auditor (src/core/permissions_auditor.py)
+- APFS snapshot guard (src/core/apfs_snapshots.py)
+- Menu bar companion (src/core/menubar.py)
+- Data breach monitor (src/core/breach_monitor.py)
+- Cloud storage junk scanner (src/scanners/cloud_junk.py)
 
 ### Changed
 - CLI wiring for new P0/P1 commands and dry-run behavior
@@ -47,7 +75,7 @@ All notable changes to **mac-deep-cleaner** will be documented in this file.
 ### Changed
 - Live dashboard now shows top findings and dev junk totals
 - Scan history schema extended with developer junk totals
-- Version bump to v1.5.0 across docs and UI
+- Version bump to v1.2.0 across docs and UI
 
 ## v1.0.0 (2026-05-10)
 ### Added

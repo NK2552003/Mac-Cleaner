@@ -1,6 +1,4 @@
 """
-Mac Deep Cleaner v1.5.0 — App Matching Engine
-==========================================
 Determines whether a directory/file belongs to an installed app.
 Uses multi-strategy matching: alias table, bundle ID prefix/suffix,
 and token overlap analysis.

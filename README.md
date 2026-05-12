@@ -1,4 +1,4 @@
-# Mac Deep Cleaner v1.5.0
+# Mac Deep Cleaner
 
 **Professional macOS cleanup tool — Smart App Orphan Detector**
 

@@ -1,6 +1,4 @@
 """
-Mac Deep Cleaner v1.5.0 — Large File Scanner
-==========================================
 Finds files above a configurable size threshold anywhere on disk
 (or within user-specified roots). Results are sorted by size and
 returned as LargeFileEntry objects.

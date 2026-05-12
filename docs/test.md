@@ -345,3 +345,4 @@ Default behavior:
 - Use `scan` first to preview what would be removed.
 - Use `clean` with undo enabled for safer cleanup.
 - Use `undo --list` to view staging sessions and `undo --session <prefix>` to restore.
+- rg -0 -l "v1\.2\.0" -g '!build/**' -g '!.venv/**' | xargs -0 perl -pi -e 's/v1\.2\.0/v2.0.0/g'  ( to change the v directly with finding patterns)
