@@ -38,6 +38,20 @@ Subcommands
   schedule      Install / remove / status of weekly scan
   update        Check for and apply upgrades
   config        Show / init config file
+  purgeable     Purgeable space reclaimer
+  installer-hunter  Find old installers and PKG files
+  dns-cache     Flush DNS cache
+  font-cache    Rebuild font cache
+  spotlight     Re-index Spotlight
+  power-optimizer  Sleep and power optimizer
+  app-updates   App update checker
+  pkg-receipts  PKG receipt manager
+  xcode-cleaner Xcode derived data cleaner
+  weekly-digest Weekly digest report
+  impact-score  Cleaning impact score
+  tui-picker    Interactive TUI app picker
+  config-sync   Multi-Mac config sync
+  time-machine  Time Machine backup guard
 """
 
 from __future__ import annotations
@@ -1617,6 +1631,8 @@ def cmd_binary(
               help="Permanently purge old staged files beyond retention period.")
 @click.option("--purge-all", "purge_all", is_flag=True, default=False,
               help="Permanently purge ALL staged sessions regardless of age.")
+@click.option("--verify", is_flag=True, default=False,
+              help="Verify checksums after restore.")
 @click.pass_context
 def cmd_undo(
     ctx: click.Context,
@@ -1624,6 +1640,7 @@ def cmd_undo(
     session_id: Optional[str],
     purge: bool,
     purge_all: bool,
+    verify: bool,
 ) -> None:
     """Restore files from the staging area (undo a clean operation).
 
@@ -1711,15 +1728,29 @@ def cmd_undo(
         f"({len(target.files)} files, {target.total_size_human})?",
         default=False,
     ):
-        result = restore_session(target)
-        console.print(
-            f"\n  [green]✓ Restored {result.restored} file(s) "
-            f"({bytes_human(result.bytes_restored)})[/green]"
-        )
-        if result.failed:
-            console.print(f"  [yellow]⚠ {result.failed} file(s) could not be restored[/yellow]")
-        for err in result.errors:
-            console.print(f"    [dim]{err}[/dim]")
+        if verify:
+            from core.restore_checksums import restore_with_verification
+            vresult = restore_with_verification(target)
+            console.print(
+                f"\n  [green]✓ Restored {vresult.restored} file(s) "
+                f"({bytes_human(vresult.bytes_restored)})[/green]"
+            )
+            if vresult.mismatched:
+                console.print(f"  [yellow]⚠ {vresult.mismatched} checksum mismatch(es)[/yellow]")
+            if vresult.failed:
+                console.print(f"  [yellow]⚠ {vresult.failed} file(s) failed to restore[/yellow]")
+            for err in vresult.errors:
+                console.print(f"    [dim]{err}[/dim]")
+        else:
+            result = restore_session(target)
+            console.print(
+                f"\n  [green]✓ Restored {result.restored} file(s) "
+                f"({bytes_human(result.bytes_restored)})[/green]"
+            )
+            if result.failed:
+                console.print(f"  [yellow]⚠ {result.failed} file(s) could not be restored[/yellow]")
+            for err in result.errors:
+                console.print(f"    [dim]{err}[/dim]")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2228,6 +2259,979 @@ def cmd_recent_activity(ctx: click.Context, clear: bool, yes: bool) -> None:
     )
     if result.skipped:
         console.print(f"  [dim]{result.skipped} item(s) skipped[/dim]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PURGEABLE SPACE
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("purgeable")
+@click.option("--volume", default="/", show_default=True,
+              help="Volume path to inspect.")
+@click.option("--thin-gb", default=None, type=int,
+              help="Reclaim at least this many GB using tmutil thinning.")
+@click.option("--thin-mb", default=None, type=int,
+              help="Reclaim at least this many MB using tmutil thinning.")
+@click.option("--delete-older-than", default=None, type=int,
+              help="Delete local snapshots older than N days.")
+@click.option("--keep", default=None, type=int,
+              help="Keep the newest N snapshots.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation prompts.")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export summary to JSON.")
+@click.pass_context
+def cmd_purgeable(
+    ctx: click.Context,
+    volume: str,
+    thin_gb: Optional[int],
+    thin_mb: Optional[int],
+    delete_older_than: Optional[int],
+    keep: Optional[int],
+    yes: bool,
+    export_path: Optional[str],
+) -> None:
+    """Inspect purgeable space and reclaim via snapshot thinning."""
+    from core.dry_run import skip_if_dry_run
+    from scanners.purgeable import (
+        collect_purgeable_sources,
+        delete_snapshots_by_policy,
+        summarize_sources,
+        thin_local_snapshots,
+    )
+
+    sources = collect_purgeable_sources(volume)
+
+    console.print()
+    console.print(Panel("[bold cyan]Purgeable Space[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Source", min_width=24)
+    table.add_column("Detail", min_width=24)
+    table.add_column("Size", justify="right", style="yellow", width=12)
+    for s in sources:
+        size_label = s.size_human if s.bytes > 0 else "unknown"
+        table.add_row(s.name, s.detail, size_label)
+    console.print(table)
+
+    if export_path:
+        import json
+        with open(export_path, "w") as f:
+            json.dump(summarize_sources(sources), f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+    do_thin = thin_gb is not None or thin_mb is not None
+    do_delete = delete_older_than is not None or keep is not None
+    if not (do_thin or do_delete):
+        return
+
+    if skip_if_dry_run(ctx, console, "purgeable cleanup"):
+        return
+
+    if not yes:
+        from rich.prompt import Confirm
+        if not Confirm.ask("Proceed with purgeable cleanup?", default=False):
+            return
+
+    if do_thin:
+        target_bytes = 0
+        if thin_gb is not None:
+            target_bytes = thin_gb * 1024 * 1024 * 1024
+        elif thin_mb is not None:
+            target_bytes = thin_mb * 1024 * 1024
+        result = thin_local_snapshots(volume, target_bytes)
+        color = "green" if result.success else "red"
+        console.print(f"  [{color}]{result.message}[/{color}]")
+
+    if do_delete:
+        deleted, total = delete_snapshots_by_policy(
+            volume,
+            keep=keep,
+            older_than_days=delete_older_than,
+        )
+        console.print(f"  Deleted {deleted}/{total} snapshot(s)")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INSTALLER HUNTER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("installer-hunter")
+@click.option("--root", "roots", multiple=True, type=click.Path(exists=True),
+              help="Roots to scan (default: Downloads/Desktop/Documents).")
+@click.option("--min-age-days", default=None, type=int,
+              help="Only show installers older than N days.")
+@click.option("--min-mb", default=0, show_default=True,
+              help="Minimum size in MB.")
+@click.option("--include-archives", is_flag=True, default=False,
+              help="Include .zip/.tar archives.")
+@click.option("--limit", default=200, show_default=True,
+              help="Maximum results to show.")
+@click.option("--delete", is_flag=True, default=False,
+              help="Delete installers under allowed roots.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation prompts.")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export results to JSON.")
+@click.pass_context
+def cmd_installer_hunter(
+    ctx: click.Context,
+    roots: Tuple[str, ...],
+    min_age_days: Optional[int],
+    min_mb: int,
+    include_archives: bool,
+    limit: int,
+    delete: bool,
+    yes: bool,
+    export_path: Optional[str],
+) -> None:
+    """Find old installers and PKG files."""
+    from core.dry_run import skip_if_dry_run
+    from scanners.installer_hunter import delete_installers, find_installers
+
+    root_paths = [Path(p).expanduser().resolve() for p in roots] or None
+    items = find_installers(
+        roots=root_paths,
+        min_age_days=min_age_days,
+        min_size_mb=min_mb,
+        include_archives=include_archives,
+        limit=limit,
+    )
+
+    console.print()
+    console.print(Panel("[bold cyan]Installer Hunter[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    if not items:
+        console.print("[green]No installers found.[/green]")
+        return
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Kind", width=12)
+    table.add_column("Age (days)", justify="right", width=9)
+    table.add_column("Size", justify="right", style="yellow", width=10)
+    table.add_column("Path", style="dim")
+    for item in items:
+        table.add_row(item.kind, str(item.age_days), item.size_human, str(item.path))
+    console.print(table)
+
+    if export_path:
+        import json
+        payload = {
+            "generated_at": __import__("datetime").datetime.now().isoformat(),
+            "count": len(items),
+            "items": [
+                {
+                    "path": str(i.path),
+                    "size": i.size,
+                    "kind": i.kind,
+                    "modified_at": i.modified_at,
+                    "age_days": i.age_days,
+                }
+                for i in items
+            ],
+        }
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+    if not delete:
+        return
+
+    if skip_if_dry_run(ctx, console, "installer cleanup"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Delete installer files?", default=False)
+    if not do_it:
+        return
+
+    result = delete_installers(items, allowed_roots=root_paths)
+    console.print(
+        f"\n  [green]Deleted {result.deleted} file(s), freed {bytes_human(result.bytes_freed)}[/green]"
+    )
+    if result.skipped:
+        console.print(f"  [dim]{result.skipped} item(s) skipped[/dim]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# XCODE CLEANER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("xcode-cleaner")
+@click.option("--category", "categories", multiple=True,
+              help="Limit cleanup to matching categories.")
+@click.option("--delete", is_flag=True, default=False,
+              help="Delete selected Xcode data.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation prompts.")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export results to JSON.")
+@click.pass_context
+def cmd_xcode_cleaner(
+    ctx: click.Context,
+    categories: Tuple[str, ...],
+    delete: bool,
+    yes: bool,
+    export_path: Optional[str],
+) -> None:
+    """Inspect and clean Xcode derived data and caches."""
+    from core.dry_run import skip_if_dry_run
+    from scanners.xcode_cleaner import collect_xcode_junk, delete_xcode_junk
+
+    items = collect_xcode_junk()
+    console.print()
+    console.print(Panel("[bold cyan]Xcode Cleaner[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    if not items:
+        console.print("[green]No Xcode caches found.[/green]")
+        return
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Category", min_width=20)
+    table.add_column("Size", justify="right", style="yellow", width=12)
+    table.add_column("Path", style="dim")
+    for item in items:
+        table.add_row(item.category, bytes_human(item.size), str(item.path))
+    console.print(table)
+
+    if export_path:
+        import json
+        payload = {
+            "generated_at": __import__("datetime").datetime.now().isoformat(),
+            "items": [
+                {
+                    "category": i.category,
+                    "path": str(i.path),
+                    "size": i.size,
+                }
+                for i in items
+            ],
+        }
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+    if not delete:
+        return
+
+    if skip_if_dry_run(ctx, console, "Xcode cleanup"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Delete Xcode caches?", default=False)
+    if not do_it:
+        return
+
+    result = delete_xcode_junk(items, categories=categories)
+    console.print(
+        f"\n  [green]Deleted {result.deleted} item(s), freed {bytes_human(result.bytes_freed)}[/green]"
+    )
+    if result.skipped:
+        console.print(f"  [dim]{result.skipped} item(s) skipped[/dim]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DNS CACHE
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("dns-cache")
+@click.option("--flush", is_flag=True, default=False,
+              help="Flush DNS caches.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation prompts.")
+@click.pass_context
+def cmd_dns_cache(ctx: click.Context, flush: bool, yes: bool) -> None:
+    """Flush DNS caches."""
+    from core.dns_cache import flush_dns_cache
+    from core.dry_run import skip_if_dry_run
+
+    if not flush:
+        console.print("Use --flush to clear DNS caches.")
+        return
+
+    if skip_if_dry_run(ctx, console, "DNS cache flush"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Flush DNS cache now?", default=False)
+    if not do_it:
+        return
+
+    result = flush_dns_cache()
+    if result.success:
+        console.print("[green]DNS cache flushed.[/green]")
+    else:
+        console.print("[yellow]DNS cache flush may be incomplete.[/yellow]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FONT CACHE
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("font-cache")
+@click.option("--rebuild", is_flag=True, default=False,
+              help="Rebuild font caches using atsutil.")
+@click.option("--clear-user", is_flag=True, default=False,
+              help="Delete user font cache folders before rebuild.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation prompts.")
+@click.pass_context
+def cmd_font_cache(ctx: click.Context, rebuild: bool, clear_user: bool, yes: bool) -> None:
+    """Rebuild font caches."""
+    from core.dry_run import skip_if_dry_run
+    from core.font_cache import rebuild_font_cache
+
+    if not rebuild:
+        console.print("Use --rebuild to rebuild font caches.")
+        return
+
+    if skip_if_dry_run(ctx, console, "font cache rebuild"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Rebuild font caches now?", default=False)
+    if not do_it:
+        return
+
+    result = rebuild_font_cache(clear_user=clear_user)
+    color = "green" if result.success else "red"
+    console.print(f"[{color}]{'Font cache rebuilt' if result.success else 'Font cache rebuild failed'}[/{color}]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SPOTLIGHT
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("spotlight")
+@click.option("--volume", default="/", show_default=True,
+              help="Volume path to inspect.")
+@click.option("--reindex", is_flag=True, default=False,
+              help="Rebuild Spotlight index.")
+@click.option("--enable", is_flag=True, default=False,
+              help="Enable Spotlight indexing.")
+@click.option("--disable", is_flag=True, default=False,
+              help="Disable Spotlight indexing.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation prompts.")
+@click.pass_context
+def cmd_spotlight(
+    ctx: click.Context,
+    volume: str,
+    reindex: bool,
+    enable: bool,
+    disable: bool,
+    yes: bool,
+) -> None:
+    """Inspect or rebuild Spotlight index."""
+    from core.dry_run import skip_if_dry_run
+    from core.spotlight import get_spotlight_status, reindex_spotlight, set_spotlight_indexing
+
+    status = get_spotlight_status(volume)
+    console.print()
+    console.print(Panel("[bold cyan]Spotlight[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+    enabled_label = "enabled" if status.enabled else "disabled"
+    console.print(f"  Status: {enabled_label} ({status.raw})")
+
+    if not (reindex or enable or disable):
+        return
+
+    if skip_if_dry_run(ctx, console, "Spotlight update"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Proceed with Spotlight changes?", default=False)
+    if not do_it:
+        return
+
+    if enable:
+        ok = set_spotlight_indexing(volume, True)
+        console.print("  Enabled" if ok else "  Enable failed")
+    if disable:
+        ok = set_spotlight_indexing(volume, False)
+        console.print("  Disabled" if ok else "  Disable failed")
+    if reindex:
+        ok = reindex_spotlight(volume)
+        console.print("  Reindex started" if ok else "  Reindex failed")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# POWER OPTIMIZER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("power-optimizer")
+@click.option("--apply", "apply_changes", is_flag=True, default=False,
+              help="Apply recommended power settings.")
+@click.option("--restore", is_flag=True, default=False,
+              help="Restore last saved power profile.")
+@click.option("--scope", default="all",
+              type=click.Choice(["all", "battery", "ac"], case_sensitive=False),
+              show_default=True)
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation prompts.")
+@click.pass_context
+def cmd_power_optimizer(
+    ctx: click.Context,
+    apply_changes: bool,
+    restore: bool,
+    scope: str,
+    yes: bool,
+) -> None:
+    """Show or apply power optimization settings."""
+    from core.dry_run import skip_if_dry_run
+    from core.power_optimizer import (
+        apply_recommended,
+        diff_recommendations,
+        get_power_profile,
+        restore_profile,
+    )
+
+    profile = get_power_profile()
+    if profile is None:
+        console.print("[yellow]Unable to read power settings.[/yellow]")
+        return
+
+    console.print()
+    console.print(Panel("[bold cyan]Power Optimizer[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Setting", min_width=18)
+    table.add_column("Battery", justify="right", width=10)
+    table.add_column("AC", justify="right", width=10)
+    keys = sorted(set(profile.battery.keys()) | set(profile.ac.keys()))
+    for key in keys:
+        table.add_row(key, profile.battery.get(key, "-"), profile.ac.get(key, "-"))
+    console.print(table)
+
+    changes = diff_recommendations(profile, scope=scope)
+    if changes:
+        console.print(f"\n  Recommended changes: {len(changes)}")
+        for change in changes[:10]:
+            console.print(f"    {change.key}: {change.current} -> {change.recommended}")
+        if len(changes) > 10:
+            console.print(f"    ... {len(changes) - 10} more")
+    else:
+        console.print("\n  No recommended changes needed.")
+
+    if not (apply_changes or restore):
+        return
+
+    if skip_if_dry_run(ctx, console, "power settings update"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        action_label = "restore" if restore else "apply"
+        do_it = Confirm.ask(f"Proceed to {action_label} power settings?", default=False)
+    if not do_it:
+        return
+
+    result = restore_profile(scope=scope) if restore else apply_recommended(scope=scope)
+    color = "green" if result.success else "red"
+    console.print(f"[{color}]{result.message}[/{color}]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# APP UPDATES
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("app-updates")
+@click.option("--system", is_flag=True, default=False,
+              help="Check macOS software updates.")
+@click.option("--brew", is_flag=True, default=False,
+              help="Check Homebrew updates.")
+@click.option("--mas", is_flag=True, default=False,
+              help="Check Mac App Store updates (requires mas).")
+@click.option("--all", "all_checks", is_flag=True, default=False,
+              help="Run all checks (default).")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export results to JSON.")
+def cmd_app_updates(
+    system: bool,
+    brew: bool,
+    mas: bool,
+    all_checks: bool,
+    export_path: Optional[str],
+) -> None:
+    """Check for app updates across system, brew, and App Store."""
+    from core.update_checker import collect_update_report
+
+    if not (system or brew or mas or all_checks):
+        all_checks = True
+
+    report = collect_update_report()
+
+    console.print()
+    console.print(Panel("[bold cyan]App Updates[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    if all_checks or system:
+        console.print(f"\n  macOS updates: {len(report.system_updates)}")
+        for item in report.system_updates[:10]:
+            console.print(f"    [dim]- {item}[/dim]")
+        if len(report.system_updates) > 10:
+            console.print(f"    [dim]... {len(report.system_updates) - 10} more[/dim]")
+
+    if all_checks or brew:
+        console.print(f"\n  Homebrew formulae: {len(report.brew_formulae)}")
+        for item in report.brew_formulae[:10]:
+            console.print(f"    [dim]- {item}[/dim]")
+        if len(report.brew_formulae) > 10:
+            console.print(f"    [dim]... {len(report.brew_formulae) - 10} more[/dim]")
+        console.print(f"\n  Homebrew casks: {len(report.brew_casks)}")
+        for item in report.brew_casks[:10]:
+            console.print(f"    [dim]- {item}[/dim]")
+        if len(report.brew_casks) > 10:
+            console.print(f"    [dim]... {len(report.brew_casks) - 10} more[/dim]")
+
+    if all_checks or mas:
+        console.print(f"\n  Mac App Store updates: {len(report.mas_updates)}")
+        for item in report.mas_updates[:10]:
+            console.print(f"    [dim]- {item}[/dim]")
+        if len(report.mas_updates) > 10:
+            console.print(f"    [dim]... {len(report.mas_updates) - 10} more[/dim]")
+
+    if report.errors:
+        console.print("\n  [yellow]Warnings:[/yellow]")
+        for err in report.errors:
+            console.print(f"    [dim]{err}[/dim]")
+
+    if export_path:
+        import json
+        payload = {
+            "generated_at": __import__("datetime").datetime.now().isoformat(),
+            "system_updates": report.system_updates,
+            "brew_formulae": report.brew_formulae,
+            "brew_casks": report.brew_casks,
+            "mas_updates": report.mas_updates,
+            "errors": report.errors,
+        }
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PKG RECEIPTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("pkg-receipts")
+@click.option("--search", default=None,
+              help="Filter receipts by substring.")
+@click.option("--limit", default=30, show_default=True,
+              help="Limit results.")
+@click.option("--details", is_flag=True, default=False,
+              help="Show detailed receipt info.")
+@click.option("--forget", "forget_id", default=None,
+              help="Forget a pkg receipt by identifier.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation prompts.")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export receipts to JSON.")
+@click.pass_context
+def cmd_pkg_receipts(
+    ctx: click.Context,
+    search: Optional[str],
+    limit: int,
+    details: bool,
+    forget_id: Optional[str],
+    yes: bool,
+    export_path: Optional[str],
+) -> None:
+    """Inspect and manage pkg receipts."""
+    from core.dry_run import skip_if_dry_run
+    from core.pkg_receipts import forget_receipt, get_receipt_info, list_receipts
+
+    if forget_id:
+        if skip_if_dry_run(ctx, console, "pkgutil forget"):
+            return
+        do_it = yes
+        if not do_it:
+            from rich.prompt import Confirm
+            do_it = Confirm.ask(f"Forget receipt {forget_id}?", default=False)
+        if not do_it:
+            return
+        ok, msg = forget_receipt(forget_id)
+        color = "green" if ok else "red"
+        console.print(f"[{color}]{msg}[/{color}]")
+        return
+
+    receipts = list_receipts(search=search, limit=limit)
+    console.print()
+    console.print(Panel("[bold cyan]PKG Receipts[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    if not receipts:
+        console.print("[yellow]No receipts found.[/yellow]")
+        return
+
+    if details:
+        table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+        table.add_column("Identifier", min_width=36)
+        table.add_column("Version", width=12)
+        table.add_column("Installed", width=20)
+        for receipt_id in receipts:
+            info = get_receipt_info(receipt_id)
+            if info:
+                table.add_row(
+                    info.identifier,
+                    info.version or "-",
+                    (info.install_time or "-")[:19],
+                )
+        console.print(table)
+    else:
+        for receipt_id in receipts:
+            console.print(f"  {receipt_id}")
+
+    if export_path:
+        import json
+        payload = {
+            "generated_at": __import__("datetime").datetime.now().isoformat(),
+            "receipts": receipts,
+        }
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TIME MACHINE GUARD
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("time-machine")
+@click.option("--enable", is_flag=True, default=False,
+              help="Enable Time Machine backups.")
+@click.option("--disable", is_flag=True, default=False,
+              help="Disable Time Machine backups.")
+@click.option("--warn-days", default=7, show_default=True,
+              help="Warn if last backup is older than N days.")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export status to JSON.")
+@click.pass_context
+def cmd_time_machine(
+    ctx: click.Context,
+    enable: bool,
+    disable: bool,
+    warn_days: int,
+    export_path: Optional[str],
+) -> None:
+    """Inspect and guard Time Machine status."""
+    from core.dry_run import skip_if_dry_run
+    from core.time_machine_guard import disable_time_machine, enable_time_machine, get_time_machine_status
+
+    console.print()
+    console.print(Panel("[bold cyan]Time Machine Guard[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    if enable or disable:
+        if skip_if_dry_run(ctx, console, "Time Machine toggle"):
+            return
+        ok, msg = (enable_time_machine() if enable else disable_time_machine())
+        color = "green" if ok else "red"
+        console.print(f"[{color}]{msg}[/{color}]")
+
+    status = get_time_machine_status()
+    console.print(f"\n  Destinations: {len(status.destinations)}")
+    for dest in status.destinations:
+        console.print(f"    [dim]- {dest}[/dim]")
+    console.print(f"  Local snapshots: {status.local_snapshot_count}")
+    if status.last_backup:
+        age = status.last_backup_age_days
+        console.print(f"  Latest backup: {status.last_backup}")
+        if age is not None and age > warn_days:
+            console.print(f"  [yellow]Warning: last backup is {age} days old[/yellow]")
+    else:
+        console.print("  [yellow]No recent backups detected[/yellow]")
+
+    if export_path:
+        import json
+        payload = status.to_dict()
+        payload["generated_at"] = __import__("datetime").datetime.now().isoformat()
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# WEEKLY DIGEST
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("weekly-digest")
+@click.option("--days", default=7, show_default=True,
+              help="Number of days to include.")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export digest to JSON.")
+def cmd_weekly_digest(days: int, export_path: Optional[str]) -> None:
+    """Generate a weekly scan digest report."""
+    from config.history import list_history
+    from reporting.weekly_digest import generate_weekly_digest
+
+    records = list_history(limit=200)
+    digest = generate_weekly_digest(records, days=days)
+
+    console.print()
+    console.print(Panel("[bold cyan]Weekly Digest[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    if not digest:
+        console.print("[yellow]No scans found in the selected time range.[/yellow]")
+        return
+
+    console.print(f"  Range: {digest.start} -> {digest.end}")
+    console.print(f"  Scans: {digest.scan_count}")
+    console.print(f"  Total reclaimable: {digest.total_reclaimable_human}")
+    console.print(f"  Avg per scan: {digest.avg_reclaimable_human}")
+
+    if digest.top_orphan_apps:
+        console.print("\n  Top orphaned apps:")
+        for name, size in digest.top_orphan_apps:
+            console.print(f"    [dim]- {name} ({bytes_human(size)})[/dim]")
+
+    if digest.top_junk_categories:
+        console.print("\n  Top junk categories:")
+        for name, size in digest.top_junk_categories:
+            console.print(f"    [dim]- {name} ({bytes_human(size)})[/dim]")
+
+    if digest.top_dev_categories:
+        console.print("\n  Top dev junk:")
+        for name, size in digest.top_dev_categories:
+            console.print(f"    [dim]- {name} ({bytes_human(size)})[/dim]")
+
+    if export_path:
+        import json
+        payload = digest.to_dict()
+        payload["generated_at"] = __import__("datetime").datetime.now().isoformat()
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# IMPACT SCORE
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("impact-score")
+@click.option("--scan-id", default=None,
+              help="Scan ID prefix to score (default: latest).")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export impact score to JSON.")
+def cmd_impact_score(scan_id: Optional[str], export_path: Optional[str]) -> None:
+    """Compute a cleaning impact score from scan history."""
+    from config.history import list_history
+    from reporting.impact_score import compute_impact_from_summary
+
+    records = list_history(limit=50)
+    if not records:
+        console.print("[yellow]No scan history found.[/yellow]")
+        return
+
+    target = None
+    if scan_id:
+        for r in records:
+            if r.scan_id.startswith(scan_id):
+                target = r
+                break
+    else:
+        target = records[0]
+
+    if not target:
+        console.print("[yellow]Scan not found.[/yellow]")
+        return
+
+    summary = target.summary
+    score = compute_impact_from_summary(
+        orphan_bytes=target.orphan_bytes,
+        junk_bytes=target.junk_bytes,
+        dev_bytes=target.dev_junk_bytes,
+        orphan_count=int(summary.get("orphan_count", 0)),
+        junk_count=int(summary.get("junk_count", 0)),
+        dev_count=int(summary.get("dev_junk_count", 0)),
+    )
+
+    console.print()
+    console.print(Panel("[bold cyan]Impact Score[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+    console.print(f"  Score: [bold]{score.score}[/bold] ({score.label})")
+    console.print(f"  Total reclaimable: {score.total_human}")
+    console.print(f"  Total items: {score.total_items}")
+
+    if export_path:
+        import json
+        payload = score.to_dict()
+        payload["scan_id"] = target.scan_id
+        payload["generated_at"] = __import__("datetime").datetime.now().isoformat()
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TUI PICKER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("tui-picker")
+@click.option("--uninstall", is_flag=True, default=False,
+              help="Uninstall the selected app.")
+@click.option("--no-undo", is_flag=True, default=False,
+              help="Permanently delete instead of staging for undo.")
+@click.option("--reveal", is_flag=True, default=False,
+              help="Reveal the app in Finder.")
+@click.option("--open", "open_app", is_flag=True, default=False,
+              help="Open the app after selection.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation prompts.")
+@click.pass_context
+def cmd_tui_picker(
+    ctx: click.Context,
+    uninstall: bool,
+    no_undo: bool,
+    reveal: bool,
+    open_app: bool,
+    yes: bool,
+) -> None:
+    """Interactive app picker."""
+    import subprocess
+    from core.dry_run import dry_run_enabled
+    from core.tui_picker import pick_app
+    from core.uninstaller import build_uninstall_plan, execute_uninstall
+
+    apps = discover_installed_apps()
+    result = pick_app(list(apps.values()), prompt="Pick an app")
+    app = result.selected
+    if app is None:
+        console.print("[yellow]No app selected.[/yellow]")
+        return
+
+    console.print(f"\nSelected: [bold]{app.name}[/bold] ({app.bundle_id})")
+
+    if reveal:
+        subprocess.run(["open", "-R", str(app.path)])
+    if open_app:
+        subprocess.run(["open", str(app.path)])
+
+    if not uninstall:
+        return
+
+    if dry_run_enabled(ctx):
+        console.print("[yellow]Dry-run enabled; uninstall skipped.[/yellow]")
+        return
+
+    cfg = load_config()
+    plan = build_uninstall_plan(app=app, whitelist_set=cfg.whitelist_set)
+    if not plan.deletable_items:
+        console.print("[yellow]No removable data found for this app.[/yellow]")
+        return
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Category", width=16)
+    table.add_column("Size", justify="right", style="yellow", width=10)
+    table.add_column("Path", style="dim")
+    for item in plan.deletable_items[:40]:
+        table.add_row(item.category, bytes_human(item.size), str(item.path))
+    console.print(table)
+    if len(plan.deletable_items) > 40:
+        console.print(f"  [dim]... {len(plan.deletable_items) - 40} more items omitted[/dim]")
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Proceed with uninstall?", default=False)
+    if not do_it:
+        return
+
+    session = None
+    if cfg.undo_mode and not no_undo:
+        session = new_session()
+    result = execute_uninstall(plan, session=session)
+    if session and result.staged > 0:
+        session.save()
+        console.print(
+            f"\n  [green]Staged {bytes_human(result.bytes_freed)} for undo[/green]"
+        )
+        console.print(
+            f"  [dim]Restore with: mac-cleaner undo --session {session.session_id[:8]}[/dim]"
+        )
+    else:
+        console.print(f"\n  [green]Removed {bytes_human(result.bytes_freed)}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CONFIG SYNC
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.group("config-sync")
+def cmd_config_sync() -> None:
+    """Sync configuration across multiple Macs."""
+
+
+@cmd_config_sync.command("export")
+@click.option("--dest", "dest_dir", default=None, type=click.Path(),
+              help="Destination sync directory.")
+@click.option("--include-history", is_flag=True, default=False,
+              help="Include scan history in sync bundle.")
+@click.option("--no-icloud", is_flag=True, default=False,
+              help="Do not use iCloud Drive as default sync location.")
+def config_sync_export(dest_dir: Optional[str], include_history: bool, no_icloud: bool) -> None:
+    """Export config to sync directory."""
+    from core.config_sync import export_config
+
+    dest = Path(dest_dir).expanduser().resolve() if dest_dir else None
+    result = export_config(dest_dir=dest, include_history=include_history, prefer_icloud=not no_icloud)
+    color = "green" if result.success else "red"
+    console.print(f"[{color}]{result.message}[/{color}]")
+    if result.path:
+        console.print(f"  [dim]{result.path}[/dim]")
+
+
+@cmd_config_sync.command("import")
+@click.option("--src", "src_dir", default=None, type=click.Path(),
+              help="Source sync directory.")
+@click.option("--no-icloud", is_flag=True, default=False,
+              help="Do not use iCloud Drive as default sync location.")
+@click.option("--no-backup", is_flag=True, default=False,
+              help="Do not backup existing config.")
+def config_sync_import(src_dir: Optional[str], no_icloud: bool, no_backup: bool) -> None:
+    """Import config from sync directory."""
+    from core.config_sync import import_config
+
+    src = Path(src_dir).expanduser().resolve() if src_dir else None
+    result = import_config(src_dir=src, prefer_icloud=not no_icloud, backup=not no_backup)
+    color = "green" if result.success else "red"
+    console.print(f"[{color}]{result.message}[/{color}]")
+    if result.path:
+        console.print(f"  [dim]{result.path}[/dim]")
+
+
+@cmd_config_sync.command("status")
+@click.option("--dir", "dest_dir", default=None, type=click.Path(),
+              help="Sync directory to inspect.")
+@click.option("--no-icloud", is_flag=True, default=False,
+              help="Do not use iCloud Drive as default sync location.")
+def config_sync_status(dest_dir: Optional[str], no_icloud: bool) -> None:
+    """Show sync metadata."""
+    from core.config_sync import sync_status
+
+    dest = Path(dest_dir).expanduser().resolve() if dest_dir else None
+    result = sync_status(dest_dir=dest, prefer_icloud=not no_icloud)
+    color = "green" if result.success else "yellow"
+    console.print(f"[{color}]{result.message}[/{color}]")
+    if result.path:
+        console.print(f"  [dim]{result.path}[/dim]")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -42,12 +42,27 @@ mdc scan
 - **Homebrew manager** — cache sizes, outdated list, cleanup and autoremove
 - **Storage trend tracker** — snapshots disk usage over time
 - **Recent activity cleaner** — scans recent-items files (safe clear)
+- **Purgeable space reclaimer** — snapshot thinning and purgeable status
+- **Installer & PKG hunter** — find old installers and disk images
+- **DNS cache flush** — refresh name resolution caches
+- **Font cache rebuild** — rebuild ATS caches safely
+- **Spotlight re-index** — rebuild metadata index on demand
+- **Sleep & power optimizer** — apply recommended pmset settings
+- **App update checker** — system, Homebrew, and App Store updates
+- **PKG receipt manager** — list and forget pkgutil receipts
+- **Xcode derived data cleaner** — DerivedData, Archives, caches
 - **Permissions auditor** — TCC privacy access audit (read-only)
+- **Time Machine backup guard** — status, age checks, local snapshots
 - **APFS snapshot guard** — list and prune local snapshots
 - **Menu bar companion** — SwiftBar/xbar plugin for last scan summary
 - **Data breach monitor** — checks emails via HIBP API (opt-in)
 - **Cloud storage junk** — scans Dropbox/Drive/OneDrive/Box caches
 - **Scheduler** — installs a LaunchAgent for weekly auto-scans
+- **Weekly digest report** — aggregated weekly scan summary
+- **Cleaning impact score** — score reclaimable impact per scan
+- **Interactive TUI app picker** — choose apps with keyboard search
+- **Multi-Mac config sync** — export/import config across devices
+- **Restore checksum verification** — verify restores via `undo --verify`
 - **macOS notifications** — via `osascript`, no dependencies
 - **CI mode** — JSON-only scan summary with threshold-based exit code
 - **Live TUI dashboard** — Rich Live/Layout summary while a scan is running
@@ -171,6 +186,14 @@ mac-cleaner duplicates --path ~/Movies --min-size 500
 mac-cleaner large-files
 mac-cleaner large-files --min-mb 50 --export large.json
 
+# Installer and PKG hunter
+mac-cleaner installer-hunter --min-age-days 30
+mac-cleaner installer-hunter --delete --yes
+
+# Xcode derived data cleaner
+mac-cleaner xcode-cleaner
+mac-cleaner xcode-cleaner --delete --yes
+
 # Find broken symlinks
 mac-cleaner symlinks
 mac-cleaner symlinks --delete
@@ -204,6 +227,15 @@ mac-cleaner diff
 mac-cleaner diff abc12345 def67890
 ```
 
+### Reports
+```bash
+# Weekly digest report
+mac-cleaner weekly-digest --days 7
+
+# Cleaning impact score
+mac-cleaner impact-score
+```
+
 ### Undo
 ```bash
 # List staged deletion sessions
@@ -214,6 +246,9 @@ mac-cleaner undo
 
 # Restore a specific session
 mac-cleaner undo --session abc12345
+
+# Restore with checksum verification
+mac-cleaner undo --verify
 
 # Purge old staged files
 mac-cleaner undo --purge
@@ -227,11 +262,33 @@ mac-cleaner system --login-items
 mac-cleaner system --health
 ```
 
+### TUI app picker
+```bash
+mac-cleaner tui-picker
+mac-cleaner tui-picker --uninstall --yes
+```
+
 ### P2/P3 system utilities
 ```bash
 # Memory pressure
 mac-cleaner memory-pressure
 mac-cleaner memory-pressure --relieve
+
+# Purgeable space
+mac-cleaner purgeable
+mac-cleaner purgeable --thin-gb 10 --yes
+
+# DNS cache
+mac-cleaner dns-cache --flush
+
+# Font cache
+mac-cleaner font-cache --rebuild --clear-user
+
+# Spotlight
+mac-cleaner spotlight --reindex
+
+# Power optimizer
+mac-cleaner power-optimizer --apply
 
 # Homebrew manager
 mac-cleaner brew --outdated
@@ -249,9 +306,18 @@ mac-cleaner recent-activity --clear
 mac-cleaner permissions
 mac-cleaner permissions --system --export tcc.json
 
+# App updates
+mac-cleaner app-updates --all
+
+# PKG receipts
+mac-cleaner pkg-receipts --search com.apple --details
+
 # APFS snapshots
 mac-cleaner snapshots
 mac-cleaner snapshots --delete-older-than 14 --yes
+
+# Time Machine guard
+mac-cleaner time-machine
 
 # Menu bar companion
 mac-cleaner menubar install --interval 15
@@ -285,6 +351,13 @@ mac-cleaner update --check  # check only, no upgrade
 ```bash
 mac-cleaner config --init    # create default config file
 mac-cleaner config --show    # print resolved settings
+```
+
+### Config sync
+```bash
+mac-cleaner config-sync export
+mac-cleaner config-sync import
+mac-cleaner config-sync status
 ```
 
 ---
