@@ -38,6 +38,44 @@ _PROVIDER_ALIASES: Dict[str, str] = {
     "box": "Box",
 }
 
+_ALLOWED_ROOTS: List[Path] = [
+    HOME / "Dropbox" / ".dropbox.cache",
+    HOME / "Library" / "Caches" / "com.dropbox.Dropbox",
+    HOME / "Library" / "Logs" / "Dropbox",
+    HOME / "Library" / "Caches" / "com.google.drivefs",
+    HOME / "Library" / "Caches" / "com.microsoft.OneDrive",
+    HOME / "Library" / "Logs" / "OneDrive",
+    HOME / "Library" / "Application Support" / "OneDrive" / "Logs",
+    HOME / "Library" / "Application Support" / "OneDrive" / "Cache",
+    HOME / "Library" / "Application Support" / "OneDrive" / "Caches",
+    HOME / "Library" / "Caches" / "com.box.desktop",
+    HOME / "Library" / "Logs" / "Box",
+]
+
+
+def _is_allowed_cloud_path(path: Path) -> bool:
+    try:
+        resolved = path.expanduser().resolve()
+    except OSError:
+        resolved = path.expanduser()
+
+    if "DriveFS" in resolved.parts and resolved.name in {"content_cache", "Logs"}:
+        return True
+
+    for root in _ALLOWED_ROOTS:
+        try:
+            if resolved.is_relative_to(root.expanduser().resolve()):
+                return True
+        except AttributeError:
+            try:
+                if str(resolved).startswith(str(root.expanduser().resolve())):
+                    return True
+            except OSError:
+                continue
+        except OSError:
+            continue
+    return False
+
 
 def _add_item(items: List[CloudJunkItem], provider: str, category: str, path: Path) -> None:
     if not path.exists():
@@ -119,6 +157,10 @@ def delete_cloud_junk(items: List[CloudJunkItem]) -> CloudDeleteResult:
     for item in items:
         if not item.safe_to_delete:
             result.skipped += 1
+            continue
+        if not _is_allowed_cloud_path(item.path):
+            result.skipped += 1
+            result.errors.append(f"Blocked outside allowlist: {item.path}")
             continue
         ok, freed = safe_remove(item.path)
         if ok:

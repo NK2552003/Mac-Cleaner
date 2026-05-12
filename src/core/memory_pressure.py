@@ -23,6 +23,9 @@ class MemoryStats:
     pages_compressed: int
     free_percent: Optional[float] = None
     pressure_level: Optional[str] = None
+    swap_total_bytes: Optional[int] = None
+    swap_used_bytes: Optional[int] = None
+    swap_free_bytes: Optional[int] = None
 
     @property
     def total_pages(self) -> int:
@@ -52,6 +55,10 @@ class MemoryStats:
         used_pages = max(self.total_pages - self.free_pages, 0)
         return used_pages * self.page_size
 
+    @property
+    def compressed_bytes(self) -> int:
+        return self.pages_compressed * self.page_size
+
 
 @dataclass
 class ReliefResult:
@@ -64,6 +71,7 @@ class ReliefResult:
 
 _VM_PAGE_RE = re.compile(r"page size of (\d+) bytes", re.IGNORECASE)
 _VM_NUMBER_RE = re.compile(r"([0-9]+)\.")
+_SWAP_RE = re.compile(r"(total|used|free) = ([0-9.]+)([KMGTP])", re.IGNORECASE)
 
 
 def parse_vm_stat(output: str) -> Optional[MemoryStats]:
@@ -135,6 +143,32 @@ def parse_memory_pressure(output: str) -> Tuple[Optional[float], Optional[str]]:
     return free_percent, level
 
 
+def _size_to_bytes(value: str, unit: str) -> int:
+    scale = {
+        "k": 1024,
+        "m": 1024 ** 2,
+        "g": 1024 ** 3,
+        "t": 1024 ** 4,
+        "p": 1024 ** 5,
+    }.get(unit.lower(), 1)
+    return int(float(value) * scale)
+
+
+def parse_swapusage(output: str) -> Optional[Tuple[int, int, int]]:
+    """Parse sysctl vm.swapusage output into byte totals."""
+    values = {}
+    for key, amount, unit in _SWAP_RE.findall(output):
+        values[key.lower()] = _size_to_bytes(amount, unit)
+    if not values:
+        return None
+    total = values.get("total")
+    used = values.get("used")
+    free = values.get("free")
+    if total is None or used is None or free is None:
+        return None
+    return total, used, free
+
+
 def collect_memory_stats(
     runner=subprocess.run,
 ) -> Optional[MemoryStats]:
@@ -171,6 +205,20 @@ def collect_memory_stats(
                 stats.pressure_level = level
         except (OSError, subprocess.TimeoutExpired):
             pass
+
+    try:
+        swap = runner(
+            ["sysctl", "vm.swapusage"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if swap.returncode == 0:
+            parsed = parse_swapusage(swap.stdout)
+            if parsed:
+                stats.swap_total_bytes, stats.swap_used_bytes, stats.swap_free_bytes = parsed
+    except (OSError, subprocess.TimeoutExpired):
+        pass
 
     return stats
 

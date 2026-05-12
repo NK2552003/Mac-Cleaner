@@ -90,7 +90,10 @@ def record_snapshot(
     )
 
 
-def load_snapshots(trend_path: Path = TREND_FILE) -> List[StorageSnapshot]:
+def load_snapshots(
+    trend_path: Path = TREND_FILE,
+    volume: Optional[str] = None,
+) -> List[StorageSnapshot]:
     if not trend_path.exists():
         return []
     try:
@@ -98,6 +101,8 @@ def load_snapshots(trend_path: Path = TREND_FILE) -> List[StorageSnapshot]:
     except (json.JSONDecodeError, OSError):
         return []
     snapshots = [StorageSnapshot.from_dict(d) for d in data.get("snapshots", [])]
+    if volume:
+        snapshots = [s for s in snapshots if s.volume == volume]
     return sorted(snapshots, key=lambda s: s.timestamp)
 
 
@@ -110,8 +115,19 @@ def append_snapshot(
     existing = load_snapshots(trend_path)
     existing.append(snapshot)
     existing = sorted(existing, key=lambda s: s.timestamp)
-    if len(existing) > max_entries:
-        existing = existing[-max_entries:]
+
+    grouped: dict[str, List[StorageSnapshot]] = {}
+    for snap in existing:
+        grouped.setdefault(snap.volume, []).append(snap)
+
+    trimmed: List[StorageSnapshot] = []
+    for volume, snaps in grouped.items():
+        snaps = sorted(snaps, key=lambda s: s.timestamp)
+        if len(snaps) > max_entries:
+            snaps = snaps[-max_entries:]
+        trimmed.extend(snaps)
+
+    existing = sorted(trimmed, key=lambda s: s.timestamp)
 
     payload = {
         "generated_at": datetime.now().isoformat(),

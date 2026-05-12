@@ -31,7 +31,7 @@ def test_storage_trend_record_and_summary(tmp_path: pathlib.Path) -> None:
     snap2 = record_snapshot(volume=tmp_path, disk_usage=fake_usage2)
     append_snapshot(snap2, trend_path=trend_file)
 
-    snapshots = load_snapshots(trend_path=trend_file)
+    snapshots = load_snapshots(trend_path=trend_file, volume=str(tmp_path))
     assert len(snapshots) == 2
 
     summary = summarize_trend(snapshots)
@@ -87,6 +87,26 @@ def test_permissions_auditor_reads_db(tmp_path: pathlib.Path) -> None:
     assert report.entries[0].allowed is True
 
 
+def test_permissions_auditor_allowed_column(tmp_path: pathlib.Path) -> None:
+    from core.permissions_auditor import audit_permissions
+
+    db_path = tmp_path / "TCC.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "CREATE TABLE access (service TEXT, client TEXT, client_type INTEGER, allowed INTEGER, last_modified INTEGER)"
+    )
+    conn.execute(
+        "INSERT INTO access VALUES (?, ?, ?, ?, ?)",
+        ("kTCCServiceAccessibility", "com.example.app", 0, 1, 0),
+    )
+    conn.commit()
+    conn.close()
+
+    report = audit_permissions(db_paths=[db_path])
+    assert len(report.entries) == 1
+    assert report.entries[0].allowed is True
+
+
 def test_apfs_snapshot_parse() -> None:
     from core.apfs_snapshots import parse_tmutil_output
 
@@ -100,7 +120,7 @@ com.apple.TimeMachine.2024-05-11-083012.local
 
 
 def test_memory_pressure_parse() -> None:
-    from core.memory_pressure import parse_vm_stat
+    from core.memory_pressure import parse_vm_stat, parse_swapusage
 
     sample = """Mach Virtual Memory Statistics: (page size of 4096 bytes)
 Pages free:                               1000.
@@ -114,6 +134,10 @@ Pages occupied by compressor:             600.
     assert stats is not None
     assert stats.page_size == 4096
     assert stats.pages_wired == 500
+
+    swap = parse_swapusage("vm.swapusage: total = 1.00G  used = 0.25G  free = 0.75G  (encrypted)")
+    assert swap is not None
+    assert swap[1] > 0
 
 
 def test_breach_monitor_parse() -> None:

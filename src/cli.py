@@ -23,7 +23,7 @@ Subcommands
   undo          Restore files from staging area
   history       Show past scan records
   diff          Compare two scans
-  system        Launch items + SIP + login items
+    system        Launch items + SIP + login items
     memory-pressure  Inspect memory pressure, optional cache purge
     brew          Homebrew manager (cache + cleanup)
     storage-trend Storage usage trend tracker
@@ -1802,10 +1802,15 @@ def cmd_memory_pressure(
     table.add_row("Total", bytes_human(stats.total_bytes))
     table.add_row("Used", bytes_human(stats.used_bytes))
     table.add_row("Free", bytes_human(stats.free_bytes))
+    table.add_row("Compressed", bytes_human(stats.compressed_bytes))
     if free_percent is not None:
         table.add_row("Free %", f"{free_percent:.1f}%")
     if stats.pressure_level:
         table.add_row("Pressure", stats.pressure_level)
+    if stats.swap_used_bytes is not None:
+        table.add_row("Swap Used", bytes_human(stats.swap_used_bytes))
+    if stats.swap_free_bytes is not None:
+        table.add_row("Swap Free", bytes_human(stats.swap_free_bytes))
 
     console.print(table)
 
@@ -1966,7 +1971,8 @@ def cmd_storage_trend(
         snapshot = record_snapshot(Path(volume))
         append_snapshot(snapshot)
 
-    snapshots = load_snapshots()
+    resolved_volume = str(Path(volume))
+    snapshots = load_snapshots(volume=resolved_volume)
     if not snapshots:
         console.print("[yellow]No storage snapshots yet. Run with --record.[/yellow]")
         return
@@ -1995,6 +2001,7 @@ def cmd_storage_trend(
         import json
         payload = {
             "generated_at": __import__("datetime").datetime.now().isoformat(),
+            "volume": resolved_volume,
             "snapshots": [s.to_dict() for s in snapshots],
         }
         with open(export_path, "w") as f:
@@ -2275,6 +2282,8 @@ def menubar_remove(target: Optional[str], custom_dir: Optional[str]) -> None:
               help="Email address to check. Can be repeated.")
 @click.option("--api-key", default=None,
               help="HIBP API key (or set HIBP_API_KEY env var).")
+@click.option("--delay", default=1.6, show_default=True,
+              help="Delay between requests in seconds.")
 @click.option("--use-watchlist", is_flag=True, default=False,
               help="Check addresses saved in the watchlist.")
 @click.option("--save", is_flag=True, default=False,
@@ -2284,12 +2293,13 @@ def menubar_remove(target: Optional[str], custom_dir: Optional[str]) -> None:
 def cmd_breach(
     emails: Tuple[str, ...],
     api_key: Optional[str],
+    delay: float,
     use_watchlist: bool,
     save: bool,
     export_path: Optional[str],
 ) -> None:
     """Check emails against Have I Been Pwned."""
-    from core.breach_monitor import check_email, load_watchlist, resolve_api_key, save_watchlist
+    from core.breach_monitor import check_emails, load_watchlist, resolve_api_key, save_watchlist
 
     email_list = list(emails)
     if use_watchlist:
@@ -2304,7 +2314,10 @@ def cmd_breach(
         save_watchlist(email_list)
 
     key = resolve_api_key(api_key)
-    results = [check_email(email, key or "") for email in email_list]
+    if not key:
+        console.print("[yellow]HIBP API key missing. Use --api-key or set HIBP_API_KEY.[/yellow]")
+        return
+    results = check_emails(email_list, key, min_delay=delay)
 
     console.print()
     console.print(Panel("[bold cyan]Breach Monitor[/bold cyan]",
