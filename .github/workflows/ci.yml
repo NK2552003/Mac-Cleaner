@@ -7,6 +7,9 @@ on:
     branches: [main, develop]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -15,8 +18,13 @@ jobs:
   lint:
     name: Lint & Type Check
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -25,7 +33,7 @@ jobs:
           cache: pip
 
       - name: Install dev dependencies
-        run: pip install ruff mypy types-PyYAML
+        run: pip install --upgrade pip && pip install ruff mypy types-PyYAML
 
       - name: Ruff lint
         run: ruff check src/ tests/
@@ -40,10 +48,11 @@ jobs:
     name: Test / Python ${{ matrix.python-version }} / ${{ matrix.os }}
     needs: lint
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13","3.14"]
         os: [macos-13, macos-14, macos-latest]
         exclude:
           # Python 3.9 not available on macos-14 (arm64 runner)
@@ -51,7 +60,11 @@ jobs:
             python-version: "3.9"
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -60,7 +73,7 @@ jobs:
           cache: pip
 
       - name: Install package (editable) + dev extras
-        run: pip install -e ".[dev]"
+        run: pip install --upgrade pip && pip install -e ".[dev]"
 
       - name: Run pytest with coverage
         run: |
@@ -78,21 +91,28 @@ jobs:
           files: coverage.xml
           flags: unittests
           fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   build-check:
     name: Build Distribution Check
     needs: test
     runs-on: macos-latest
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
 
       - name: Install build tools
-        run: pip install build twine
+        run: pip install --upgrade pip && pip install build twine
 
       - name: Build wheel + sdist
         run: python -m build
