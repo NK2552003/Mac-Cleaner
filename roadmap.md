@@ -1,6 +1,6 @@
 # Mac Deep Cleaner v2.x Roadmap
 
-Date: 2026-05-11
+Date: 2026-05-15
 
 ## Goals
 - Ship a full v2.x feature set with professional-grade safety, logging, and undo support.
