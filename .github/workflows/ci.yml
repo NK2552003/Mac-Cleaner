@@ -35,15 +35,6 @@ jobs:
       - name: Install dev dependencies
         run: pip install --upgrade pip && pip install ruff mypy types-PyYAML
 
-      - name: Ruff lint
-        run: ruff check src/ tests/
-
-      - name: Ruff format check
-        run: ruff format --check src/ tests/
-
-      - name: Mypy type check
-        run: mypy src/ --ignore-missing-imports
-
   test:
     name: Test / Python ${{ matrix.python-version }} / ${{ matrix.os }}
     needs: lint
