@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Professional Edition
+Mac Deep Cleaner v1.5.0 — Professional Edition
 Smart App Orphan Detector & System Cleanup Tool for macOS
 """
 

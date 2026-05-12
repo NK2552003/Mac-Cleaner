@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Duplicate File Finder
+Mac Deep Cleaner v1.5.0 — Duplicate File Finder
 =============================================
 Finds identical files by content hash across user-specified or default
 directories. Groups duplicates, computes wasted space, and returns a

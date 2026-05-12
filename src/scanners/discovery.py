@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — App Discovery
+Mac Deep Cleaner v1.5.0 — App Discovery
 =====================================
 Discovers all installed applications by scanning standard macOS
 app directories and reading Info.plist files.

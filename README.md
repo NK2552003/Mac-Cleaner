@@ -1,4 +1,4 @@
-# Mac Deep Cleaner v1.2.0
+# Mac Deep Cleaner v1.5.0
 
 **Professional macOS cleanup tool — Smart App Orphan Detector**
 
@@ -23,6 +23,12 @@ mdc scan
 - **Duplicate finder** — SHA-256 content hashing, two-phase (head + full), sorted by wasted space
 - **Large file scanner** — finds files ≥100 MB (configurable), categorised by type
 - **Broken symlink detector** — walks `/usr/local`, `/opt/homebrew`, `~/bin`, etc.
+- **Browser data cleaner** — cache, cookies, history, sessions (opt-in delete)
+- **Space map** — disk usage overview by folder tree
+- **Photos analyzer** — summaries of Photos libraries and originals
+- **iOS simulator cleaner** — shows simulator sizes and can purge
+- **Full app uninstaller** — remove app bundle plus known data
+- **Shell completions** — bash, zsh, fish
 - **iOS backup finder** — parses `MobileSync/Backup` manifests, shows device/age/size
 - **Language pack stripper** — detects removable `.lproj` dirs in every installed app
 - **Universal binary thinner** — uses `ditto --arch` safely; creates `.fat_backup` by default
@@ -32,6 +38,15 @@ mdc scan
 - **Diff** — compare any two scans to see what's new or resolved
 - **HTML report** — self-contained with Chart.js doughnut + collapsible sections
 - **System inspector** — LaunchAgents, LaunchDaemons, login items, SIP status
+- **Memory pressure reliever** — reports pressure, optional cache purge
+- **Homebrew manager** — cache sizes, outdated list, cleanup and autoremove
+- **Storage trend tracker** — snapshots disk usage over time
+- **Recent activity cleaner** — scans recent-items files (safe clear)
+- **Permissions auditor** — TCC privacy access audit (read-only)
+- **APFS snapshot guard** — list and prune local snapshots
+- **Menu bar companion** — SwiftBar/xbar plugin for last scan summary
+- **Data breach monitor** — checks emails via HIBP API (opt-in)
+- **Cloud storage junk** — scans Dropbox/Drive/OneDrive/Box caches
 - **Scheduler** — installs a LaunchAgent for weekly auto-scans
 - **macOS notifications** — via `osascript`, no dependencies
 - **CI mode** — JSON-only scan summary with threshold-based exit code
@@ -84,6 +99,9 @@ mac-cleaner clean
 # Auto-delete everything detected
 mac-cleaner clean --auto
 
+# Force preview mode (no deletes anywhere)
+mac-cleaner --dry-run clean
+
 # Permanently delete (skip undo staging)
 mac-cleaner clean --no-undo
 
@@ -125,6 +143,26 @@ mac-cleaner scan --log-file ~/mac-cleaner.log
 
 ### New scanners
 ```bash
+# Shell completions
+mac-cleaner completions --shell zsh --instructions
+
+# Full app uninstall
+mac-cleaner uninstall "Slack"
+
+# Browser data cleanup
+mac-cleaner browser-data
+mac-cleaner browser-data --browser chrome --category cache --clean
+
+# Disk usage map
+mac-cleaner space-map --depth 2 --limit 12
+
+# Photos library analyzer
+mac-cleaner photos --details
+
+# iOS simulator cleaner
+mac-cleaner simulators
+mac-cleaner simulators --purge-unavailable --yes
+
 # Find duplicate files (default: ~/Downloads, ~/Documents, ~/Desktop, ~/Pictures)
 mac-cleaner duplicates
 mac-cleaner duplicates --path ~/Movies --min-size 500
@@ -187,6 +225,44 @@ mac-cleaner system --all
 mac-cleaner system --launch-items
 mac-cleaner system --login-items
 mac-cleaner system --health
+```
+
+### P2/P3 system utilities
+```bash
+# Memory pressure
+mac-cleaner memory-pressure
+mac-cleaner memory-pressure --relieve
+
+# Homebrew manager
+mac-cleaner brew --outdated
+mac-cleaner brew --cleanup --yes
+
+# Storage trend snapshots
+mac-cleaner storage-trend --record
+mac-cleaner storage-trend --days 7
+
+# Recent activity cleanup (Recent Items folder only)
+mac-cleaner recent-activity
+mac-cleaner recent-activity --clear
+
+# Permissions audit (TCC)
+mac-cleaner permissions
+mac-cleaner permissions --system --export tcc.json
+
+# APFS snapshots
+mac-cleaner snapshots
+mac-cleaner snapshots --delete-older-than 14 --yes
+
+# Menu bar companion
+mac-cleaner menubar install --interval 15
+mac-cleaner menubar status --format swiftbar
+
+# Breach monitor (HIBP)
+mac-cleaner breach --email you@example.com --api-key $HIBP_API_KEY
+
+# Cloud storage junk
+mac-cleaner cloud-junk
+mac-cleaner cloud-junk --provider dropbox --clean
 ```
 
 ### Scheduler

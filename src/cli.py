@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mac Deep Cleaner v1.2.0 — CLI Entry Point
+Mac Deep Cleaner v1.5.0 — CLI Entry Point
 =======================================
 All subcommands, new and updated.
 
@@ -9,6 +9,12 @@ Subcommands
   scan          Preview scan (orphans + junk) — safe
   clean         Interactive or auto cleanup
   info          Safety guarantees
+  completions   Generate shell completion scripts
+  uninstall     Full app uninstaller
+  browser-data  Clean browser caches/history/cookies
+  space-map     Visual disk space map
+  photos        Photo library analyzer
+  simulators    iOS simulator deep cleaner
   duplicates    Find duplicate files by hash
   large-files   Find files over a size threshold
   symlinks      Find broken symbolic links
@@ -18,6 +24,15 @@ Subcommands
   history       Show past scan records
   diff          Compare two scans
   system        Launch items + SIP + login items
+  memory-pressure  Inspect memory pressure, optional cache purge
+  brew          Homebrew manager (cache + cleanup)
+  storage-trend Storage usage trend tracker
+  recent-activity  Recent files/activity scanner
+  permissions   Audit macOS privacy permissions (TCC)
+  snapshots     APFS local snapshot guard
+  menubar       Menu bar companion (SwiftBar/xbar)
+  breach        Data breach monitor (HIBP API)
+  cloud-junk    Cloud storage cache/log scanner
   schedule      Install / remove / status of weekly scan
   update        Check for and apply upgrades
   config        Show / init config file
@@ -141,13 +156,22 @@ def _ensure_first_run_profile(profile: Optional[str], ci: bool) -> Optional[str]
               help="Enable debug logging to file.")
 @click.option("--log-file", type=click.Path(), default=None,
               help="Write logs to a file (default: ~/.config/mac-cleaner/mac-cleaner.log).")
+@click.option("--dry-run", is_flag=True, default=False,
+              help="Do not modify anything (disables deletions and writes).")
 @click.pass_context
-def main(ctx: click.Context, verbose: bool, log_file: Optional[str]) -> None:
-    """Mac Deep Cleaner v1.2.0 — Professional macOS cleanup tool."""
+def main(
+    ctx: click.Context,
+    verbose: bool,
+    log_file: Optional[str],
+    dry_run: bool,
+) -> None:
+    """Mac Deep Cleaner v1.5.0 — Professional macOS cleanup tool."""
+    from core.dry_run import set_dry_run
     configure_logging(
         verbose=verbose,
         log_file=Path(log_file) if log_file else None,
     )
+    set_dry_run(ctx, dry_run)
     if ctx.invoked_subcommand is None:
         ctx.invoke(scan)
 
@@ -437,7 +461,9 @@ def cmd_dashboard(
 @click.option("--notify", is_flag=True, default=False)
 @click.option("--no-undo", is_flag=True, default=False,
               help="Permanently delete instead of staging for undo.")
+@click.pass_context
 def clean(
+    ctx: click.Context,
     auto: bool,
     skip_junk: bool,
     whitelist: Tuple[str, ...],
@@ -457,6 +483,7 @@ def clean(
     and can be restored with: mac-cleaner undo
     Pass --no-undo to permanently delete (faster, no recovery).
     """
+    from core.dry_run import dry_run_enabled
     profile = _ensure_first_run_profile(profile=profile, ci=False)
     cfg = load_config(profile=profile)
     wl = cfg.whitelist_set | {
@@ -465,9 +492,12 @@ def clean(
     cfg.custom_scan_roots.extend(Path(p).expanduser().resolve() for p in custom_roots)
     cfg.dev_junk_roots.extend(Path(p).expanduser().resolve() for p in dev_roots)
     undo_mode = cfg.undo_mode and not no_undo
+    dry_run = dry_run_enabled(ctx)
+    if dry_run:
+        console.print("[yellow]Dry-run enabled; clean will run in preview mode.[/yellow]")
 
     _run(
-        delete=True,
+        delete=not dry_run,
         auto=auto,
         skip_junk=skip_junk,
         export_path=export_path,
@@ -512,6 +542,441 @@ def info() -> None:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# COMPLETIONS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("completions")
+@click.option("--shell", default=None,
+              type=click.Choice(["bash", "zsh", "fish"], case_sensitive=False),
+              help="Shell type (bash, zsh, fish).")
+@click.option("--instructions", is_flag=True, default=False,
+              help="Show install instructions for your shell.")
+def cmd_completions(shell: Optional[str], instructions: bool) -> None:
+    """Generate shell completion scripts."""
+    from core.completions import completion_script, detect_shell, install_instructions
+
+    resolved_shell = (shell or detect_shell()).lower()
+    script = completion_script(resolved_shell, "mac-cleaner", main)
+    console.print(script)
+    if instructions:
+        console.print()
+        console.print(install_instructions(resolved_shell, "mac-cleaner"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# UNINSTALL
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("uninstall")
+@click.argument("app_query")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation and uninstall immediately.")
+@click.option("--no-undo", is_flag=True, default=False,
+              help="Permanently delete instead of staging for undo.")
+@click.option("--keep-preferences", is_flag=True, default=False,
+              help="Keep Preferences and Saved State data.")
+@click.option("--force", is_flag=True, default=False,
+              help="Allow uninstall even if the app appears to be running.")
+@click.pass_context
+def cmd_uninstall(
+    ctx: click.Context,
+    app_query: str,
+    yes: bool,
+    no_undo: bool,
+    keep_preferences: bool,
+    force: bool,
+) -> None:
+    """Remove an app and its data (full uninstall)."""
+    from core.uninstaller import build_uninstall_plan, execute_uninstall, find_app_candidates
+    from core.dry_run import dry_run_enabled
+
+    apps = discover_installed_apps()
+    matches = find_app_candidates(app_query, apps)
+
+    if not matches:
+        console.print(f"[yellow]No installed app matched '{app_query}'.[/yellow]")
+        return
+
+    app = matches[0]
+    if len(matches) > 1:
+        table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+        table.add_column("#", style="dim", width=4, justify="right")
+        table.add_column("App")
+        table.add_column("Bundle ID", style="dim")
+        table.add_column("Path", style="dim")
+        for i, a in enumerate(matches, 1):
+            table.add_row(str(i), a.name, a.bundle_id, str(a.path))
+        console.print(table)
+        choice = click.prompt("Select app", type=click.IntRange(1, len(matches)))
+        app = matches[choice - 1]
+
+    running = running_bundle_ids()
+    if app.bundle_id.lower() in running and not force:
+        console.print(
+            "[yellow]App appears to be running. Quit it or pass --force to continue.[/yellow]"
+        )
+        return
+
+    cfg = load_config()
+    plan = build_uninstall_plan(
+        app=app,
+        whitelist_set=cfg.whitelist_set,
+        keep_preferences=keep_preferences,
+    )
+
+    if not plan.deletable_items and not plan.protected_items:
+        console.print("[yellow]No removable data found for this app.[/yellow]")
+        return
+
+    console.print()
+    console.print(Panel(
+        f"[bold cyan]Uninstall Plan[/bold cyan]  [dim]{app.name}[/dim]",
+        border_style="cyan", padding=(0, 2),
+    ))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("#", style="dim", width=4, justify="right")
+    table.add_column("Category", width=16)
+    table.add_column("Size", justify="right", style="yellow", width=10)
+    table.add_column("Path", style="dim")
+
+    for i, item in enumerate(plan.deletable_items[:50], 1):
+        table.add_row(str(i), item.category, bytes_human(item.size), str(item.path))
+
+    console.print(table)
+    if len(plan.deletable_items) > 50:
+        console.print(f"  [dim]... {len(plan.deletable_items) - 50} more items omitted[/dim]")
+    if plan.protected_items:
+        console.print(
+            f"  [dim]{len(plan.protected_items)} item(s) protected by safety checks[/dim]"
+        )
+
+    console.print(
+        f"\n  Total removable: [yellow]{bytes_human(plan.total_size)}[/yellow]"
+    )
+
+    if dry_run_enabled(ctx):
+        console.print("[yellow]Dry-run enabled; uninstall skipped.[/yellow]")
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Proceed with uninstall?", default=False)
+    if not do_it:
+        return
+
+    session = None
+    if cfg.undo_mode and not no_undo:
+        session = new_session()
+
+    result = execute_uninstall(plan, session=session)
+
+    if session and result.staged > 0:
+        session.save()
+        console.print(
+            f"\n  [green]Staged {bytes_human(result.bytes_freed)} for undo[/green]"
+        )
+        console.print(
+            f"  [dim]Restore with: mac-cleaner undo --session {session.session_id[:8]}[/dim]"
+        )
+    else:
+        console.print(
+            f"\n  [green]Removed {bytes_human(result.bytes_freed)}[/green]"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BROWSER DATA CLEANER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("browser-data")
+@click.option("--browser", "browsers", multiple=True,
+              type=click.Choice(["safari", "chrome", "firefox", "edge", "brave"],
+                                case_sensitive=False),
+              help="Limit to specific browsers.")
+@click.option("--category", "categories", multiple=True,
+              type=click.Choice(["cache", "cookies", "history", "downloads", "site-data", "sessions"],
+                                case_sensitive=False),
+              help="Limit to specific data categories.")
+@click.option("--clean", is_flag=True, default=False,
+              help="Delete selected data (requires --category or --all).")
+@click.option("--all", "clean_all", is_flag=True, default=False,
+              help="Delete all supported categories for selected browsers.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation for deletions.")
+@click.pass_context
+def cmd_browser_data(
+    ctx: click.Context,
+    browsers: Tuple[str, ...],
+    categories: Tuple[str, ...],
+    clean: bool,
+    clean_all: bool,
+    yes: bool,
+) -> None:
+    """Analyze and optionally clean browser data."""
+    from scanners.browser_data import (
+        collect_browser_data,
+        delete_browser_data,
+        summarize_browser_data,
+    )
+    from core.dry_run import dry_run_enabled
+
+    items = collect_browser_data(browsers=list(browsers) or None)
+    if not items:
+        console.print("[green]No browser data found.[/green]")
+        return
+
+    summary = summarize_browser_data(items)
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Browser", width=14)
+    table.add_column("Category", width=14)
+    table.add_column("Items", justify="right", width=7)
+    table.add_column("Size", justify="right", style="yellow", width=12)
+
+    for row in summary:
+        table.add_row(row[0], row[1], str(row[2]), bytes_human(row[3]))
+
+    console.print()
+    console.print(Panel("[bold cyan]Browser Data Summary[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+    console.print(table)
+
+    if not (clean or clean_all):
+        return
+
+    if dry_run_enabled(ctx):
+        console.print("[yellow]Dry-run enabled; browser data cleanup skipped.[/yellow]")
+        return
+
+    target_categories = [c.lower() for c in categories]
+    if not clean_all and not target_categories:
+        console.print("[yellow]Specify --category or use --all to clean.[/yellow]")
+        return
+
+    if clean_all:
+        target_categories = []  # empty means all in delete_browser_data
+
+    if not yes:
+        from rich.prompt import Confirm
+        if not Confirm.ask("Proceed with browser data deletion?", default=False):
+            return
+
+    result = delete_browser_data(items, categories=target_categories)
+    console.print(
+        f"\n  [green]Deleted {result.deleted} item(s), freed {bytes_human(result.bytes_freed)}[/green]"
+    )
+    if result.skipped:
+        console.print(f"  [dim]{result.skipped} item(s) skipped by safety checks[/dim]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SPACE MAP
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("space-map")
+@click.option("--root", "roots", multiple=True, type=click.Path(exists=True),
+              help="Root directories to map (default: HOME).")
+@click.option("--depth", default=2, show_default=True,
+              help="Folder depth to include.")
+@click.option("--limit", default=12, show_default=True,
+              help="Maximum child entries shown per directory.")
+@click.option("--min-mb", default=1, show_default=True,
+              help="Minimum size per entry (MB).")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export map to JSON.")
+def cmd_space_map(
+    roots: Tuple[str, ...],
+    depth: int,
+    limit: int,
+    min_mb: int,
+    export_path: Optional[str],
+) -> None:
+    """Visual disk space map."""
+    from scanners.space_map import build_usage_tree, render_usage_tree
+    from constants import HOME
+
+    min_bytes = min_mb * 1024 * 1024
+    root_paths = [Path(p).expanduser().resolve() for p in roots] or [HOME]
+
+    trees = []
+    for root in root_paths:
+        node = build_usage_tree(root, max_depth=depth, min_size=min_bytes)
+        trees.append(node)
+        console.print()
+        console.print(Panel(
+            f"[bold cyan]Space Map[/bold cyan]  [dim]{root}[/dim]",
+            border_style="cyan", padding=(0, 2),
+        ))
+        console.print(render_usage_tree(node, limit=limit))
+
+    if export_path:
+        import json
+        data = [t.to_dict() for t in trees]
+        with open(export_path, "w") as f:
+            json.dump(data, f, indent=2, default=str)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PHOTOS ANALYZER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("photos")
+@click.option("--root", "roots", multiple=True, type=click.Path(exists=True),
+              help="Search roots for Photos libraries (default: ~/Pictures).")
+@click.option("--details", is_flag=True, default=False,
+              help="Show file type breakdown for originals.")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export analysis to JSON.")
+def cmd_photos(
+    roots: Tuple[str, ...],
+    details: bool,
+    export_path: Optional[str],
+) -> None:
+    """Analyze Photos libraries and storage usage."""
+    from scanners.photos_analyzer import analyze_photo_library, find_photo_libraries
+    from constants import HOME
+
+    search_roots = [Path(p).expanduser().resolve() for p in roots] or [HOME / "Pictures"]
+    libs = find_photo_libraries(search_roots=search_roots)
+    if not libs:
+        console.print("[yellow]No Photos libraries found in the selected roots.[/yellow]")
+        return
+
+    reports = [analyze_photo_library(p) for p in libs]
+
+    console.print()
+    console.print(Panel("[bold cyan]Photos Library Analysis[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Library", min_width=22)
+    table.add_column("Total", justify="right", style="yellow", width=10)
+    table.add_column("Originals", justify="right", width=10)
+    table.add_column("Previews", justify="right", width=10)
+    table.add_column("Database", justify="right", width=10)
+    table.add_column("Originals Count", justify="right", width=16)
+
+    for r in reports:
+        table.add_row(
+            r.name,
+            bytes_human(r.size),
+            bytes_human(r.originals_size),
+            bytes_human(r.previews_size),
+            bytes_human(r.database_size),
+            str(r.originals_count),
+        )
+
+    console.print(table)
+
+    if details:
+        for r in reports:
+            console.print(f"\n  [bold]{r.name}[/bold]")
+            for ext, count, size in r.top_extensions(8):
+                console.print(f"    {ext:>6}  {count:>6} files  {bytes_human(size)}")
+
+    if export_path:
+        import json
+        with open(export_path, "w") as f:
+            json.dump([r.to_dict() for r in reports], f, indent=2, default=str)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SIMULATOR CLEANER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("simulators")
+@click.option("--purge-unavailable", is_flag=True, default=False,
+              help="Delete data for unavailable simulators only.")
+@click.option("--purge-all", is_flag=True, default=False,
+              help="Delete data for all simulators (destructive).")
+@click.option("--purge-caches", is_flag=True, default=False,
+              help="Delete CoreSimulator caches and logs.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation prompts.")
+@click.pass_context
+def cmd_simulators(
+    ctx: click.Context,
+    purge_unavailable: bool,
+    purge_all: bool,
+    purge_caches: bool,
+    yes: bool,
+) -> None:
+    """Inspect and clean iOS Simulator data."""
+    from scanners.simulators import (
+        find_simulator_caches,
+        find_simulator_devices,
+        purge_simulator_caches,
+        purge_simulator_devices,
+    )
+    from core.dry_run import dry_run_enabled
+
+    devices = find_simulator_devices()
+    caches = find_simulator_caches()
+
+    console.print()
+    console.print(Panel("[bold cyan]iOS Simulator Data[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    if devices:
+        table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+        table.add_column("Name", min_width=20)
+        table.add_column("Runtime", width=18)
+        table.add_column("State", width=12)
+        table.add_column("Available", width=10)
+        table.add_column("Size", justify="right", style="yellow", width=10)
+        for d in devices:
+            table.add_row(d.name, d.runtime, d.state, "yes" if d.is_available else "no", bytes_human(d.size))
+        console.print(table)
+    else:
+        console.print("  [dim]No simulator devices found.[/dim]")
+
+    if caches:
+        cache_total = sum(c.size for c in caches)
+        console.print(f"\n  Caches: {bytes_human(cache_total)}")
+        for c in caches:
+            console.print(f"    {c.category}: {bytes_human(c.size)}")
+
+    if not (purge_unavailable or purge_all or purge_caches):
+        return
+
+    if dry_run_enabled(ctx):
+        console.print("[yellow]Dry-run enabled; simulator cleanup skipped.[/yellow]")
+        return
+
+    if purge_unavailable or purge_all:
+        targets = devices if purge_all else [d for d in devices if not d.is_available]
+        if targets:
+            if not yes:
+                from rich.prompt import Confirm
+                if not Confirm.ask(
+                    f"Delete simulator data for {len(targets)} device(s)?",
+                    default=False,
+                ):
+                    targets = []
+            if targets:
+                result = purge_simulator_devices(targets)
+                console.print(
+                    f"\n  [green]Deleted {result.deleted} device(s), freed {bytes_human(result.bytes_freed)}[/green]"
+                )
+        else:
+            console.print("  [dim]No devices matched purge criteria.[/dim]")
+
+    if purge_caches and caches:
+        if yes:
+            proceed = True
+        else:
+            from rich.prompt import Confirm
+            proceed = Confirm.ask("Delete CoreSimulator caches?", default=False)
+        if proceed:
+            result = purge_simulator_caches(caches)
+            console.print(
+                f"  [green]Deleted {result.deleted} cache item(s), freed {bytes_human(result.bytes_freed)}[/green]"
+            )
+
+# ══════════════════════════════════════════════════════════════════════════════
 # DUPLICATES
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -524,7 +989,9 @@ def info() -> None:
               help="Export results to JSON.")
 @click.option("--delete", is_flag=True, default=False,
               help="Interactively delete duplicates (keeps the first copy).")
+@click.pass_context
 def cmd_duplicates(
+    ctx: click.Context,
     paths: Tuple[str, ...],
     min_size: int,
     export_path: Optional[str],
@@ -601,6 +1068,9 @@ def cmd_duplicates(
         console.print(f"\n  [green]✓ Exported to {export_path}[/green]")
 
     if delete:
+        from core.dry_run import skip_if_dry_run
+        if skip_if_dry_run(ctx, console, "duplicate deletions"):
+            return
         from rich.prompt import Confirm
         console.print()
         for g in groups:
@@ -698,7 +1168,8 @@ def cmd_large_files(
 @click.option("--path", "paths", multiple=True, type=click.Path())
 @click.option("--delete", is_flag=True, default=False,
               help="Delete broken symlinks after confirmation.")
-def cmd_symlinks(paths: Tuple[str, ...], delete: bool) -> None:
+@click.pass_context
+def cmd_symlinks(ctx: click.Context, paths: Tuple[str, ...], delete: bool) -> None:
     """Find broken (dangling) symbolic links in developer directories."""
     from scanners.symlinks import find_broken_symlinks, DEFAULT_ROOTS
 
@@ -734,6 +1205,9 @@ def cmd_symlinks(paths: Tuple[str, ...], delete: bool) -> None:
     console.print(table)
 
     if delete:
+        from core.dry_run import skip_if_dry_run
+        if skip_if_dry_run(ctx, console, "symlink deletions"):
+            return
         from rich.prompt import Confirm
         if Confirm.ask(f"\n  Delete all {len(broken)} broken symlinks?", default=False):
             deleted = 0
@@ -761,7 +1235,9 @@ def cmd_symlinks(paths: Tuple[str, ...], delete: bool) -> None:
               help="Interactively delete old iOS backups.")
 @click.option("--strip-languages", is_flag=True, default=False,
               help="Interactively strip unused language packs.")
+@click.pass_context
 def cmd_extras(
+    ctx: click.Context,
     ios_backups: bool,
     language_packs: bool,
     all_extras: bool,
@@ -776,7 +1252,12 @@ def cmd_extras(
       mac-cleaner extras --ios-backups --delete-backups
       mac-cleaner extras --language-packs --strip-languages
     """
+    from core.dry_run import dry_run_enabled
     from scanners.extras import find_ios_backups, find_language_packs
+
+    dry_run = dry_run_enabled(ctx)
+    if dry_run and (delete_backups or strip_languages):
+        console.print("[yellow]Dry-run enabled; delete actions are skipped.[/yellow]")
 
     do_ios = ios_backups or all_extras
     do_lang = language_packs or all_extras
@@ -815,7 +1296,7 @@ def cmd_extras(
                 table.add_row(b.device_name, b.ios_version, age, b.size_human, str(b.path))
             console.print(table)
 
-            if delete_backups:
+            if delete_backups and not dry_run:
                 from rich.prompt import Confirm
                 console.print()
                 for b in backups:
@@ -854,7 +1335,7 @@ def cmd_extras(
                 table.add_row(e.app_name, str(len(e.removable_lprojs)), e.removable_size_human)
             console.print(table)
 
-            if strip_languages:
+            if strip_languages and not dry_run:
                 from rich.prompt import Confirm
                 console.print()
                 for e in lang_entries:
@@ -884,7 +1365,9 @@ def cmd_extras(
               help="Interactively thin fat binaries.")
 @click.option("--no-backup", is_flag=True, default=False,
               help="Skip .fat_backup copy (irreversible!).")
+@click.pass_context
 def cmd_binary(
+    ctx: click.Context,
     paths: Tuple[str, ...],
     arch: Optional[str],
     thin: bool,
@@ -936,6 +1419,9 @@ def cmd_binary(
     console.print(table)
 
     if thin:
+        from core.dry_run import skip_if_dry_run
+        if skip_if_dry_run(ctx, console, "binary thinning"):
+            return
         from rich.prompt import Confirm
         keep_backup = not no_backup
         freed = 0
@@ -972,14 +1458,29 @@ def cmd_binary(
               help="Permanently purge old staged files beyond retention period.")
 @click.option("--purge-all", "purge_all", is_flag=True, default=False,
               help="Permanently purge ALL staged sessions regardless of age.")
-def cmd_undo(list_only: bool, session_id: Optional[str], purge: bool, purge_all: bool) -> None:
+@click.pass_context
+def cmd_undo(
+    ctx: click.Context,
+    list_only: bool,
+    session_id: Optional[str],
+    purge: bool,
+    purge_all: bool,
+) -> None:
     """Restore files from the staging area (undo a clean operation).
 
     \b
     Files are staged in ~/.mac_cleaner_trash/ during clean.
     Sessions older than 30 days are purged automatically.
     """
+    from core.dry_run import dry_run_enabled
     from core.undo import list_sessions, restore_session, purge_old_sessions, purge_all_sessions
+
+    dry_run = dry_run_enabled(ctx)
+    if dry_run and (purge or purge_all or not list_only):
+        console.print("[yellow]Dry-run enabled; restore and purge actions are skipped.[/yellow]")
+        purge = False
+        purge_all = False
+        list_only = True
 
     sessions = list_sessions()
 
@@ -1264,6 +1765,654 @@ def cmd_system(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# MEMORY PRESSURE
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("memory-pressure")
+@click.option("--relieve", is_flag=True, default=False,
+              help="Run purge to relieve memory pressure.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation for purge.")
+@click.pass_context
+def cmd_memory_pressure(
+    ctx: click.Context,
+    relieve: bool,
+    yes: bool,
+) -> None:
+    """Inspect memory pressure and optionally purge caches."""
+    from core.dry_run import skip_if_dry_run
+    from core.memory_pressure import collect_memory_stats, relieve_memory_pressure
+
+    stats = collect_memory_stats()
+    if stats is None:
+        console.print("[yellow]Could not read memory statistics.[/yellow]")
+        return
+
+    free_percent = stats.free_percent
+    if free_percent is None and stats.total_bytes > 0:
+        free_percent = (stats.free_bytes / stats.total_bytes) * 100
+
+    console.print()
+    console.print(Panel("[bold cyan]Memory Pressure[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Metric", style="bold")
+    table.add_column("Value", style="yellow")
+    table.add_row("Total", bytes_human(stats.total_bytes))
+    table.add_row("Used", bytes_human(stats.used_bytes))
+    table.add_row("Free", bytes_human(stats.free_bytes))
+    table.add_row("Compressed", bytes_human(stats.compressed_bytes))
+    if free_percent is not None:
+        table.add_row("Free %", f"{free_percent:.1f}%")
+    if stats.pressure_level:
+        table.add_row("Pressure", stats.pressure_level)
+    if stats.swap_used_bytes is not None:
+        table.add_row("Swap Used", bytes_human(stats.swap_used_bytes))
+    if stats.swap_free_bytes is not None:
+        table.add_row("Swap Free", bytes_human(stats.swap_free_bytes))
+
+    console.print(table)
+
+    if not relieve:
+        return
+
+    if skip_if_dry_run(ctx, console, "memory pressure purge"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Run purge to clear inactive caches?", default=False)
+    if not do_it:
+        return
+
+    result = relieve_memory_pressure()
+    color = "green" if result.success else "red"
+    console.print(f"  [{color}]{result.message}[/{color}]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HOMEBREW MANAGER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("brew")
+@click.option("--outdated", is_flag=True, default=False,
+              help="Check for outdated formulae and casks.")
+@click.option("--cleanup", is_flag=True, default=False,
+              help="Run brew cleanup.")
+@click.option("--prune-all", is_flag=True, default=False,
+              help="Run brew cleanup --prune=all.")
+@click.option("--autoremove", is_flag=True, default=False,
+              help="Run brew autoremove.")
+@click.option("--doctor", is_flag=True, default=False,
+              help="Run brew doctor.")
+@click.option("--update", is_flag=True, default=False,
+              help="Run brew update.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation for maintenance actions.")
+@click.pass_context
+def cmd_brew(
+    ctx: click.Context,
+    outdated: bool,
+    cleanup: bool,
+    prune_all: bool,
+    autoremove: bool,
+    doctor: bool,
+    update: bool,
+    yes: bool,
+) -> None:
+    """Manage Homebrew caches and maintenance."""
+    from core.brew_manager import (
+        brew_autoremove,
+        brew_cleanup,
+        brew_doctor,
+        brew_installed,
+        brew_update,
+        collect_brew_status,
+    )
+    from core.dry_run import skip_if_dry_run
+
+    if not brew_installed():
+        console.print("[yellow]Homebrew not found in PATH.[/yellow]")
+        return
+
+    status = collect_brew_status(include_outdated=outdated)
+
+    console.print()
+    console.print(Panel("[bold cyan]Homebrew Manager[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=False, border_style="dim", padding=(0, 1))
+    table.add_column("Key", style="bold")
+    table.add_column("Value", style="yellow")
+    table.add_row("Version", status.version or "unknown")
+    table.add_row("Prefix", str(status.prefix) if status.prefix else "unknown")
+    table.add_row("Cache", f"{status.cache} ({bytes_human(status.cache_size)})" if status.cache else "unknown")
+    table.add_row("Cellar", f"{status.cellar} ({bytes_human(status.cellar_size)})" if status.cellar else "unknown")
+    table.add_row("Formulae", str(status.formulae))
+    table.add_row("Casks", str(status.casks))
+    console.print(table)
+
+    if outdated:
+        if status.outdated_formulae:
+            console.print(f"\n  Outdated formulae: {len(status.outdated_formulae)}")
+            for name in status.outdated_formulae[:10]:
+                console.print(f"    [dim]- {name}[/dim]")
+            if len(status.outdated_formulae) > 10:
+                console.print(f"    [dim]... {len(status.outdated_formulae) - 10} more[/dim]")
+        if status.outdated_casks:
+            console.print(f"\n  Outdated casks: {len(status.outdated_casks)}")
+            for name in status.outdated_casks[:10]:
+                console.print(f"    [dim]- {name}[/dim]")
+            if len(status.outdated_casks) > 10:
+                console.print(f"    [dim]... {len(status.outdated_casks) - 10} more[/dim]")
+
+    if not any([cleanup, prune_all, autoremove, doctor, update]):
+        return
+
+    if skip_if_dry_run(ctx, console, "Homebrew maintenance"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Run selected Homebrew actions?", default=False)
+    if not do_it:
+        return
+
+    if update:
+        result = brew_update()
+        color = "green" if result.success else "red"
+        console.print(f"  [{color}]{result.message}[/{color}]")
+
+    if doctor:
+        result = brew_doctor()
+        color = "green" if result.success else "red"
+        console.print(f"  [{color}]{result.message}[/{color}]")
+
+    if cleanup or prune_all:
+        result = brew_cleanup(prune_all=prune_all)
+        color = "green" if result.success else "red"
+        console.print(f"  [{color}]{result.message}[/{color}]")
+
+    if autoremove:
+        result = brew_autoremove()
+        color = "green" if result.success else "red"
+        console.print(f"  [{color}]{result.message}[/{color}]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STORAGE TREND
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("storage-trend")
+@click.option("--record", is_flag=True, default=False,
+              help="Record a new snapshot before showing results.")
+@click.option("--limit", default=12, show_default=True,
+              help="Maximum snapshots to display.")
+@click.option("--days", default=None, type=int,
+              help="Summarize only the last N days.")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export snapshots to JSON.")
+@click.option("--volume", default="/", show_default=True,
+              help="Volume path to record.")
+def cmd_storage_trend(
+    record: bool,
+    limit: int,
+    days: Optional[int],
+    export_path: Optional[str],
+    volume: str,
+) -> None:
+    """Track disk usage trends over time."""
+    from reporting.storage_trend import append_snapshot, load_snapshots, record_snapshot, summarize_trend
+
+    if record:
+        snapshot = record_snapshot(Path(volume))
+        append_snapshot(snapshot)
+
+    resolved_volume = str(Path(volume))
+    snapshots = load_snapshots(volume=resolved_volume)
+    if not snapshots:
+        console.print("[yellow]No storage snapshots yet. Run with --record.[/yellow]")
+        return
+
+    console.print()
+    console.print(Panel("[bold cyan]Storage Trend[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Timestamp", min_width=20)
+    table.add_column("Used", justify="right", style="yellow", width=12)
+    table.add_column("Free", justify="right", width=12)
+
+    for snap in snapshots[-limit:]:
+        table.add_row(snap.timestamp[:19], snap.used_human, snap.free_human)
+    console.print(table)
+
+    summary = summarize_trend(snapshots, days=days)
+    if summary:
+        direction = "more" if summary.delta_used > 0 else "less"
+        console.print(
+            f"\n  Used {direction} space by {summary.delta_used_human} over {summary.days} day(s)."
+        )
+
+    if export_path:
+        import json
+        payload = {
+            "generated_at": __import__("datetime").datetime.now().isoformat(),
+            "volume": resolved_volume,
+            "snapshots": [s.to_dict() for s in snapshots],
+        }
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# RECENT ACTIVITY
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("recent-activity")
+@click.option("--clear", is_flag=True, default=False,
+              help="Clear items under ~/Library/Recent Items.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation for clearing.")
+@click.pass_context
+def cmd_recent_activity(ctx: click.Context, clear: bool, yes: bool) -> None:
+    """Scan and optionally clear recent activity files."""
+    from core.dry_run import skip_if_dry_run
+    from scanners.recent_activity import clear_recent_items, collect_recent_activity
+
+    items = collect_recent_activity()
+    if not items:
+        console.print("[green]No recent activity files found.[/green]")
+        return
+
+    by_cat: dict = {}
+    for item in items:
+        by_cat.setdefault(item.category, []).append(item)
+
+    console.print()
+    console.print(Panel("[bold cyan]Recent Activity[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Category", min_width=18)
+    table.add_column("Items", justify="right", width=8)
+    table.add_column("Size", justify="right", style="yellow", width=12)
+    table.add_column("Removable", justify="center", width=10)
+
+    for category, entries in by_cat.items():
+        total = sum(e.size for e in entries)
+        removable = all(e.safe_to_delete for e in entries)
+        table.add_row(category, str(len(entries)), bytes_human(total), "yes" if removable else "no")
+
+    console.print(table)
+
+    if not clear:
+        return
+
+    if skip_if_dry_run(ctx, console, "recent activity clearing"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Clear Recent Items folder?", default=False)
+    if not do_it:
+        return
+
+    result = clear_recent_items()
+    console.print(
+        f"\n  [green]Deleted {result.deleted} item(s), freed {bytes_human(result.bytes_freed)}[/green]"
+    )
+    if result.skipped:
+        console.print(f"  [dim]{result.skipped} item(s) skipped[/dim]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PERMISSIONS AUDITOR
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("permissions")
+@click.option("--system", is_flag=True, default=False,
+              help="Include the system-wide TCC database (may require privileges).")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export entries to JSON.")
+def cmd_permissions(system: bool, export_path: Optional[str]) -> None:
+    """Audit macOS privacy permissions."""
+    from core.permissions_auditor import audit_permissions
+
+    report = audit_permissions(include_system=system)
+    if not report.entries:
+        console.print("[yellow]No TCC entries found or access denied.[/yellow]")
+        return
+
+    console.print()
+    console.print(Panel("[bold cyan]Permissions Audit[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    grouped = report.by_service()
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Service", min_width=28)
+    table.add_column("Allowed", justify="right", width=8)
+    table.add_column("Denied", justify="right", width=8)
+
+    for service, entries in grouped.items():
+        allowed = sum(1 for e in entries if e.allowed)
+        denied = len(entries) - allowed
+        name = entries[0].service_name if entries else service
+        table.add_row(name, str(allowed), str(denied))
+
+    console.print(table)
+
+    for warning in report.warnings:
+        console.print(f"\n  [yellow]⚠ {warning}[/yellow]")
+
+    if export_path:
+        import json
+        payload = {
+            "generated_at": __import__("datetime").datetime.now().isoformat(),
+            "entries": [e.__dict__ for e in report.entries],
+        }
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# APFS SNAPSHOTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("snapshots")
+@click.option("--volume", default="/", show_default=True,
+              help="Volume path to inspect.")
+@click.option("--delete-older-than", default=None, type=int,
+              help="Delete snapshots older than N days.")
+@click.option("--keep", default=None, type=int,
+              help="Keep the newest N snapshots.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation for deletions.")
+@click.pass_context
+def cmd_snapshots(
+    ctx: click.Context,
+    volume: str,
+    delete_older_than: Optional[int],
+    keep: Optional[int],
+    yes: bool,
+) -> None:
+    """Inspect and prune APFS local snapshots."""
+    from core.apfs_snapshots import list_snapshots, select_snapshots_to_delete, delete_snapshot
+    from core.dry_run import skip_if_dry_run
+
+    snapshots = list_snapshots(volume)
+    console.print()
+    console.print(Panel("[bold cyan]APFS Snapshots[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    if not snapshots:
+        console.print("  [dim]No local snapshots found.[/dim]")
+        return
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Snapshot", min_width=34)
+    table.add_column("Created", width=20)
+    for snap in snapshots:
+        created = snap.created_at.strftime("%Y-%m-%d %H:%M") if snap.created_at else "unknown"
+        table.add_row(snap.name, created)
+    console.print(table)
+
+    if delete_older_than is None and keep is None:
+        return
+
+    targets = select_snapshots_to_delete(snapshots, keep=keep, older_than_days=delete_older_than)
+    if not targets:
+        console.print("  [dim]No snapshots matched the prune criteria.[/dim]")
+        return
+
+    if skip_if_dry_run(ctx, console, "snapshot deletion"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask(f"Delete {len(targets)} snapshot(s)?", default=False)
+    if not do_it:
+        return
+
+    deleted = 0
+    for snap in targets:
+        if delete_snapshot(snap):
+            deleted += 1
+    console.print(f"\n  [green]Deleted {deleted} snapshot(s)[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MENU BAR COMPANION
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.group("menubar")
+def cmd_menubar() -> None:
+    """Menu bar companion for SwiftBar/xbar."""
+
+
+@cmd_menubar.command("status")
+@click.option("--format", "output_format", default="plain",
+              type=click.Choice(["plain", "swiftbar"], case_sensitive=False))
+def menubar_status(output_format: str) -> None:
+    """Emit status for menu bar tools."""
+    from core.menubar import build_status_from_history, format_swiftbar
+
+    status = build_status_from_history()
+    if status is None:
+        console.print("No scan history yet. Run 'mac-cleaner scan' first.")
+        return
+
+    if output_format.lower() == "swiftbar":
+        click.echo(format_swiftbar(status))
+        return
+
+    console.print(status.label)
+    console.print(status.subtitle)
+
+
+@cmd_menubar.command("install")
+@click.option("--target", default=None,
+              type=click.Choice(["swiftbar", "xbar"], case_sensitive=False),
+              help="Choose SwiftBar or xbar plugin directory.")
+@click.option("--interval", default=15, show_default=True,
+              help="Refresh interval in minutes.")
+@click.option("--dir", "custom_dir", default=None, type=click.Path(),
+              help="Custom plugin directory.")
+def menubar_install(target: Optional[str], interval: int, custom_dir: Optional[str]) -> None:
+    """Install a menu bar plugin script."""
+    from core.menubar import detect_plugin_dirs, install_plugin
+
+    if custom_dir:
+        path = install_plugin(Path(custom_dir), interval_minutes=interval)
+        console.print(f"[green]Installed plugin at {path}[/green]")
+        return
+
+    dirs = detect_plugin_dirs()
+    if not dirs:
+        console.print("[yellow]No SwiftBar/xbar plugin folder found.[/yellow]")
+        return
+
+    chosen = target.lower() if target else ("swiftbar" if "swiftbar" in dirs else "xbar")
+    plugin_dir = dirs.get(chosen)
+    if not plugin_dir:
+        console.print("[yellow]Selected plugin directory not found.[/yellow]")
+        return
+
+    path = install_plugin(plugin_dir, interval_minutes=interval)
+    console.print(f"[green]Installed plugin at {path}[/green]")
+
+
+@cmd_menubar.command("remove")
+@click.option("--target", default=None,
+              type=click.Choice(["swiftbar", "xbar"], case_sensitive=False))
+@click.option("--dir", "custom_dir", default=None, type=click.Path())
+def menubar_remove(target: Optional[str], custom_dir: Optional[str]) -> None:
+    """Remove menu bar plugin scripts."""
+    from core.menubar import detect_plugin_dirs, remove_plugin
+
+    removed = 0
+    if custom_dir:
+        removed = remove_plugin(Path(custom_dir))
+    else:
+        dirs = detect_plugin_dirs()
+        if target:
+            t = target.lower()
+            if t in dirs:
+                removed = remove_plugin(dirs[t])
+        else:
+            for path in dirs.values():
+                removed += remove_plugin(path)
+
+    console.print(f"Removed {removed} plugin(s).")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BREACH MONITOR
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("breach")
+@click.option("--email", "emails", multiple=True,
+              help="Email address to check. Can be repeated.")
+@click.option("--api-key", default=None,
+              help="HIBP API key (or set HIBP_API_KEY env var).")
+@click.option("--delay", default=1.6, show_default=True,
+              help="Delay between requests in seconds.")
+@click.option("--use-watchlist", is_flag=True, default=False,
+              help="Check addresses saved in the watchlist.")
+@click.option("--save", is_flag=True, default=False,
+              help="Save provided emails to the watchlist.")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export results to JSON.")
+def cmd_breach(
+    emails: Tuple[str, ...],
+    api_key: Optional[str],
+    delay: float,
+    use_watchlist: bool,
+    save: bool,
+    export_path: Optional[str],
+) -> None:
+    """Check emails against Have I Been Pwned."""
+    from core.breach_monitor import check_emails, load_watchlist, resolve_api_key, save_watchlist
+
+    email_list = list(emails)
+    if use_watchlist:
+        email_list.extend(load_watchlist())
+    email_list = [e.strip() for e in email_list if e.strip()]
+
+    if not email_list:
+        console.print("[yellow]No email addresses provided.[/yellow]")
+        return
+
+    if save:
+        save_watchlist(email_list)
+
+    key = resolve_api_key(api_key)
+    if not key:
+        console.print("[yellow]HIBP API key missing. Use --api-key or set HIBP_API_KEY.[/yellow]")
+        return
+    results = check_emails(email_list, key, min_delay=delay)
+
+    console.print()
+    console.print(Panel("[bold cyan]Breach Monitor[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Email", min_width=28)
+    table.add_column("Breached", width=10)
+    table.add_column("Count", justify="right", width=6)
+    table.add_column("Error", style="red")
+
+    for r in results:
+        table.add_row(
+            r.email,
+            "yes" if r.breached else "no",
+            str(len(r.breaches)),
+            r.error or "",
+        )
+
+    console.print(table)
+
+    if export_path:
+        import json
+        payload = {
+            "generated_at": __import__("datetime").datetime.now().isoformat(),
+            "results": [r.__dict__ for r in results],
+        }
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CLOUD STORAGE JUNK
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("cloud-junk")
+@click.option("--provider", "providers", multiple=True,
+              type=click.Choice(["dropbox", "google-drive", "onedrive", "box"], case_sensitive=False),
+              help="Limit to a specific provider.")
+@click.option("--clean", is_flag=True, default=False,
+              help="Delete detected cache/log directories.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation for deletions.")
+@click.pass_context
+def cmd_cloud_junk(
+    ctx: click.Context,
+    providers: Tuple[str, ...],
+    clean: bool,
+    yes: bool,
+) -> None:
+    """Scan cloud storage caches and logs."""
+    from core.dry_run import skip_if_dry_run
+    from scanners.cloud_junk import collect_cloud_junk, delete_cloud_junk
+
+    items = collect_cloud_junk(providers=providers or None)
+    if not items:
+        console.print("[green]No cloud cache data found.[/green]")
+        return
+
+    console.print()
+    console.print(Panel("[bold cyan]Cloud Storage Junk[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Provider", width=14)
+    table.add_column("Category", width=10)
+    table.add_column("Size", justify="right", style="yellow", width=10)
+    table.add_column("Path", style="dim")
+
+    for item in items:
+        table.add_row(item.provider, item.category, bytes_human(item.size), str(item.path))
+    console.print(table)
+
+    if not clean:
+        return
+
+    if skip_if_dry_run(ctx, console, "cloud cache cleanup"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask(f"Delete {len(items)} cache/log item(s)?", default=False)
+    if not do_it:
+        return
+
+    result = delete_cloud_junk(items)
+    console.print(
+        f"\n  [green]Deleted {result.deleted} item(s), freed {bytes_human(result.bytes_freed)}[/green]"
+    )
+    if result.skipped:
+        console.print(f"  [dim]{result.skipped} item(s) skipped[/dim]")
+
+# ══════════════════════════════════════════════════════════════════════════════
 # SCHEDULE
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1274,8 +2423,12 @@ def cmd_schedule() -> None:
 
 @cmd_schedule.command("install")
 @click.option("--no-notify", is_flag=True, default=False)
-def schedule_install(no_notify: bool) -> None:
+@click.pass_context
+def schedule_install(ctx: click.Context, no_notify: bool) -> None:
     """Install a weekly LaunchAgent to run scans automatically."""
+    from core.dry_run import skip_if_dry_run
+    if skip_if_dry_run(ctx, console, "schedule install"):
+        return
     from core.scheduler import install_schedule
     ok, msg = install_schedule(notify=not no_notify)
     color = "green" if ok else "red"
@@ -1283,8 +2436,12 @@ def schedule_install(no_notify: bool) -> None:
 
 
 @cmd_schedule.command("remove")
-def schedule_remove() -> None:
+@click.pass_context
+def schedule_remove(ctx: click.Context) -> None:
     """Remove the weekly scan LaunchAgent."""
+    from core.dry_run import skip_if_dry_run
+    if skip_if_dry_run(ctx, console, "schedule removal"):
+        return
     from core.scheduler import remove_schedule
     ok, msg = remove_schedule()
     color = "green" if ok else "yellow"
@@ -1315,9 +2472,11 @@ def schedule_status() -> None:
               help="Check only — do not upgrade.")
 @click.option("--yes", "-y", is_flag=True, default=False,
               help="Upgrade without prompting.")
-def cmd_update(check: bool, yes: bool) -> None:
+@click.pass_context
+def cmd_update(ctx: click.Context, check: bool, yes: bool) -> None:
     """Check for a newer version on PyPI and optionally upgrade."""
     from core.updater import check_for_update, perform_upgrade
+    from core.dry_run import dry_run_enabled
 
     console.print()
     console.print(f"  Current version: [bold cyan]{__version__}[/bold cyan]")
@@ -1338,6 +2497,10 @@ def cmd_update(check: bool, yes: bool) -> None:
     console.print(f"  [yellow]Update available:[/yellow] {__version__} → [bold]{latest}[/bold]")
 
     if check:
+        return
+
+    if dry_run_enabled(ctx):
+        console.print("  [yellow]Dry-run enabled; upgrade skipped.[/yellow]")
         return
 
     do_it = yes

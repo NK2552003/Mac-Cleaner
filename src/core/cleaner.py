@@ -1,10 +1,10 @@
 """
-Mac Deep Cleaner v1.2.0 — Cleaner Module
+Mac Deep Cleaner v1.5.0 — Cleaner Module
 ======================================
 Handles deletion of orphan and junk files with safety checks,
 audit logging, and optional staged-deletion (undo) support.
 
-Changes from v1.2.0
+Changes from v1.5.0
 ---------------
 - do_cleanup() now accepts an optional `session` parameter.
   When provided, files are moved to the staging area (undo.stage_file)
@@ -41,7 +41,7 @@ def write_deletion_log(entries: List[Tuple[str, int]]) -> None:
     try:
         with open(LOG_FILE, "a") as f:
             f.write(f"\n{'=' * 60}\n")
-            f.write(f"Mac Deep Cleaner v1.2.0 — Deletion Log\n")
+            f.write(f"Mac Deep Cleaner v1.5.0 — Deletion Log\n")
             f.write(f"Timestamp: {datetime.now().isoformat()}\n")
             f.write(f"Items deleted: {len(entries)}\n")
             f.write(f"Total freed: {bytes_human(sum(s for _, s in entries))}\n")

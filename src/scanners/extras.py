@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — iOS Backup & Language Pack Scanner
+Mac Deep Cleaner v1.5.0 — iOS Backup & Language Pack Scanner
 ==========================================================
 
 iOS Backup Finder
@@ -242,7 +242,7 @@ def _lprojs_in_bundle(app_path: Path) -> List[Path]:
                     if child.suffix == ".lproj" and child.is_dir():
                         lprojs.append(child)
             except (PermissionError, OSError) as exc:
-                logger.debug("Language pack scan failed for %s: %s", item, exc)
+                logger.debug("Language pack scan failed for %s: %s", candidate, exc)
     return lprojs
 
 

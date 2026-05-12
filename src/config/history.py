@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Scan History & Diff
+Mac Deep Cleaner v1.5.0 — Scan History & Diff
 ==========================================
 Stores past scan results in ~/.config/mac-cleaner/history/ as JSON files.
 Allows comparing two scans to show what's new or resolved since the last run.

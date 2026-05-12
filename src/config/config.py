@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Configuration Manager
+Mac Deep Cleaner v1.5.0 — Configuration Manager
 =============================================
 Reads and writes a YAML config file at ~/.config/mac-cleaner/config.yaml.
 

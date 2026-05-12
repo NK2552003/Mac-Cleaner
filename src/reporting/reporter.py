@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Reporter Module
+Mac Deep Cleaner v1.5.0 — Reporter Module
 =======================================
 Beautiful terminal output using Rich library.
 Tables, trees, panels, and progress indicators.
@@ -107,7 +107,7 @@ def print_banner() -> None:
     """Print the application banner."""
     banner = Text()
     banner.append("Mac Deep Cleaner", style="bold cyan")
-    banner.append("  v1.2.0", style="dim cyan")
+    banner.append("  v1.5.0", style="dim cyan")
     banner.append("  —  Professional Edition", style="dim")
 
     console.print()
@@ -389,7 +389,7 @@ def print_instructions() -> None:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# v1.2.0 Additions (merged from reporter_v5.py)
+# v1.5.0 Additions (merged from reporter_v5.py)
 # ═════════════════════════════════════════════════════════════════════════════
 
 from typing import Any

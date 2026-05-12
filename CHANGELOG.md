@@ -3,11 +3,37 @@
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
 ## Unreleased
+
+## v1.5.0 (2026-05-12)
 ### Added
-- Debug logging flags (`--verbose`, `--log-file`) with file rotation
-- Basic test coverage for utilities and matching
+#### P0 (baseline UX and safety)
+- [x] Global --dry-run flag (src/core/dry_run.py)
+- [x] Shell completion command (src/core/completions.py)
+- [x] Full app uninstaller (src/core/uninstaller.py)
+
+#### P1 (highest demand data and visibility)
+- [x] Browser data cleaner (src/scanners/browser_data.py)
+- [x] Visual disk space map (src/scanners/space_map.py)
+- [x] Photo library analyzer (src/scanners/photos_analyzer.py)
+- [x] iOS simulator deep cleaner (src/scanners/simulators.py)
+
+#### P2 (system utilities and maintenance)
+- [x] Memory pressure reliever (src/core/memory_pressure.py)
+- [x] Homebrew deep manager (src/core/brew_manager.py)
+- [x] Storage trend tracker (src/reporting/storage_trend.py)
+- [x] Recent files and activity cleaner (src/scanners/recent_activity.py)
+
+#### P3 (advanced and higher risk features)
+- [x] Permissions auditor (src/core/permissions_auditor.py)
+- [x] APFS snapshot guard (src/core/apfs_snapshots.py)
+- [x] Menu bar companion (src/core/menubar.py)
+- [x] Data breach monitor (src/core/breach_monitor.py)
+- [x] Cloud storage junk scanner (src/scanners/cloud_junk.py)
 
 ### Changed
+- CLI wiring for new P0/P1 commands and dry-run behavior
+- Module layout aligned to core/scanners (removed features package)
+- README, checklist, and roadmap paths updated for the new layout
 - Improved error handling with debug logs across filesystem and subprocess paths
 - Dev junk scanner traversal now uses a deque for better performance
 
@@ -21,7 +47,7 @@ All notable changes to **mac-deep-cleaner** will be documented in this file.
 ### Changed
 - Live dashboard now shows top findings and dev junk totals
 - Scan history schema extended with developer junk totals
-- Version bump to v1.2.0 across docs and UI
+- Version bump to v1.5.0 across docs and UI
 
 ## v1.0.0 (2026-05-10)
 ### Added

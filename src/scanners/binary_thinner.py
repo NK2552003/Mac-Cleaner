@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Universal Binary Thinner
+Mac Deep Cleaner v1.5.0 — Universal Binary Thinner
 ================================================
 Detects fat (universal) Mach-O binaries that contain both arm64 and x86_64
 slices, and optionally thins them to keep only the slice matching the current

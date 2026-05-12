@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Utilities
+Mac Deep Cleaner v1.5.0 — Utilities
 ================================
 Shared helper functions for filesystem operations, formatting, etc.
 """

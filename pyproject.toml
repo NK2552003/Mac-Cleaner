@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mac-deep-cleaner"
-version = "1.2.0"
+version = "1.5.0"
 description = "Professional Mac cleanup tool — Smart App Orphan Detector"
 readme = "README.md"
 license = "Apache-2.0"
@@ -27,6 +27,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: System :: Systems Administration",
     "Topic :: Utilities",
 ]
