@@ -1,9 +1,5 @@
-"""
-Mac Deep Cleaner v1.5.0 — Constants & Configuration
-=================================================
-All safelists, alias tables, search roots, and configuration constants.
 
-"""
+"""Constants and configuration data for scans and safety rules."""
 
 from pathlib import Path
 from typing import Dict, List, Set

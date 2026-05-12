@@ -52,7 +52,38 @@ class PhotoLibraryReport:
         }
 
 
-def find_photo_libraries(search_roots: Optional[Iterable[Path]] = None) -> List[Path]:
+_PHOTO_LIBRARY_SUFFIXES = {".photoslibrary", ".photolibrary"}
+_PHOTO_SKIP_DIRS = {
+    ".git", ".svn", ".Trash", "Library", "System", "private", "var", "tmp",
+    "usr", "opt", "bin", "sbin", "Applications", "Volumes",
+}
+
+
+def _walk_photo_libraries(root: Path, max_depth: int) -> List[Path]:
+    libraries: List[Path] = []
+    base_depth = len(root.parts)
+    for dirpath, dirnames, _files in os.walk(root):
+        depth = len(Path(dirpath).parts) - base_depth
+        if depth > max_depth:
+            dirnames[:] = []
+            continue
+        pruned: List[str] = []
+        for name in dirnames:
+            if name.startswith(".") or name in _PHOTO_SKIP_DIRS:
+                continue
+            if Path(name).suffix in _PHOTO_LIBRARY_SUFFIXES:
+                libraries.append(Path(dirpath) / name)
+                continue
+            pruned.append(name)
+        dirnames[:] = pruned
+    return libraries
+
+
+def find_photo_libraries(
+    search_roots: Optional[Iterable[Path]] = None,
+    recursive: bool = False,
+    max_depth: int = 6,
+) -> List[Path]:
     """Return Photos libraries found under search roots."""
     roots = list(search_roots) if search_roots else [HOME / "Pictures"]
     libraries: List[Path] = []
@@ -60,17 +91,28 @@ def find_photo_libraries(search_roots: Optional[Iterable[Path]] = None) -> List[
     for root in roots:
         if not root.exists():
             continue
-        if root.suffix in {".photoslibrary", ".photolibrary"}:
+        if root.suffix in _PHOTO_LIBRARY_SUFFIXES:
             libraries.append(root)
+            continue
+        if recursive:
+            libraries.extend(_walk_photo_libraries(root, max_depth=max_depth))
             continue
         try:
             for child in root.iterdir():
-                if child.is_dir() and child.suffix in {".photoslibrary", ".photolibrary"}:
+                if child.is_dir() and child.suffix in _PHOTO_LIBRARY_SUFFIXES:
                     libraries.append(child)
         except (PermissionError, OSError):
             continue
 
-    return sorted(libraries)
+    seen = set()
+    unique: List[Path] = []
+    for lib in libraries:
+        if lib in seen:
+            continue
+        seen.add(lib)
+        unique.append(lib)
+
+    return sorted(unique)
 
 
 def _extension_stats(root: Path) -> Tuple[Dict[str, int], Dict[str, int]]:

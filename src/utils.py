@@ -1,7 +1,11 @@
-"""
-Mac Deep Cleaner v1.5.0 — Utilities
-================================
-Shared helper functions for filesystem operations, formatting, etc.
+
+"""Utility helpers for logging and filesystem operations.
+
+Functions:
+    configure_logging: Configure app-wide logging handlers.
+    bytes_human: Format bytes in a human-friendly way.
+    actual_disk_usage: Calculate real on-disk size using filesystem blocks.
+    safe_remove: Delete files/directories with fallbacks for sandboxed paths.
 """
 
 from __future__ import annotations
@@ -27,7 +31,15 @@ def configure_logging(
     verbose: bool = False,
     log_file: Optional[Path] = None,
 ) -> Optional[Path]:
-    """Configure app-wide logging. Returns the log file path or None."""
+    """Configure app-wide logging.
+
+    Args:
+        verbose: Enable debug logging if True.
+        log_file: Optional log file path override.
+
+    Returns:
+        The resolved log file path if file logging is enabled; otherwise None.
+    """
     global _LOGGER_CONFIGURED
     global _LOG_PATH
     if _LOGGER_CONFIGURED:
@@ -75,20 +87,34 @@ def configure_logging(
 
 
 def bytes_human(n: int) -> str:
-    """Convert byte count to human-readable string."""
+    """Convert a byte count to a human-readable string.
+
+    Args:
+        n: Byte count.
+
+    Returns:
+        Human-friendly size string (e.g., "1.2 GB").
+    """
     if n < 0:
         return "0 B"
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if n < 1024:
             return f"{n:.1f} {unit}"
-        n /= 1024
+        n = int(n/1024)
     return f"{n:.1f} PB"
 
 
 def actual_disk_usage(path: Path) -> int:
-    """
-    Return actual allocated disk usage in bytes using st_blocks.
-    This gives the real on-disk size rather than apparent file size.
+    """Return actual allocated disk usage in bytes.
+
+    Uses `st_blocks` when available to report real on-disk size, falling back
+    to apparent size when needed.
+
+    Args:
+        path: File or directory to inspect.
+
+    Returns:
+        Allocated size in bytes.
     """
     if path.is_symlink() or not path.exists():
         return 0
@@ -117,12 +143,26 @@ def actual_disk_usage(path: Path) -> int:
 
 
 def size_of(path: Path) -> int:
-    """Get size of a file or directory."""
+    """Get the allocated size of a file or directory.
+
+    Args:
+        path: File or directory path.
+
+    Returns:
+        Size in bytes.
+    """
     return actual_disk_usage(path)
 
 
 def iterdir_safe(path: Path) -> List[Path]:
-    """Safely iterate a directory, returning empty list on errors."""
+    """Safely iterate a directory.
+
+    Args:
+        path: Directory to list.
+
+    Returns:
+        Sorted list of children, or an empty list on error.
+    """
     if not path.exists():
         return []
     try:
@@ -133,14 +173,20 @@ def iterdir_safe(path: Path) -> List[Path]:
 
 
 def rm_rf(path: Path) -> Tuple[bool, str]:
-    """
-    Remove path using subprocess rm -rf for reliable deletion of
-    sandboxed containers that shutil.rmtree can't handle.
-    Returns (success, error_message).
+    """Remove a path using the system `rm -rf` command.
+
+    This is a fallback for sandboxed containers that `shutil.rmtree` can't
+    delete reliably.
+
+    Args:
+        path: File or directory to delete.
+
+    Returns:
+        Tuple of (success, error_message).
     """
     try:
         result = subprocess.run(
-            ["rm", "-rf", str(path)],
+            ["rm", "-rf", "--", str(path)],
             capture_output=True, text=True, timeout=60,
         )
         if result.returncode == 0:
@@ -149,15 +195,19 @@ def rm_rf(path: Path) -> Tuple[bool, str]:
         return False, result.stderr.strip()
     except subprocess.TimeoutExpired:
         return False, "Deletion timed out after 60 seconds"
-    except Exception as e:
-        logger.debug("rm_rf exception for %s: %s", path, e)
-        return False, str(e)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        logger.debug("rm_rf exception for %s: %s", path, exc)
+        return False, str(exc)
 
 
 def safe_remove(path: Path) -> Tuple[bool, int]:
-    """
-    Remove a file/directory safely.
-    Returns (success, freed_bytes).
+    """Remove a file or directory safely.
+
+    Args:
+        path: File or directory to remove.
+
+    Returns:
+        Tuple of (success, freed_bytes).
     """
     sz = size_of(path)
 
@@ -184,14 +234,25 @@ def safe_remove(path: Path) -> Tuple[bool, int]:
 
 
 def stem_of(name: str) -> str:
-    """Extract the lowercase stem of a filename."""
+    """Extract the lowercase stem of a filename.
+
+    Args:
+        name: Filename or path-like string.
+
+    Returns:
+        Lowercased stem.
+    """
     return Path(name).stem.lower()
 
 
 def derive_display_name(raw: str) -> str:
-    """
-    Derive a human-readable app name from a bundle-ID-style directory name.
-    E.g., "com.example.myapp" → "Myapp"
+    """Derive a human-readable app name from a bundle-style identifier.
+
+    Args:
+        raw: Bundle-ID-like directory name (e.g., "com.example.myapp").
+
+    Returns:
+        Display-friendly name.
     """
     stem = Path(raw).stem
 
@@ -211,7 +272,14 @@ def derive_display_name(raw: str) -> str:
 
 
 def count_files_recursive(path: Path) -> int:
-    """Count files recursively inside a directory."""
+    """Count files recursively inside a directory.
+
+    Args:
+        path: Directory to count.
+
+    Returns:
+        Number of files found.
+    """
     if not path.is_dir():
         return 1
     count = 0

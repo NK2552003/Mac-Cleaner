@@ -34,6 +34,8 @@ class DevJunkRule:
 
 _NODE_MARKERS: Set[str] = {
     "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+    "pnpm-workspace.yaml", "lerna.json", "nx.json", "turbo.json",
+    "bun.lockb", "bun.lock",
 }
 
 _PY_MARKERS: Set[str] = {
@@ -69,6 +71,7 @@ _GENERIC_MARKERS: Set[str] = (
 
 _RULES: List[DevJunkRule] = [
     DevJunkRule("Node Modules", {"node_modules"}, _NODE_MARKERS),
+    DevJunkRule("JS Build Cache", {".next", ".nuxt", ".svelte-kit", ".astro", ".parcel-cache", ".turbo", ".nx"}, _NODE_MARKERS),
     DevJunkRule("Python Venv", {".venv", "venv", "env", ".env", "virtualenv"}, _PY_MARKERS),
     DevJunkRule("Python Cache", {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", ".nox", ".hypothesis"}, _PY_MARKERS),
     DevJunkRule("Rust Target", {"target"}, _RUST_MARKERS),
@@ -116,6 +119,10 @@ def _resolve_roots(roots: Optional[Iterable[Path]]) -> List[Path]:
         if r not in seen and r.exists():
             seen.add(r)
             resolved.append(r)
+    if not resolved and roots is None:
+        fallback = HOME.expanduser()
+        if fallback.exists():
+            resolved.append(fallback)
     return resolved
 
 

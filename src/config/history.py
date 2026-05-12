@@ -1,39 +1,8 @@
-"""
-Mac Deep Cleaner v1.5.0 — Scan History & Diff
-==========================================
-Stores past scan results in ~/.config/mac-cleaner/history/ as JSON files.
-Allows comparing two scans to show what's new or resolved since the last run.
 
-Storage format
---------------
-Each scan is stored as <timestamp>_<uuid8>.json with this schema:
+"""Persist and diff scan history on disk.
 
-{
-  "schema_version": 2,
-  "scan_id":        "abc12345",
-  "scanned_at":     "2024-01-15T10:30:00",
-  "profile":        "developer",          // optional
-  "orphans": {
-    "Slack": {
-      "total_size": 123456,
-      "items": [{"path": "...", "reason": "...", "size": 123}]
-    }
-  },
-  "junk": [
-    {"path": "...", "category": "User Cache", "size": 123}
-  ],
-    "dev_junk": [
-        {"path": "...", "category": "Node Modules", "size": 123}
-    ],
-  "summary": {
-    "orphan_count": 3,
-    "orphan_bytes": 456789,
-        "junk_count": 12,
-        "junk_bytes": 987654,
-        "dev_junk_count": 5,
-        "dev_junk_bytes": 55555
-  }
-}
+Scan history is stored as JSON files in ~/.config/mac-cleaner/history/ and can
+be diffed to show what changed between runs.
 """
 
 from __future__ import annotations
@@ -43,9 +12,12 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from utils import bytes_human
+
+if TYPE_CHECKING:
+    from config.models import DevJunkEntry, JunkEntry, OrphanEntry
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
@@ -55,6 +27,7 @@ MAX_HISTORY_ENTRIES = 100   # prune oldest beyond this
 
 
 def _ensure_history_dir() -> None:
+    """Ensure the history directory exists."""
     HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -62,7 +35,17 @@ def _ensure_history_dir() -> None:
 
 @dataclass
 class ScanRecord:
-    """A single historical scan result."""
+    """A single historical scan result.
+
+    Attributes:
+        scan_id: Unique scan identifier.
+        scanned_at: Timestamp of the scan.
+        profile: Optional profile name.
+        orphans: Orphaned app data grouped by name.
+        junk: List of junk items.
+        dev_junk: List of developer junk items.
+        summary: Aggregated counts and totals.
+    """
     scan_id: str
     scanned_at: datetime
     profile: Optional[str]
@@ -92,7 +75,8 @@ class ScanRecord:
     def total_bytes(self) -> int:
         return self.orphan_bytes + self.junk_bytes + self.dev_junk_bytes
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the record to a JSON-serializable dictionary."""
         return {
             "schema_version": SCHEMA_VERSION,
             "scan_id": self.scan_id,
@@ -105,13 +89,15 @@ class ScanRecord:
         }
 
     def save(self) -> None:
+        """Persist the scan record to disk."""
         _ensure_history_dir()
-        with open(self.file_path, "w") as f:
+        with open(self.file_path, "w", encoding="utf-8") as f:
             json.dump(self.to_dict(), f, indent=2, default=str)
         _prune_old_entries()
 
     @classmethod
-    def from_dict(cls, d: dict) -> "ScanRecord":
+    def from_dict(cls, d: Dict[str, Any]) -> "ScanRecord":
+        """Create a ScanRecord from a dictionary payload."""
         return cls(
             scan_id=d["scan_id"],
             scanned_at=datetime.fromisoformat(d["scanned_at"]),
@@ -124,8 +110,16 @@ class ScanRecord:
 
     @classmethod
     def load(cls, path: Path) -> Optional["ScanRecord"]:
+        """Load a scan record from disk.
+
+        Args:
+            path: Path to a JSON history file.
+
+        Returns:
+            ScanRecord if the file is valid; otherwise None.
+        """
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             return cls.from_dict(data)
         except (json.JSONDecodeError, KeyError, OSError, ValueError):
@@ -142,17 +136,17 @@ class ScanRecord:
 # ── Builder ────────────────────────────────────────────────────────────────────
 
 def build_scan_record(
-    orphans: Dict,
-    junk: List,
-    dev_junk: Optional[List] = None,
+    orphans: Dict[str, List["OrphanEntry"]],
+    junk: List["JunkEntry"],
+    dev_junk: Optional[List["DevJunkEntry"]] = None,
     profile: Optional[str] = None,
 ) -> ScanRecord:
-    """
-    Create a ScanRecord from live scan results.
+    """Create a ScanRecord from live scan results.
 
     Args:
-        orphans: Dict[str, List[OrphanEntry]] from scanner.scan_orphans()
-        junk:    List[JunkEntry] from scanner.scan_junk()
+        orphans: Mapping of app name to orphan entries.
+        junk: List of junk entries.
+        dev_junk: List of developer junk entries.
         profile: Active profile name (optional).
     """
     orphan_data: Dict[str, Any] = {}
@@ -199,7 +193,14 @@ def build_scan_record(
 # ── History listing ────────────────────────────────────────────────────────────
 
 def list_history(limit: int = 20) -> List[ScanRecord]:
-    """Return past scan records, newest first."""
+    """Return past scan records, newest first.
+
+    Args:
+        limit: Maximum records to return.
+
+    Returns:
+        List of ScanRecord instances.
+    """
     _ensure_history_dir()
     records: List[ScanRecord] = []
     for p in sorted(HISTORY_DIR.glob("*.json"), reverse=True):
@@ -232,7 +233,17 @@ def _prune_old_entries() -> None:
 
 @dataclass
 class ScanDiff:
-    """Comparison between two scan records."""
+    """Comparison between two scan records.
+
+    Attributes:
+        older: Older scan record.
+        newer: Newer scan record.
+        new_orphans: App names appearing only in the newer scan.
+        resolved_orphans: App names missing from the newer scan.
+        persistent_orphans: App names present in both scans.
+        junk_delta_bytes: Net change in junk bytes.
+        dev_junk_delta_bytes: Net change in dev junk bytes.
+    """
     older: ScanRecord
     newer: ScanRecord
 
@@ -261,6 +272,7 @@ class ScanDiff:
 
     @property
     def summary(self) -> Dict[str, Any]:
+        """Return a JSON-ready summary of the diff."""
         return {
             "older_scan": self.older.scan_id[:8],
             "older_date": self.older.scanned_at.isoformat(),
@@ -277,14 +289,30 @@ class ScanDiff:
 
 
 def diff_scans(older: ScanRecord, newer: ScanRecord) -> ScanDiff:
-    """Compare two ScanRecords and return a ScanDiff."""
+    """Compare two ScanRecords and return a ScanDiff.
+
+    Args:
+        older: Older scan record.
+        newer: Newer scan record.
+
+    Returns:
+        ScanDiff instance.
+    """
     return ScanDiff(older=older, newer=newer)
 
 
-def diff_with_latest(current_orphans: Dict, current_junk: List) -> Optional[ScanDiff]:
-    """
-    Compare the current (live) scan results with the most recent stored scan.
-    Returns None if there is no history yet.
+def diff_with_latest(
+    current_orphans: Dict[str, List["OrphanEntry"]],
+    current_junk: List["JunkEntry"],
+) -> Optional[ScanDiff]:
+    """Compare live scan results with the most recent stored scan.
+
+    Args:
+        current_orphans: Mapping of app name to orphan entries.
+        current_junk: List of junk entries.
+
+    Returns:
+        ScanDiff if history exists; otherwise None.
     """
     last = latest_scan()
     if last is None:

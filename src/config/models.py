@@ -1,15 +1,12 @@
-"""
-Mac Deep Cleaner v1.5.0 — Data Models
-==================================
-Immutable data classes for apps, orphan entries, and junk entries.
-"""
+
+"""Core data models for scan results and metadata."""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Set
+from typing import Any, Dict, Set
 
 from utils import size_of
 
@@ -24,7 +21,13 @@ _FILLER_TOKENS: Set[str] = {
 
 @dataclass
 class AppInfo:
-    """Represents a single installed application."""
+    """Represents a single installed application.
+
+    Attributes:
+        name: Display name of the app.
+        bundle_id: App bundle identifier.
+        path: Filesystem path to the app bundle.
+    """
     name: str
     bundle_id: str
     path: Path
@@ -61,7 +64,17 @@ class AppInfo:
 
 @dataclass
 class OrphanEntry:
-    """A leftover file/directory from an uninstalled app."""
+    """A leftover file or directory from an uninstalled app.
+
+    Attributes:
+        path: Filesystem path to the orphaned item.
+        app_name: Display name of the app, if known.
+        reason: Reason category for the orphan entry.
+        size: Size in bytes.
+        category: Normalized category label.
+        bundle_id: Associated bundle identifier, if available.
+        vendor: Vendor name, if known.
+    """
     path: Path
     app_name: str = ""
     reason: str = "Other"  # e.g. "App Support", "Cache", "Container"
@@ -80,7 +93,8 @@ class OrphanEntry:
         if self.size <= 0:
             self.size = size_of(self.path)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the entry to a JSON-serializable dictionary."""
         return {
             "path": str(self.path),
             "app_name": self.app_name,
@@ -94,7 +108,15 @@ class OrphanEntry:
 
 @dataclass
 class JunkEntry:
-    """A general junk file/directory (cache, log, crash report, etc.)."""
+    """A general junk file or directory.
+
+    Attributes:
+        path: Filesystem path to the junk item.
+        category: Category label (e.g., "User Cache").
+        is_system: Whether the item is system-owned (never auto-delete).
+        size: Size in bytes.
+        bundle_id: Associated bundle identifier, if available.
+    """
     path: Path
     category: str = "Other"       # e.g. "User Cache", "Log File", "Trash"
     is_system: bool = False  # If True, never auto-delete
@@ -105,7 +127,8 @@ class JunkEntry:
         if self.size <= 0:
             self.size = size_of(self.path)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the entry to a JSON-serializable dictionary."""
         return {
             "path": str(self.path),
             "category": self.category,
@@ -117,7 +140,13 @@ class JunkEntry:
 
 @dataclass
 class DevJunkEntry:
-    """Developer junk directory (build output, venv, node_modules, etc.)."""
+    """Developer junk directory (build output, venv, node_modules, etc.).
+
+    Attributes:
+        path: Filesystem path to the dev junk directory.
+        category: Category label.
+        size: Size in bytes.
+    """
     path: Path
     category: str = "Other"
     size: int = 0
@@ -126,7 +155,8 @@ class DevJunkEntry:
         if self.size <= 0:
             self.size = size_of(self.path)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the entry to a JSON-serializable dictionary."""
         return {
             "path": str(self.path),
             "category": self.category,

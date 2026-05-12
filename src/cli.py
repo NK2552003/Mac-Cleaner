@@ -11,6 +11,7 @@ Subcommands
   info          Safety guarantees
   completions   Generate shell completion scripts
   uninstall     Full app uninstaller
+  uninstall-cli Uninstall mac-cleaner CLI and data
   browser-data  Clean browser caches/history/cookies
   space-map     Visual disk space map
   photos        Photo library analyzer
@@ -28,6 +29,7 @@ Subcommands
   brew          Homebrew manager (cache + cleanup)
   storage-trend Storage usage trend tracker
   recent-activity  Recent files/activity scanner
+  developer     Developer junk scanner / cleanup
   permissions   Audit macOS privacy permissions (TCC)
   snapshots     APFS local snapshot guard
   menubar       Menu bar companion (SwiftBar/xbar)
@@ -44,7 +46,7 @@ import logging
 import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import click
 from rich.console import Console
@@ -126,8 +128,11 @@ def _ensure_first_run_profile(profile: Optional[str], ci: bool) -> Optional[str]
     table = Table(show_header=True, header_style="bold cyan", border_style="dim")
     table.add_column("Profile", style="bold")
     table.add_column("Focus")
+    table.add_column("Recommended", justify="center", width=12)
+    recommended = "beginner"
     for name in choices:
-        table.add_row(name, descriptions.get(name, ""))
+        rec = "yes" if name == recommended else ""
+        table.add_row(name, descriptions.get(name, ""), rec)
 
     console.print()
     console.print(Panel(
@@ -514,6 +519,138 @@ def clean(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# DEVELOPER JUNK
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("developer")
+@click.option("--root", "roots", multiple=True, type=click.Path(exists=True),
+              help="Roots to scan for developer junk (default: config + common project folders).")
+@click.option("--max-depth", default=None, type=int,
+              help="Max depth for dev junk scanning (default: config value).")
+@click.option("--global", "include_global", is_flag=True, default=False,
+              help="Include global caches (~/.npm, ~/.gradle, etc).")
+@click.option("--limit", default=0, show_default=True,
+              help="Limit number of items returned (0 = no limit).")
+@click.option("--delete", is_flag=True, default=False,
+              help="Delete detected developer junk.")
+@click.option("--no-undo", is_flag=True, default=False,
+              help="Permanently delete instead of staging for undo.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation prompts.")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export report to JSON.")
+@click.option("--profile", default=None, help="Config profile to use.")
+@click.pass_context
+def cmd_developer(
+    ctx: click.Context,
+    roots: Tuple[str, ...],
+    max_depth: Optional[int],
+    include_global: bool,
+    limit: int,
+    delete: bool,
+    no_undo: bool,
+    yes: bool,
+    export_path: Optional[str],
+    profile: Optional[str],
+) -> None:
+    """Scan and optionally clean developer junk (node_modules, venv, build dirs)."""
+    from core.dry_run import skip_if_dry_run
+    from core.safety import validate_path_for_deletion
+    from scanners.dev_junk import find_dev_junk
+
+    cfg = load_config(profile=profile)
+    wl = cfg.whitelist_set
+    roots_list = [Path(p).expanduser().resolve() for p in roots] or (cfg.dev_junk_roots or None)
+    depth = max_depth if max_depth is not None else cfg.dev_junk_max_depth
+    include_global = include_global or bool(getattr(cfg, "scan_dev_junk_global", False))
+    limit_val = None if limit <= 0 else limit
+
+    console.print()
+    console.print(Panel("[bold cyan]Developer Junk[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    with _progress() as prog:
+        task = prog.add_task("Scanning developer junk...", total=None)
+        entries = find_dev_junk(
+            roots=roots_list,
+            max_depth=depth,
+            limit=limit_val,
+            include_global=include_global,
+        )
+        prog.update(task, completed=100, total=100)
+
+    if wl:
+        entries = [
+            e for e in entries
+            if e.path not in wl and not any(w in e.path.parents for w in wl)
+        ]
+
+    total = print_dev_junk_report(entries)
+
+    if export_path:
+        import json
+        payload = {
+            "generated_at": __import__("datetime").datetime.now().isoformat(),
+            "total_bytes": total,
+            "total_human": bytes_human(total),
+            "entries": [e.to_dict() for e in entries],
+        }
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2, default=str)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+    if not delete or not entries:
+        return
+
+    if skip_if_dry_run(ctx, console, "developer junk cleanup"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask(
+            f"Delete developer junk ({bytes_human(total)})?",
+            default=False,
+        )
+    if not do_it:
+        return
+
+    if cfg.undo_mode and not no_undo:
+        session = new_session()
+        freed = 0
+        for e in entries:
+            safe, _ = validate_path_for_deletion(e.path)
+            if safe:
+                ok, sz = stage_file(e.path, session, category="Dev Junk")
+                if ok:
+                    freed += sz
+        session.save()
+        console.print(
+            f"\n  [green]Staged {bytes_human(freed)} for undo[/green]"
+        )
+        console.print(
+            f"  [dim]Restore with: mac-cleaner undo --session {session.session_id[:8]}[/dim]"
+        )
+        return
+
+    from core.cleaner import write_deletion_log
+    from utils import safe_remove
+
+    freed = 0
+    deleted = []
+    for e in entries:
+        safe, _ = validate_path_for_deletion(e.path)
+        if safe:
+            ok, sz = safe_remove(e.path)
+            if ok:
+                freed += sz
+                deleted.append((str(e.path), sz))
+    if deleted:
+        write_deletion_log(deleted)
+    console.print(f"\n  [green]Removed {bytes_human(freed)}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # INFO
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -825,12 +962,18 @@ def cmd_space_map(
 @main.command("photos")
 @click.option("--root", "roots", multiple=True, type=click.Path(exists=True),
               help="Search roots for Photos libraries (default: ~/Pictures).")
+@click.option("--anywhere", is_flag=True, default=False,
+              help="Search recursively under roots (or your home folder when no roots are provided).")
+@click.option("--depth", default=6, show_default=True,
+              help="Max recursion depth for --anywhere searches.")
 @click.option("--details", is_flag=True, default=False,
               help="Show file type breakdown for originals.")
 @click.option("--export", "export_path", type=click.Path(), default=None,
               help="Export analysis to JSON.")
 def cmd_photos(
     roots: Tuple[str, ...],
+    anywhere: bool,
+    depth: int,
     details: bool,
     export_path: Optional[str],
 ) -> None:
@@ -838,8 +981,24 @@ def cmd_photos(
     from scanners.photos_analyzer import analyze_photo_library, find_photo_libraries
     from constants import HOME
 
-    search_roots = [Path(p).expanduser().resolve() for p in roots] or [HOME / "Pictures"]
-    libs = find_photo_libraries(search_roots=search_roots)
+    if roots:
+        search_roots = [Path(p).expanduser().resolve() for p in roots]
+    else:
+        search_roots = [HOME] if anywhere else [HOME / "Pictures"]
+
+    libs = find_photo_libraries(
+        search_roots=search_roots,
+        recursive=anywhere,
+        max_depth=depth,
+    )
+    if not libs and not anywhere and not roots:
+        libs = find_photo_libraries(
+            search_roots=[HOME],
+            recursive=True,
+            max_depth=depth,
+        )
+        if libs:
+            console.print("[dim]No libraries in ~/Pictures; searched your home folder instead.[/dim]")
     if not libs:
         console.print("[yellow]No Photos libraries found in the selected roots.[/yellow]")
         return
