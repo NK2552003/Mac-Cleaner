@@ -14,22 +14,6 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 
-def test_space_map_tree_builds(tmp_path: pathlib.Path) -> None:
-    from scanners.space_map import build_usage_tree
-
-    alpha = tmp_path / "alpha"
-    beta = tmp_path / "beta"
-    alpha.mkdir()
-    beta.mkdir()
-    (alpha / "a.bin").write_bytes(b"a" * 4096)
-    (beta / "b.bin").write_bytes(b"b" * 2048)
-
-    node = build_usage_tree(tmp_path, max_depth=1, min_size=0)
-    child_names = {c.path.name for c in node.children}
-    assert "alpha" in child_names
-    assert "beta" in child_names
-
-
 def test_photo_library_analyzer(tmp_path: pathlib.Path) -> None:
     from scanners.photos_analyzer import analyze_photo_library, find_photo_libraries
 

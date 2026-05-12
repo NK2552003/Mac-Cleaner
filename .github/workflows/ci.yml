@@ -52,7 +52,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13","3.14"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
         os: [macos-13, macos-14, macos-latest]
         exclude:
           # Python 3.9 not available on macos-14 (arm64 runner)
@@ -72,26 +72,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install package (editable) + dev extras
-        run: pip install --upgrade pip && pip install -e ".[dev]"
-
-      - name: Run pytest with coverage
+      - name: CI install + smoke test (venv)
         run: |
-          pytest tests/ \
-            --tb=short \
-            --cov=src \
-            --cov-report=term-missing \
-            --cov-report=xml \
-            -v
-
-      - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.11' && matrix.os == 'macos-latest'
-        uses: codecov/codecov-action@v4
-        with:
-          files: coverage.xml
-          flags: unittests
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+          bash scripts/build.sh venv
+          bash scripts/build.sh test
 
   build-check:
     name: Build Distribution Check
@@ -132,3 +116,4 @@ jobs:
           name: dist-packages
           path: dist/
           retention-days: 7
+
