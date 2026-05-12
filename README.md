@@ -38,6 +38,15 @@ mdc scan
 - **Diff** — compare any two scans to see what's new or resolved
 - **HTML report** — self-contained with Chart.js doughnut + collapsible sections
 - **System inspector** — LaunchAgents, LaunchDaemons, login items, SIP status
+- **Memory pressure reliever** — reports pressure, optional cache purge
+- **Homebrew manager** — cache sizes, outdated list, cleanup and autoremove
+- **Storage trend tracker** — snapshots disk usage over time
+- **Recent activity cleaner** — scans recent-items files (safe clear)
+- **Permissions auditor** — TCC privacy access audit (read-only)
+- **APFS snapshot guard** — list and prune local snapshots
+- **Menu bar companion** — SwiftBar/xbar plugin for last scan summary
+- **Data breach monitor** — checks emails via HIBP API (opt-in)
+- **Cloud storage junk** — scans Dropbox/Drive/OneDrive/Box caches
 - **Scheduler** — installs a LaunchAgent for weekly auto-scans
 - **macOS notifications** — via `osascript`, no dependencies
 - **CI mode** — JSON-only scan summary with threshold-based exit code
@@ -216,6 +225,44 @@ mac-cleaner system --all
 mac-cleaner system --launch-items
 mac-cleaner system --login-items
 mac-cleaner system --health
+```
+
+### P2/P3 system utilities
+```bash
+# Memory pressure
+mac-cleaner memory-pressure
+mac-cleaner memory-pressure --relieve
+
+# Homebrew manager
+mac-cleaner brew --outdated
+mac-cleaner brew --cleanup --yes
+
+# Storage trend snapshots
+mac-cleaner storage-trend --record
+mac-cleaner storage-trend --days 7
+
+# Recent activity cleanup (Recent Items folder only)
+mac-cleaner recent-activity
+mac-cleaner recent-activity --clear
+
+# Permissions audit (TCC)
+mac-cleaner permissions
+mac-cleaner permissions --system --export tcc.json
+
+# APFS snapshots
+mac-cleaner snapshots
+mac-cleaner snapshots --delete-older-than 14 --yes
+
+# Menu bar companion
+mac-cleaner menubar install --interval 15
+mac-cleaner menubar status --format swiftbar
+
+# Breach monitor (HIBP)
+mac-cleaner breach --email you@example.com --api-key $HIBP_API_KEY
+
+# Cloud storage junk
+mac-cleaner cloud-junk
+mac-cleaner cloud-junk --provider dropbox --clean
 ```
 
 ### Scheduler

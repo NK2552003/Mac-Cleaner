@@ -24,6 +24,15 @@ Subcommands
   history       Show past scan records
   diff          Compare two scans
   system        Launch items + SIP + login items
+    memory-pressure  Inspect memory pressure, optional cache purge
+    brew          Homebrew manager (cache + cleanup)
+    storage-trend Storage usage trend tracker
+    recent-activity  Recent files/activity scanner
+    permissions   Audit macOS privacy permissions (TCC)
+    snapshots     APFS local snapshot guard
+    menubar       Menu bar companion (SwiftBar/xbar)
+    breach        Data breach monitor (HIBP API)
+    cloud-junk    Cloud storage cache/log scanner
   schedule      Install / remove / status of weekly scan
   update        Check for and apply upgrades
   config        Show / init config file
@@ -1754,6 +1763,641 @@ def cmd_system(
 
     console.print()
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MEMORY PRESSURE
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("memory-pressure")
+@click.option("--relieve", is_flag=True, default=False,
+              help="Run purge to relieve memory pressure.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation for purge.")
+@click.pass_context
+def cmd_memory_pressure(
+    ctx: click.Context,
+    relieve: bool,
+    yes: bool,
+) -> None:
+    """Inspect memory pressure and optionally purge caches."""
+    from core.dry_run import skip_if_dry_run
+    from core.memory_pressure import collect_memory_stats, relieve_memory_pressure
+
+    stats = collect_memory_stats()
+    if stats is None:
+        console.print("[yellow]Could not read memory statistics.[/yellow]")
+        return
+
+    free_percent = stats.free_percent
+    if free_percent is None and stats.total_bytes > 0:
+        free_percent = (stats.free_bytes / stats.total_bytes) * 100
+
+    console.print()
+    console.print(Panel("[bold cyan]Memory Pressure[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Metric", style="bold")
+    table.add_column("Value", style="yellow")
+    table.add_row("Total", bytes_human(stats.total_bytes))
+    table.add_row("Used", bytes_human(stats.used_bytes))
+    table.add_row("Free", bytes_human(stats.free_bytes))
+    if free_percent is not None:
+        table.add_row("Free %", f"{free_percent:.1f}%")
+    if stats.pressure_level:
+        table.add_row("Pressure", stats.pressure_level)
+
+    console.print(table)
+
+    if not relieve:
+        return
+
+    if skip_if_dry_run(ctx, console, "memory pressure purge"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Run purge to clear inactive caches?", default=False)
+    if not do_it:
+        return
+
+    result = relieve_memory_pressure()
+    color = "green" if result.success else "red"
+    console.print(f"  [{color}]{result.message}[/{color}]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HOMEBREW MANAGER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("brew")
+@click.option("--outdated", is_flag=True, default=False,
+              help="Check for outdated formulae and casks.")
+@click.option("--cleanup", is_flag=True, default=False,
+              help="Run brew cleanup.")
+@click.option("--prune-all", is_flag=True, default=False,
+              help="Run brew cleanup --prune=all.")
+@click.option("--autoremove", is_flag=True, default=False,
+              help="Run brew autoremove.")
+@click.option("--doctor", is_flag=True, default=False,
+              help="Run brew doctor.")
+@click.option("--update", is_flag=True, default=False,
+              help="Run brew update.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation for maintenance actions.")
+@click.pass_context
+def cmd_brew(
+    ctx: click.Context,
+    outdated: bool,
+    cleanup: bool,
+    prune_all: bool,
+    autoremove: bool,
+    doctor: bool,
+    update: bool,
+    yes: bool,
+) -> None:
+    """Manage Homebrew caches and maintenance."""
+    from core.brew_manager import (
+        brew_autoremove,
+        brew_cleanup,
+        brew_doctor,
+        brew_installed,
+        brew_update,
+        collect_brew_status,
+    )
+    from core.dry_run import skip_if_dry_run
+
+    if not brew_installed():
+        console.print("[yellow]Homebrew not found in PATH.[/yellow]")
+        return
+
+    status = collect_brew_status(include_outdated=outdated)
+
+    console.print()
+    console.print(Panel("[bold cyan]Homebrew Manager[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=False, border_style="dim", padding=(0, 1))
+    table.add_column("Key", style="bold")
+    table.add_column("Value", style="yellow")
+    table.add_row("Version", status.version or "unknown")
+    table.add_row("Prefix", str(status.prefix) if status.prefix else "unknown")
+    table.add_row("Cache", f"{status.cache} ({bytes_human(status.cache_size)})" if status.cache else "unknown")
+    table.add_row("Cellar", f"{status.cellar} ({bytes_human(status.cellar_size)})" if status.cellar else "unknown")
+    table.add_row("Formulae", str(status.formulae))
+    table.add_row("Casks", str(status.casks))
+    console.print(table)
+
+    if outdated:
+        if status.outdated_formulae:
+            console.print(f"\n  Outdated formulae: {len(status.outdated_formulae)}")
+            for name in status.outdated_formulae[:10]:
+                console.print(f"    [dim]- {name}[/dim]")
+            if len(status.outdated_formulae) > 10:
+                console.print(f"    [dim]... {len(status.outdated_formulae) - 10} more[/dim]")
+        if status.outdated_casks:
+            console.print(f"\n  Outdated casks: {len(status.outdated_casks)}")
+            for name in status.outdated_casks[:10]:
+                console.print(f"    [dim]- {name}[/dim]")
+            if len(status.outdated_casks) > 10:
+                console.print(f"    [dim]... {len(status.outdated_casks) - 10} more[/dim]")
+
+    if not any([cleanup, prune_all, autoremove, doctor, update]):
+        return
+
+    if skip_if_dry_run(ctx, console, "Homebrew maintenance"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Run selected Homebrew actions?", default=False)
+    if not do_it:
+        return
+
+    if update:
+        result = brew_update()
+        color = "green" if result.success else "red"
+        console.print(f"  [{color}]{result.message}[/{color}]")
+
+    if doctor:
+        result = brew_doctor()
+        color = "green" if result.success else "red"
+        console.print(f"  [{color}]{result.message}[/{color}]")
+
+    if cleanup or prune_all:
+        result = brew_cleanup(prune_all=prune_all)
+        color = "green" if result.success else "red"
+        console.print(f"  [{color}]{result.message}[/{color}]")
+
+    if autoremove:
+        result = brew_autoremove()
+        color = "green" if result.success else "red"
+        console.print(f"  [{color}]{result.message}[/{color}]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STORAGE TREND
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("storage-trend")
+@click.option("--record", is_flag=True, default=False,
+              help="Record a new snapshot before showing results.")
+@click.option("--limit", default=12, show_default=True,
+              help="Maximum snapshots to display.")
+@click.option("--days", default=None, type=int,
+              help="Summarize only the last N days.")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export snapshots to JSON.")
+@click.option("--volume", default="/", show_default=True,
+              help="Volume path to record.")
+def cmd_storage_trend(
+    record: bool,
+    limit: int,
+    days: Optional[int],
+    export_path: Optional[str],
+    volume: str,
+) -> None:
+    """Track disk usage trends over time."""
+    from reporting.storage_trend import append_snapshot, load_snapshots, record_snapshot, summarize_trend
+
+    if record:
+        snapshot = record_snapshot(Path(volume))
+        append_snapshot(snapshot)
+
+    snapshots = load_snapshots()
+    if not snapshots:
+        console.print("[yellow]No storage snapshots yet. Run with --record.[/yellow]")
+        return
+
+    console.print()
+    console.print(Panel("[bold cyan]Storage Trend[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Timestamp", min_width=20)
+    table.add_column("Used", justify="right", style="yellow", width=12)
+    table.add_column("Free", justify="right", width=12)
+
+    for snap in snapshots[-limit:]:
+        table.add_row(snap.timestamp[:19], snap.used_human, snap.free_human)
+    console.print(table)
+
+    summary = summarize_trend(snapshots, days=days)
+    if summary:
+        direction = "more" if summary.delta_used > 0 else "less"
+        console.print(
+            f"\n  Used {direction} space by {summary.delta_used_human} over {summary.days} day(s)."
+        )
+
+    if export_path:
+        import json
+        payload = {
+            "generated_at": __import__("datetime").datetime.now().isoformat(),
+            "snapshots": [s.to_dict() for s in snapshots],
+        }
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# RECENT ACTIVITY
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("recent-activity")
+@click.option("--clear", is_flag=True, default=False,
+              help="Clear items under ~/Library/Recent Items.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation for clearing.")
+@click.pass_context
+def cmd_recent_activity(ctx: click.Context, clear: bool, yes: bool) -> None:
+    """Scan and optionally clear recent activity files."""
+    from core.dry_run import skip_if_dry_run
+    from scanners.recent_activity import clear_recent_items, collect_recent_activity
+
+    items = collect_recent_activity()
+    if not items:
+        console.print("[green]No recent activity files found.[/green]")
+        return
+
+    by_cat: dict = {}
+    for item in items:
+        by_cat.setdefault(item.category, []).append(item)
+
+    console.print()
+    console.print(Panel("[bold cyan]Recent Activity[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Category", min_width=18)
+    table.add_column("Items", justify="right", width=8)
+    table.add_column("Size", justify="right", style="yellow", width=12)
+    table.add_column("Removable", justify="center", width=10)
+
+    for category, entries in by_cat.items():
+        total = sum(e.size for e in entries)
+        removable = all(e.safe_to_delete for e in entries)
+        table.add_row(category, str(len(entries)), bytes_human(total), "yes" if removable else "no")
+
+    console.print(table)
+
+    if not clear:
+        return
+
+    if skip_if_dry_run(ctx, console, "recent activity clearing"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Clear Recent Items folder?", default=False)
+    if not do_it:
+        return
+
+    result = clear_recent_items()
+    console.print(
+        f"\n  [green]Deleted {result.deleted} item(s), freed {bytes_human(result.bytes_freed)}[/green]"
+    )
+    if result.skipped:
+        console.print(f"  [dim]{result.skipped} item(s) skipped[/dim]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PERMISSIONS AUDITOR
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("permissions")
+@click.option("--system", is_flag=True, default=False,
+              help="Include the system-wide TCC database (may require privileges).")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export entries to JSON.")
+def cmd_permissions(system: bool, export_path: Optional[str]) -> None:
+    """Audit macOS privacy permissions."""
+    from core.permissions_auditor import audit_permissions
+
+    report = audit_permissions(include_system=system)
+    if not report.entries:
+        console.print("[yellow]No TCC entries found or access denied.[/yellow]")
+        return
+
+    console.print()
+    console.print(Panel("[bold cyan]Permissions Audit[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    grouped = report.by_service()
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Service", min_width=28)
+    table.add_column("Allowed", justify="right", width=8)
+    table.add_column("Denied", justify="right", width=8)
+
+    for service, entries in grouped.items():
+        allowed = sum(1 for e in entries if e.allowed)
+        denied = len(entries) - allowed
+        name = entries[0].service_name if entries else service
+        table.add_row(name, str(allowed), str(denied))
+
+    console.print(table)
+
+    for warning in report.warnings:
+        console.print(f"\n  [yellow]⚠ {warning}[/yellow]")
+
+    if export_path:
+        import json
+        payload = {
+            "generated_at": __import__("datetime").datetime.now().isoformat(),
+            "entries": [e.__dict__ for e in report.entries],
+        }
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# APFS SNAPSHOTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("snapshots")
+@click.option("--volume", default="/", show_default=True,
+              help="Volume path to inspect.")
+@click.option("--delete-older-than", default=None, type=int,
+              help="Delete snapshots older than N days.")
+@click.option("--keep", default=None, type=int,
+              help="Keep the newest N snapshots.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation for deletions.")
+@click.pass_context
+def cmd_snapshots(
+    ctx: click.Context,
+    volume: str,
+    delete_older_than: Optional[int],
+    keep: Optional[int],
+    yes: bool,
+) -> None:
+    """Inspect and prune APFS local snapshots."""
+    from core.apfs_snapshots import list_snapshots, select_snapshots_to_delete, delete_snapshot
+    from core.dry_run import skip_if_dry_run
+
+    snapshots = list_snapshots(volume)
+    console.print()
+    console.print(Panel("[bold cyan]APFS Snapshots[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    if not snapshots:
+        console.print("  [dim]No local snapshots found.[/dim]")
+        return
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Snapshot", min_width=34)
+    table.add_column("Created", width=20)
+    for snap in snapshots:
+        created = snap.created_at.strftime("%Y-%m-%d %H:%M") if snap.created_at else "unknown"
+        table.add_row(snap.name, created)
+    console.print(table)
+
+    if delete_older_than is None and keep is None:
+        return
+
+    targets = select_snapshots_to_delete(snapshots, keep=keep, older_than_days=delete_older_than)
+    if not targets:
+        console.print("  [dim]No snapshots matched the prune criteria.[/dim]")
+        return
+
+    if skip_if_dry_run(ctx, console, "snapshot deletion"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask(f"Delete {len(targets)} snapshot(s)?", default=False)
+    if not do_it:
+        return
+
+    deleted = 0
+    for snap in targets:
+        if delete_snapshot(snap):
+            deleted += 1
+    console.print(f"\n  [green]Deleted {deleted} snapshot(s)[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MENU BAR COMPANION
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.group("menubar")
+def cmd_menubar() -> None:
+    """Menu bar companion for SwiftBar/xbar."""
+
+
+@cmd_menubar.command("status")
+@click.option("--format", "output_format", default="plain",
+              type=click.Choice(["plain", "swiftbar"], case_sensitive=False))
+def menubar_status(output_format: str) -> None:
+    """Emit status for menu bar tools."""
+    from core.menubar import build_status_from_history, format_swiftbar
+
+    status = build_status_from_history()
+    if status is None:
+        console.print("No scan history yet. Run 'mac-cleaner scan' first.")
+        return
+
+    if output_format.lower() == "swiftbar":
+        click.echo(format_swiftbar(status))
+        return
+
+    console.print(status.label)
+    console.print(status.subtitle)
+
+
+@cmd_menubar.command("install")
+@click.option("--target", default=None,
+              type=click.Choice(["swiftbar", "xbar"], case_sensitive=False),
+              help="Choose SwiftBar or xbar plugin directory.")
+@click.option("--interval", default=15, show_default=True,
+              help="Refresh interval in minutes.")
+@click.option("--dir", "custom_dir", default=None, type=click.Path(),
+              help="Custom plugin directory.")
+def menubar_install(target: Optional[str], interval: int, custom_dir: Optional[str]) -> None:
+    """Install a menu bar plugin script."""
+    from core.menubar import detect_plugin_dirs, install_plugin
+
+    if custom_dir:
+        path = install_plugin(Path(custom_dir), interval_minutes=interval)
+        console.print(f"[green]Installed plugin at {path}[/green]")
+        return
+
+    dirs = detect_plugin_dirs()
+    if not dirs:
+        console.print("[yellow]No SwiftBar/xbar plugin folder found.[/yellow]")
+        return
+
+    chosen = target.lower() if target else ("swiftbar" if "swiftbar" in dirs else "xbar")
+    plugin_dir = dirs.get(chosen)
+    if not plugin_dir:
+        console.print("[yellow]Selected plugin directory not found.[/yellow]")
+        return
+
+    path = install_plugin(plugin_dir, interval_minutes=interval)
+    console.print(f"[green]Installed plugin at {path}[/green]")
+
+
+@cmd_menubar.command("remove")
+@click.option("--target", default=None,
+              type=click.Choice(["swiftbar", "xbar"], case_sensitive=False))
+@click.option("--dir", "custom_dir", default=None, type=click.Path())
+def menubar_remove(target: Optional[str], custom_dir: Optional[str]) -> None:
+    """Remove menu bar plugin scripts."""
+    from core.menubar import detect_plugin_dirs, remove_plugin
+
+    removed = 0
+    if custom_dir:
+        removed = remove_plugin(Path(custom_dir))
+    else:
+        dirs = detect_plugin_dirs()
+        if target:
+            t = target.lower()
+            if t in dirs:
+                removed = remove_plugin(dirs[t])
+        else:
+            for path in dirs.values():
+                removed += remove_plugin(path)
+
+    console.print(f"Removed {removed} plugin(s).")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BREACH MONITOR
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("breach")
+@click.option("--email", "emails", multiple=True,
+              help="Email address to check. Can be repeated.")
+@click.option("--api-key", default=None,
+              help="HIBP API key (or set HIBP_API_KEY env var).")
+@click.option("--use-watchlist", is_flag=True, default=False,
+              help="Check addresses saved in the watchlist.")
+@click.option("--save", is_flag=True, default=False,
+              help="Save provided emails to the watchlist.")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export results to JSON.")
+def cmd_breach(
+    emails: Tuple[str, ...],
+    api_key: Optional[str],
+    use_watchlist: bool,
+    save: bool,
+    export_path: Optional[str],
+) -> None:
+    """Check emails against Have I Been Pwned."""
+    from core.breach_monitor import check_email, load_watchlist, resolve_api_key, save_watchlist
+
+    email_list = list(emails)
+    if use_watchlist:
+        email_list.extend(load_watchlist())
+    email_list = [e.strip() for e in email_list if e.strip()]
+
+    if not email_list:
+        console.print("[yellow]No email addresses provided.[/yellow]")
+        return
+
+    if save:
+        save_watchlist(email_list)
+
+    key = resolve_api_key(api_key)
+    results = [check_email(email, key or "") for email in email_list]
+
+    console.print()
+    console.print(Panel("[bold cyan]Breach Monitor[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Email", min_width=28)
+    table.add_column("Breached", width=10)
+    table.add_column("Count", justify="right", width=6)
+    table.add_column("Error", style="red")
+
+    for r in results:
+        table.add_row(
+            r.email,
+            "yes" if r.breached else "no",
+            str(len(r.breaches)),
+            r.error or "",
+        )
+
+    console.print(table)
+
+    if export_path:
+        import json
+        payload = {
+            "generated_at": __import__("datetime").datetime.now().isoformat(),
+            "results": [r.__dict__ for r in results],
+        }
+        with open(export_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CLOUD STORAGE JUNK
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("cloud-junk")
+@click.option("--provider", "providers", multiple=True,
+              type=click.Choice(["dropbox", "google-drive", "onedrive", "box"], case_sensitive=False),
+              help="Limit to a specific provider.")
+@click.option("--clean", is_flag=True, default=False,
+              help="Delete detected cache/log directories.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation for deletions.")
+@click.pass_context
+def cmd_cloud_junk(
+    ctx: click.Context,
+    providers: Tuple[str, ...],
+    clean: bool,
+    yes: bool,
+) -> None:
+    """Scan cloud storage caches and logs."""
+    from core.dry_run import skip_if_dry_run
+    from scanners.cloud_junk import collect_cloud_junk, delete_cloud_junk
+
+    items = collect_cloud_junk(providers=providers or None)
+    if not items:
+        console.print("[green]No cloud cache data found.[/green]")
+        return
+
+    console.print()
+    console.print(Panel("[bold cyan]Cloud Storage Junk[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Provider", width=14)
+    table.add_column("Category", width=10)
+    table.add_column("Size", justify="right", style="yellow", width=10)
+    table.add_column("Path", style="dim")
+
+    for item in items:
+        table.add_row(item.provider, item.category, bytes_human(item.size), str(item.path))
+    console.print(table)
+
+    if not clean:
+        return
+
+    if skip_if_dry_run(ctx, console, "cloud cache cleanup"):
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask(f"Delete {len(items)} cache/log item(s)?", default=False)
+    if not do_it:
+        return
+
+    result = delete_cloud_junk(items)
+    console.print(
+        f"\n  [green]Deleted {result.deleted} item(s), freed {bytes_human(result.bytes_freed)}[/green]"
+    )
+    if result.skipped:
+        console.print(f"  [dim]{result.skipped} item(s) skipped[/dim]")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SCHEDULE
