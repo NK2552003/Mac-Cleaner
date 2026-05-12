@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import Callable, cast
 
 SUPPORTED_SHELLS = ("bash", "zsh", "fish")
 
@@ -37,9 +38,16 @@ def completion_script(shell: str, prog_name: str, command=None) -> str:
         raise ValueError(f"Unsupported shell: {shell}")
 
     try:
-        from click.shell_completion import get_completion_script
+        import click.shell_completion as shell_completion
     except Exception:
         return _fallback_script(shell, prog_name)
+
+    get_completion_script = getattr(shell_completion, "get_completion_script", None)
+    if not callable(get_completion_script):
+        return _fallback_script(shell, prog_name)
+
+    get_completion_script_typed = cast(Callable[..., str], get_completion_script)
+
     import inspect
 
     params = list(inspect.signature(get_completion_script).parameters)
@@ -48,10 +56,10 @@ def completion_script(shell: str, prog_name: str, command=None) -> str:
 
     try:
         if has_command and command is not None:
-            return get_completion_script(prog_name, shell, command)
+            return get_completion_script_typed(prog_name, shell, command)
         if has_complete_var:
-            return get_completion_script(prog_name, shell, _complete_var(prog_name))
-        return get_completion_script(prog_name, shell)
+            return get_completion_script_typed(prog_name, shell, _complete_var(prog_name))
+        return get_completion_script_typed(prog_name, shell)
     except TypeError:
         return _fallback_script(shell, prog_name)
 

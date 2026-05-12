@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Self-Update
+Mac Deep Cleaner v1.5.0 — Self-Update
 ===================================
 Checks PyPI for a newer version and upgrades the package in-place using pip.
 

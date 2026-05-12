@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Notifications & Scheduler
+Mac Deep Cleaner v1.5.0 — Notifications & Scheduler
 =================================================
 
 Notifications

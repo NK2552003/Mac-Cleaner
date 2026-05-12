@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Data Models
+Mac Deep Cleaner v1.5.0 — Data Models
 ==================================
 Immutable data classes for apps, orphan entries, and junk entries.
 """

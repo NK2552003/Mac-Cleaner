@@ -6,7 +6,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, cast
 
 
 _TMUTIL_RE = re.compile(
@@ -68,7 +68,7 @@ def select_snapshots_to_delete(
     """Select snapshots to delete based on age or keep count."""
     ordered = sorted(
         [s for s in snapshots if s.created_at is not None],
-        key=lambda s: s.created_at,
+        key=lambda s: cast(datetime, s.created_at),
     )
     if not ordered:
         return []

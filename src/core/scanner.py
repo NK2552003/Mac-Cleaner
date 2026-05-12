@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Scanner Module
+Mac Deep Cleaner v1.5.0 — Scanner Module
 ======================================
 Core scanning logic for orphan detection and general junk discovery.
 """

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mac Deep Cleaner v1.2.0 — CLI Entry Point
+Mac Deep Cleaner v1.5.0 — CLI Entry Point
 =======================================
 All subcommands, new and updated.
 
@@ -23,16 +23,16 @@ Subcommands
   undo          Restore files from staging area
   history       Show past scan records
   diff          Compare two scans
-    system        Launch items + SIP + login items
-    memory-pressure  Inspect memory pressure, optional cache purge
-    brew          Homebrew manager (cache + cleanup)
-    storage-trend Storage usage trend tracker
-    recent-activity  Recent files/activity scanner
-    permissions   Audit macOS privacy permissions (TCC)
-    snapshots     APFS local snapshot guard
-    menubar       Menu bar companion (SwiftBar/xbar)
-    breach        Data breach monitor (HIBP API)
-    cloud-junk    Cloud storage cache/log scanner
+  system        Launch items + SIP + login items
+  memory-pressure  Inspect memory pressure, optional cache purge
+  brew          Homebrew manager (cache + cleanup)
+  storage-trend Storage usage trend tracker
+  recent-activity  Recent files/activity scanner
+  permissions   Audit macOS privacy permissions (TCC)
+  snapshots     APFS local snapshot guard
+  menubar       Menu bar companion (SwiftBar/xbar)
+  breach        Data breach monitor (HIBP API)
+  cloud-junk    Cloud storage cache/log scanner
   schedule      Install / remove / status of weekly scan
   update        Check for and apply upgrades
   config        Show / init config file
@@ -165,7 +165,7 @@ def main(
     log_file: Optional[str],
     dry_run: bool,
 ) -> None:
-    """Mac Deep Cleaner v1.2.0 — Professional macOS cleanup tool."""
+    """Mac Deep Cleaner v1.5.0 — Professional macOS cleanup tool."""
     from core.dry_run import set_dry_run
     configure_logging(
         verbose=verbose,

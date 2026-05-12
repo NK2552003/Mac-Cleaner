@@ -2,32 +2,6 @@
 
 Date: 2026-05-11
 
-Use this file as the execution order. Check items only after the feature is fully implemented, wired to CLI, and covered by tests when feasible.
-
-## P0 (baseline UX and safety)
-- [x] Global --dry-run flag (src/core/dry_run.py)
-- [x] Shell completion command (src/core/completions.py)
-- [x] Full app uninstaller (src/core/uninstaller.py)
-
-## P1 (highest demand data and visibility)
-- [x] Browser data cleaner (src/scanners/browser_data.py)
-- [x] Visual disk space map (src/scanners/space_map.py)
-- [x] Photo library analyzer (src/scanners/photos_analyzer.py)
-- [x] iOS simulator deep cleaner (src/scanners/simulators.py)
-
-## P2 (system utilities and maintenance)
-- [x] Memory pressure reliever (src/core/memory_pressure.py)
-- [x] Homebrew deep manager (src/core/brew_manager.py)
-- [x] Storage trend tracker (src/reporting/storage_trend.py)
-- [x] Recent files and activity cleaner (src/scanners/recent_activity.py)
-
-## P3 (advanced and higher risk features)
-- [x] Permissions auditor (src/core/permissions_auditor.py)
-- [x] APFS snapshot guard (src/core/apfs_snapshots.py)
-- [x] Menu bar companion (src/core/menubar.py)
-- [x] Data breach monitor (src/core/breach_monitor.py)
-- [x] Cloud storage junk scanner (src/scanners/cloud_junk.py)
-
 ## Additional (not yet scheduled)
 - [ ] Purgeable space reclaimer (src/scanners/purgeable.py)
 - [ ] Installer and PKG file hunter (src/scanners/installer_hunter.py)

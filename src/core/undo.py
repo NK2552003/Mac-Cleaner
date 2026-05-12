@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Undo / Restore (Staged Deletion)
+Mac Deep Cleaner v1.5.0 — Undo / Restore (Staged Deletion)
 ========================================================
 Instead of permanently deleting files, mac-cleaner moves them to a staging
 area (~/.mac_cleaner_trash/) with a JSON manifest so they can be restored.

@@ -1,5 +1,5 @@
 """
-Backward-compatible shim for v1.2.0 reporter additions.
+Backward-compatible shim for v1.5.0 reporter additions.
 
 The project now consolidates all reporting helpers into:
     mac_cleaner.reporting.reporter

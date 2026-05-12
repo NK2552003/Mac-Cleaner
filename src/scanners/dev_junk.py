@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Developer Junk Scanner
+Mac Deep Cleaner v1.5.0 — Developer Junk Scanner
 ==============================================
 Finds language-specific build output and dependency directories
 (e.g., node_modules, venv, target, bin/obj) inside project folders.

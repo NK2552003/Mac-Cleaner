@@ -1,5 +1,5 @@
 """
-Mac Deep Cleaner v1.2.0 — Broken Symlink Detector
+Mac Deep Cleaner v1.5.0 — Broken Symlink Detector
 ===============================================
 Finds dangling symbolic links in developer-relevant directories
 (e.g. /usr/local, ~/bin, ~/.local/bin, Homebrew prefixes).
