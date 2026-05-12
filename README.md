@@ -23,6 +23,12 @@ mdc scan
 - **Duplicate finder** — SHA-256 content hashing, two-phase (head + full), sorted by wasted space
 - **Large file scanner** — finds files ≥100 MB (configurable), categorised by type
 - **Broken symlink detector** — walks `/usr/local`, `/opt/homebrew`, `~/bin`, etc.
+- **Browser data cleaner** — cache, cookies, history, sessions (opt-in delete)
+- **Space map** — disk usage overview by folder tree
+- **Photos analyzer** — summaries of Photos libraries and originals
+- **iOS simulator cleaner** — shows simulator sizes and can purge
+- **Full app uninstaller** — remove app bundle plus known data
+- **Shell completions** — bash, zsh, fish
 - **iOS backup finder** — parses `MobileSync/Backup` manifests, shows device/age/size
 - **Language pack stripper** — detects removable `.lproj` dirs in every installed app
 - **Universal binary thinner** — uses `ditto --arch` safely; creates `.fat_backup` by default
@@ -84,6 +90,9 @@ mac-cleaner clean
 # Auto-delete everything detected
 mac-cleaner clean --auto
 
+# Force preview mode (no deletes anywhere)
+mac-cleaner --dry-run clean
+
 # Permanently delete (skip undo staging)
 mac-cleaner clean --no-undo
 
@@ -125,6 +134,26 @@ mac-cleaner scan --log-file ~/mac-cleaner.log
 
 ### New scanners
 ```bash
+# Shell completions
+mac-cleaner completions --shell zsh --instructions
+
+# Full app uninstall
+mac-cleaner uninstall "Slack"
+
+# Browser data cleanup
+mac-cleaner browser-data
+mac-cleaner browser-data --browser chrome --category cache --clean
+
+# Disk usage map
+mac-cleaner space-map --depth 2 --limit 12
+
+# Photos library analyzer
+mac-cleaner photos --details
+
+# iOS simulator cleaner
+mac-cleaner simulators
+mac-cleaner simulators --purge-unavailable --yes
+
 # Find duplicate files (default: ~/Downloads, ~/Documents, ~/Desktop, ~/Pictures)
 mac-cleaner duplicates
 mac-cleaner duplicates --path ~/Movies --min-size 500

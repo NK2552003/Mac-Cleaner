@@ -11,64 +11,64 @@ Date: 2026-05-11
 ## Proposed Feature Modules (one per feature)
 
 Privacy and security
-- src/features/privacy/browser_data.py
-- src/features/privacy/recent_activity.py
-- src/features/security/breach_monitor.py
-- src/features/security/permissions_auditor.py
+- src/scanners/browser_data.py
+- src/scanners/recent_activity.py
+- src/core/breach_monitor.py
+- src/core/permissions_auditor.py
 
 Storage intelligence
-- src/features/storage/space_map.py
-- src/features/storage/purgeable.py
-- src/features/storage/cloud_junk.py
-- src/features/storage/photos_analyzer.py
-- src/features/storage/installer_hunter.py
+- src/scanners/space_map.py
+- src/scanners/purgeable.py
+- src/scanners/cloud_junk.py
+- src/scanners/photos_analyzer.py
+- src/scanners/installer_hunter.py
 
 Performance and system
-- src/features/system/memory_pressure.py
-- src/features/system/dns_cache.py
-- src/features/system/font_cache.py
-- src/features/system/spotlight.py
-- src/features/system/power_optimizer.py
+- src/core/memory_pressure.py
+- src/core/dns_cache.py
+- src/core/font_cache.py
+- src/core/spotlight.py
+- src/core/power_optimizer.py
 
 Application management
-- src/features/apps/uninstaller.py
-- src/features/apps/update_checker.py
-- src/features/apps/brew_manager.py
-- src/features/apps/pkg_receipts.py
+- src/core/uninstaller.py
+- src/core/update_checker.py
+- src/core/brew_manager.py
+- src/core/pkg_receipts.py
 
 Simulation and development
-- src/features/dev/simulators.py
-- src/features/dev/xcode_cleaner.py
+- src/scanners/simulators.py
+- src/scanners/xcode_cleaner.py
 
 Reporting and insights
-- src/features/reporting/weekly_digest.py
-- src/features/reporting/storage_trend.py
-- src/features/reporting/impact_score.py
+- src/reporting/weekly_digest.py
+- src/reporting/storage_trend.py
+- src/reporting/impact_score.py
 
 UX and workflow
-- src/features/ux/completions.py
-- src/features/ux/tui_picker.py
-- src/features/ux/dry_run.py
-- src/features/ux/config_sync.py
-- src/features/ux/menubar.py
+- src/core/completions.py
+- src/core/tui_picker.py
+- src/core/dry_run.py
+- src/core/config_sync.py
+- src/core/menubar.py
 
 Safety enhancements
-- src/features/safety/time_machine_guard.py
-- src/features/safety/apfs_snapshots.py
-- src/features/safety/restore_checksums.py
+- src/core/time_machine_guard.py
+- src/core/apfs_snapshots.py
+- src/core/restore_checksums.py
 
 ## Phases and Order
 
 P0 (baseline UX and safety)
-- Global --dry-run flag (ux/dry_run)
-- Shell completion command (ux/completions)
-- Full app uninstaller (apps/uninstaller)
+- Global --dry-run flag (core/dry_run)
+- Shell completion command (core/completions)
+- Full app uninstaller (core/uninstaller)
 
 P1 (highest demand data and visibility)
-- Browser data cleaner (privacy/browser_data)
-- Visual disk space map (storage/space_map)
-- Photo library analyzer (storage/photos_analyzer)
-- iOS simulator deep cleaner (dev/simulators)
+- Browser data cleaner (scanners/browser_data)
+- Visual disk space map (scanners/space_map)
+- Photo library analyzer (scanners/photos_analyzer)
+- iOS simulator deep cleaner (scanners/simulators)
 
 P2 (system utilities and maintenance)
 - Memory pressure reliever (system/memory_pressure)

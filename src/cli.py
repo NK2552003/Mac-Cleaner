@@ -9,6 +9,12 @@ Subcommands
   scan          Preview scan (orphans + junk) — safe
   clean         Interactive or auto cleanup
   info          Safety guarantees
+  completions   Generate shell completion scripts
+  uninstall     Full app uninstaller
+  browser-data  Clean browser caches/history/cookies
+  space-map     Visual disk space map
+  photos        Photo library analyzer
+  simulators    iOS simulator deep cleaner
   duplicates    Find duplicate files by hash
   large-files   Find files over a size threshold
   symlinks      Find broken symbolic links
@@ -141,13 +147,22 @@ def _ensure_first_run_profile(profile: Optional[str], ci: bool) -> Optional[str]
               help="Enable debug logging to file.")
 @click.option("--log-file", type=click.Path(), default=None,
               help="Write logs to a file (default: ~/.config/mac-cleaner/mac-cleaner.log).")
+@click.option("--dry-run", is_flag=True, default=False,
+              help="Do not modify anything (disables deletions and writes).")
 @click.pass_context
-def main(ctx: click.Context, verbose: bool, log_file: Optional[str]) -> None:
+def main(
+    ctx: click.Context,
+    verbose: bool,
+    log_file: Optional[str],
+    dry_run: bool,
+) -> None:
     """Mac Deep Cleaner v1.2.0 — Professional macOS cleanup tool."""
+    from core.dry_run import set_dry_run
     configure_logging(
         verbose=verbose,
         log_file=Path(log_file) if log_file else None,
     )
+    set_dry_run(ctx, dry_run)
     if ctx.invoked_subcommand is None:
         ctx.invoke(scan)
 
@@ -437,7 +452,9 @@ def cmd_dashboard(
 @click.option("--notify", is_flag=True, default=False)
 @click.option("--no-undo", is_flag=True, default=False,
               help="Permanently delete instead of staging for undo.")
+@click.pass_context
 def clean(
+    ctx: click.Context,
     auto: bool,
     skip_junk: bool,
     whitelist: Tuple[str, ...],
@@ -457,6 +474,7 @@ def clean(
     and can be restored with: mac-cleaner undo
     Pass --no-undo to permanently delete (faster, no recovery).
     """
+    from core.dry_run import dry_run_enabled
     profile = _ensure_first_run_profile(profile=profile, ci=False)
     cfg = load_config(profile=profile)
     wl = cfg.whitelist_set | {
@@ -465,9 +483,12 @@ def clean(
     cfg.custom_scan_roots.extend(Path(p).expanduser().resolve() for p in custom_roots)
     cfg.dev_junk_roots.extend(Path(p).expanduser().resolve() for p in dev_roots)
     undo_mode = cfg.undo_mode and not no_undo
+    dry_run = dry_run_enabled(ctx)
+    if dry_run:
+        console.print("[yellow]Dry-run enabled; clean will run in preview mode.[/yellow]")
 
     _run(
-        delete=True,
+        delete=not dry_run,
         auto=auto,
         skip_junk=skip_junk,
         export_path=export_path,
@@ -512,6 +533,441 @@ def info() -> None:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# COMPLETIONS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("completions")
+@click.option("--shell", default=None,
+              type=click.Choice(["bash", "zsh", "fish"], case_sensitive=False),
+              help="Shell type (bash, zsh, fish).")
+@click.option("--instructions", is_flag=True, default=False,
+              help="Show install instructions for your shell.")
+def cmd_completions(shell: Optional[str], instructions: bool) -> None:
+    """Generate shell completion scripts."""
+    from core.completions import completion_script, detect_shell, install_instructions
+
+    resolved_shell = (shell or detect_shell()).lower()
+    script = completion_script(resolved_shell, "mac-cleaner", main)
+    console.print(script)
+    if instructions:
+        console.print()
+        console.print(install_instructions(resolved_shell, "mac-cleaner"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# UNINSTALL
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("uninstall")
+@click.argument("app_query")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation and uninstall immediately.")
+@click.option("--no-undo", is_flag=True, default=False,
+              help="Permanently delete instead of staging for undo.")
+@click.option("--keep-preferences", is_flag=True, default=False,
+              help="Keep Preferences and Saved State data.")
+@click.option("--force", is_flag=True, default=False,
+              help="Allow uninstall even if the app appears to be running.")
+@click.pass_context
+def cmd_uninstall(
+    ctx: click.Context,
+    app_query: str,
+    yes: bool,
+    no_undo: bool,
+    keep_preferences: bool,
+    force: bool,
+) -> None:
+    """Remove an app and its data (full uninstall)."""
+    from core.uninstaller import build_uninstall_plan, execute_uninstall, find_app_candidates
+    from core.dry_run import dry_run_enabled
+
+    apps = discover_installed_apps()
+    matches = find_app_candidates(app_query, apps)
+
+    if not matches:
+        console.print(f"[yellow]No installed app matched '{app_query}'.[/yellow]")
+        return
+
+    app = matches[0]
+    if len(matches) > 1:
+        table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+        table.add_column("#", style="dim", width=4, justify="right")
+        table.add_column("App")
+        table.add_column("Bundle ID", style="dim")
+        table.add_column("Path", style="dim")
+        for i, a in enumerate(matches, 1):
+            table.add_row(str(i), a.name, a.bundle_id, str(a.path))
+        console.print(table)
+        choice = click.prompt("Select app", type=click.IntRange(1, len(matches)))
+        app = matches[choice - 1]
+
+    running = running_bundle_ids()
+    if app.bundle_id.lower() in running and not force:
+        console.print(
+            "[yellow]App appears to be running. Quit it or pass --force to continue.[/yellow]"
+        )
+        return
+
+    cfg = load_config()
+    plan = build_uninstall_plan(
+        app=app,
+        whitelist_set=cfg.whitelist_set,
+        keep_preferences=keep_preferences,
+    )
+
+    if not plan.deletable_items and not plan.protected_items:
+        console.print("[yellow]No removable data found for this app.[/yellow]")
+        return
+
+    console.print()
+    console.print(Panel(
+        f"[bold cyan]Uninstall Plan[/bold cyan]  [dim]{app.name}[/dim]",
+        border_style="cyan", padding=(0, 2),
+    ))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("#", style="dim", width=4, justify="right")
+    table.add_column("Category", width=16)
+    table.add_column("Size", justify="right", style="yellow", width=10)
+    table.add_column("Path", style="dim")
+
+    for i, item in enumerate(plan.deletable_items[:50], 1):
+        table.add_row(str(i), item.category, bytes_human(item.size), str(item.path))
+
+    console.print(table)
+    if len(plan.deletable_items) > 50:
+        console.print(f"  [dim]... {len(plan.deletable_items) - 50} more items omitted[/dim]")
+    if plan.protected_items:
+        console.print(
+            f"  [dim]{len(plan.protected_items)} item(s) protected by safety checks[/dim]"
+        )
+
+    console.print(
+        f"\n  Total removable: [yellow]{bytes_human(plan.total_size)}[/yellow]"
+    )
+
+    if dry_run_enabled(ctx):
+        console.print("[yellow]Dry-run enabled; uninstall skipped.[/yellow]")
+        return
+
+    do_it = yes
+    if not do_it:
+        from rich.prompt import Confirm
+        do_it = Confirm.ask("Proceed with uninstall?", default=False)
+    if not do_it:
+        return
+
+    session = None
+    if cfg.undo_mode and not no_undo:
+        session = new_session()
+
+    result = execute_uninstall(plan, session=session)
+
+    if session and result.staged > 0:
+        session.save()
+        console.print(
+            f"\n  [green]Staged {bytes_human(result.bytes_freed)} for undo[/green]"
+        )
+        console.print(
+            f"  [dim]Restore with: mac-cleaner undo --session {session.session_id[:8]}[/dim]"
+        )
+    else:
+        console.print(
+            f"\n  [green]Removed {bytes_human(result.bytes_freed)}[/green]"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BROWSER DATA CLEANER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("browser-data")
+@click.option("--browser", "browsers", multiple=True,
+              type=click.Choice(["safari", "chrome", "firefox", "edge", "brave"],
+                                case_sensitive=False),
+              help="Limit to specific browsers.")
+@click.option("--category", "categories", multiple=True,
+              type=click.Choice(["cache", "cookies", "history", "downloads", "site-data", "sessions"],
+                                case_sensitive=False),
+              help="Limit to specific data categories.")
+@click.option("--clean", is_flag=True, default=False,
+              help="Delete selected data (requires --category or --all).")
+@click.option("--all", "clean_all", is_flag=True, default=False,
+              help="Delete all supported categories for selected browsers.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation for deletions.")
+@click.pass_context
+def cmd_browser_data(
+    ctx: click.Context,
+    browsers: Tuple[str, ...],
+    categories: Tuple[str, ...],
+    clean: bool,
+    clean_all: bool,
+    yes: bool,
+) -> None:
+    """Analyze and optionally clean browser data."""
+    from scanners.browser_data import (
+        collect_browser_data,
+        delete_browser_data,
+        summarize_browser_data,
+    )
+    from core.dry_run import dry_run_enabled
+
+    items = collect_browser_data(browsers=list(browsers) or None)
+    if not items:
+        console.print("[green]No browser data found.[/green]")
+        return
+
+    summary = summarize_browser_data(items)
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Browser", width=14)
+    table.add_column("Category", width=14)
+    table.add_column("Items", justify="right", width=7)
+    table.add_column("Size", justify="right", style="yellow", width=12)
+
+    for row in summary:
+        table.add_row(row[0], row[1], str(row[2]), bytes_human(row[3]))
+
+    console.print()
+    console.print(Panel("[bold cyan]Browser Data Summary[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+    console.print(table)
+
+    if not (clean or clean_all):
+        return
+
+    if dry_run_enabled(ctx):
+        console.print("[yellow]Dry-run enabled; browser data cleanup skipped.[/yellow]")
+        return
+
+    target_categories = [c.lower() for c in categories]
+    if not clean_all and not target_categories:
+        console.print("[yellow]Specify --category or use --all to clean.[/yellow]")
+        return
+
+    if clean_all:
+        target_categories = []  # empty means all in delete_browser_data
+
+    if not yes:
+        from rich.prompt import Confirm
+        if not Confirm.ask("Proceed with browser data deletion?", default=False):
+            return
+
+    result = delete_browser_data(items, categories=target_categories)
+    console.print(
+        f"\n  [green]Deleted {result.deleted} item(s), freed {bytes_human(result.bytes_freed)}[/green]"
+    )
+    if result.skipped:
+        console.print(f"  [dim]{result.skipped} item(s) skipped by safety checks[/dim]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SPACE MAP
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("space-map")
+@click.option("--root", "roots", multiple=True, type=click.Path(exists=True),
+              help="Root directories to map (default: HOME).")
+@click.option("--depth", default=2, show_default=True,
+              help="Folder depth to include.")
+@click.option("--limit", default=12, show_default=True,
+              help="Maximum child entries shown per directory.")
+@click.option("--min-mb", default=1, show_default=True,
+              help="Minimum size per entry (MB).")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export map to JSON.")
+def cmd_space_map(
+    roots: Tuple[str, ...],
+    depth: int,
+    limit: int,
+    min_mb: int,
+    export_path: Optional[str],
+) -> None:
+    """Visual disk space map."""
+    from scanners.space_map import build_usage_tree, render_usage_tree
+    from constants import HOME
+
+    min_bytes = min_mb * 1024 * 1024
+    root_paths = [Path(p).expanduser().resolve() for p in roots] or [HOME]
+
+    trees = []
+    for root in root_paths:
+        node = build_usage_tree(root, max_depth=depth, min_size=min_bytes)
+        trees.append(node)
+        console.print()
+        console.print(Panel(
+            f"[bold cyan]Space Map[/bold cyan]  [dim]{root}[/dim]",
+            border_style="cyan", padding=(0, 2),
+        ))
+        console.print(render_usage_tree(node, limit=limit))
+
+    if export_path:
+        import json
+        data = [t.to_dict() for t in trees]
+        with open(export_path, "w") as f:
+            json.dump(data, f, indent=2, default=str)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PHOTOS ANALYZER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("photos")
+@click.option("--root", "roots", multiple=True, type=click.Path(exists=True),
+              help="Search roots for Photos libraries (default: ~/Pictures).")
+@click.option("--details", is_flag=True, default=False,
+              help="Show file type breakdown for originals.")
+@click.option("--export", "export_path", type=click.Path(), default=None,
+              help="Export analysis to JSON.")
+def cmd_photos(
+    roots: Tuple[str, ...],
+    details: bool,
+    export_path: Optional[str],
+) -> None:
+    """Analyze Photos libraries and storage usage."""
+    from scanners.photos_analyzer import analyze_photo_library, find_photo_libraries
+    from constants import HOME
+
+    search_roots = [Path(p).expanduser().resolve() for p in roots] or [HOME / "Pictures"]
+    libs = find_photo_libraries(search_roots=search_roots)
+    if not libs:
+        console.print("[yellow]No Photos libraries found in the selected roots.[/yellow]")
+        return
+
+    reports = [analyze_photo_library(p) for p in libs]
+
+    console.print()
+    console.print(Panel("[bold cyan]Photos Library Analysis[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+    table.add_column("Library", min_width=22)
+    table.add_column("Total", justify="right", style="yellow", width=10)
+    table.add_column("Originals", justify="right", width=10)
+    table.add_column("Previews", justify="right", width=10)
+    table.add_column("Database", justify="right", width=10)
+    table.add_column("Originals Count", justify="right", width=16)
+
+    for r in reports:
+        table.add_row(
+            r.name,
+            bytes_human(r.size),
+            bytes_human(r.originals_size),
+            bytes_human(r.previews_size),
+            bytes_human(r.database_size),
+            str(r.originals_count),
+        )
+
+    console.print(table)
+
+    if details:
+        for r in reports:
+            console.print(f"\n  [bold]{r.name}[/bold]")
+            for ext, count, size in r.top_extensions(8):
+                console.print(f"    {ext:>6}  {count:>6} files  {bytes_human(size)}")
+
+    if export_path:
+        import json
+        with open(export_path, "w") as f:
+            json.dump([r.to_dict() for r in reports], f, indent=2, default=str)
+        console.print(f"\n  [green]Exported to {export_path}[/green]")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SIMULATOR CLEANER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command("simulators")
+@click.option("--purge-unavailable", is_flag=True, default=False,
+              help="Delete data for unavailable simulators only.")
+@click.option("--purge-all", is_flag=True, default=False,
+              help="Delete data for all simulators (destructive).")
+@click.option("--purge-caches", is_flag=True, default=False,
+              help="Delete CoreSimulator caches and logs.")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip confirmation prompts.")
+@click.pass_context
+def cmd_simulators(
+    ctx: click.Context,
+    purge_unavailable: bool,
+    purge_all: bool,
+    purge_caches: bool,
+    yes: bool,
+) -> None:
+    """Inspect and clean iOS Simulator data."""
+    from scanners.simulators import (
+        find_simulator_caches,
+        find_simulator_devices,
+        purge_simulator_caches,
+        purge_simulator_devices,
+    )
+    from core.dry_run import dry_run_enabled
+
+    devices = find_simulator_devices()
+    caches = find_simulator_caches()
+
+    console.print()
+    console.print(Panel("[bold cyan]iOS Simulator Data[/bold cyan]",
+                        border_style="cyan", padding=(0, 2)))
+
+    if devices:
+        table = Table(show_header=True, header_style="bold cyan", border_style="dim")
+        table.add_column("Name", min_width=20)
+        table.add_column("Runtime", width=18)
+        table.add_column("State", width=12)
+        table.add_column("Available", width=10)
+        table.add_column("Size", justify="right", style="yellow", width=10)
+        for d in devices:
+            table.add_row(d.name, d.runtime, d.state, "yes" if d.is_available else "no", bytes_human(d.size))
+        console.print(table)
+    else:
+        console.print("  [dim]No simulator devices found.[/dim]")
+
+    if caches:
+        cache_total = sum(c.size for c in caches)
+        console.print(f"\n  Caches: {bytes_human(cache_total)}")
+        for c in caches:
+            console.print(f"    {c.category}: {bytes_human(c.size)}")
+
+    if not (purge_unavailable or purge_all or purge_caches):
+        return
+
+    if dry_run_enabled(ctx):
+        console.print("[yellow]Dry-run enabled; simulator cleanup skipped.[/yellow]")
+        return
+
+    if purge_unavailable or purge_all:
+        targets = devices if purge_all else [d for d in devices if not d.is_available]
+        if targets:
+            if not yes:
+                from rich.prompt import Confirm
+                if not Confirm.ask(
+                    f"Delete simulator data for {len(targets)} device(s)?",
+                    default=False,
+                ):
+                    targets = []
+            if targets:
+                result = purge_simulator_devices(targets)
+                console.print(
+                    f"\n  [green]Deleted {result.deleted} device(s), freed {bytes_human(result.bytes_freed)}[/green]"
+                )
+        else:
+            console.print("  [dim]No devices matched purge criteria.[/dim]")
+
+    if purge_caches and caches:
+        if yes:
+            proceed = True
+        else:
+            from rich.prompt import Confirm
+            proceed = Confirm.ask("Delete CoreSimulator caches?", default=False)
+        if proceed:
+            result = purge_simulator_caches(caches)
+            console.print(
+                f"  [green]Deleted {result.deleted} cache item(s), freed {bytes_human(result.bytes_freed)}[/green]"
+            )
+
+# ══════════════════════════════════════════════════════════════════════════════
 # DUPLICATES
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -524,7 +980,9 @@ def info() -> None:
               help="Export results to JSON.")
 @click.option("--delete", is_flag=True, default=False,
               help="Interactively delete duplicates (keeps the first copy).")
+@click.pass_context
 def cmd_duplicates(
+    ctx: click.Context,
     paths: Tuple[str, ...],
     min_size: int,
     export_path: Optional[str],
@@ -601,6 +1059,9 @@ def cmd_duplicates(
         console.print(f"\n  [green]✓ Exported to {export_path}[/green]")
 
     if delete:
+        from core.dry_run import skip_if_dry_run
+        if skip_if_dry_run(ctx, console, "duplicate deletions"):
+            return
         from rich.prompt import Confirm
         console.print()
         for g in groups:
@@ -698,7 +1159,8 @@ def cmd_large_files(
 @click.option("--path", "paths", multiple=True, type=click.Path())
 @click.option("--delete", is_flag=True, default=False,
               help="Delete broken symlinks after confirmation.")
-def cmd_symlinks(paths: Tuple[str, ...], delete: bool) -> None:
+@click.pass_context
+def cmd_symlinks(ctx: click.Context, paths: Tuple[str, ...], delete: bool) -> None:
     """Find broken (dangling) symbolic links in developer directories."""
     from scanners.symlinks import find_broken_symlinks, DEFAULT_ROOTS
 
@@ -734,6 +1196,9 @@ def cmd_symlinks(paths: Tuple[str, ...], delete: bool) -> None:
     console.print(table)
 
     if delete:
+        from core.dry_run import skip_if_dry_run
+        if skip_if_dry_run(ctx, console, "symlink deletions"):
+            return
         from rich.prompt import Confirm
         if Confirm.ask(f"\n  Delete all {len(broken)} broken symlinks?", default=False):
             deleted = 0
@@ -761,7 +1226,9 @@ def cmd_symlinks(paths: Tuple[str, ...], delete: bool) -> None:
               help="Interactively delete old iOS backups.")
 @click.option("--strip-languages", is_flag=True, default=False,
               help="Interactively strip unused language packs.")
+@click.pass_context
 def cmd_extras(
+    ctx: click.Context,
     ios_backups: bool,
     language_packs: bool,
     all_extras: bool,
@@ -776,7 +1243,12 @@ def cmd_extras(
       mac-cleaner extras --ios-backups --delete-backups
       mac-cleaner extras --language-packs --strip-languages
     """
+    from core.dry_run import dry_run_enabled
     from scanners.extras import find_ios_backups, find_language_packs
+
+    dry_run = dry_run_enabled(ctx)
+    if dry_run and (delete_backups or strip_languages):
+        console.print("[yellow]Dry-run enabled; delete actions are skipped.[/yellow]")
 
     do_ios = ios_backups or all_extras
     do_lang = language_packs or all_extras
@@ -815,7 +1287,7 @@ def cmd_extras(
                 table.add_row(b.device_name, b.ios_version, age, b.size_human, str(b.path))
             console.print(table)
 
-            if delete_backups:
+            if delete_backups and not dry_run:
                 from rich.prompt import Confirm
                 console.print()
                 for b in backups:
@@ -854,7 +1326,7 @@ def cmd_extras(
                 table.add_row(e.app_name, str(len(e.removable_lprojs)), e.removable_size_human)
             console.print(table)
 
-            if strip_languages:
+            if strip_languages and not dry_run:
                 from rich.prompt import Confirm
                 console.print()
                 for e in lang_entries:
@@ -884,7 +1356,9 @@ def cmd_extras(
               help="Interactively thin fat binaries.")
 @click.option("--no-backup", is_flag=True, default=False,
               help="Skip .fat_backup copy (irreversible!).")
+@click.pass_context
 def cmd_binary(
+    ctx: click.Context,
     paths: Tuple[str, ...],
     arch: Optional[str],
     thin: bool,
@@ -936,6 +1410,9 @@ def cmd_binary(
     console.print(table)
 
     if thin:
+        from core.dry_run import skip_if_dry_run
+        if skip_if_dry_run(ctx, console, "binary thinning"):
+            return
         from rich.prompt import Confirm
         keep_backup = not no_backup
         freed = 0
@@ -972,14 +1449,29 @@ def cmd_binary(
               help="Permanently purge old staged files beyond retention period.")
 @click.option("--purge-all", "purge_all", is_flag=True, default=False,
               help="Permanently purge ALL staged sessions regardless of age.")
-def cmd_undo(list_only: bool, session_id: Optional[str], purge: bool, purge_all: bool) -> None:
+@click.pass_context
+def cmd_undo(
+    ctx: click.Context,
+    list_only: bool,
+    session_id: Optional[str],
+    purge: bool,
+    purge_all: bool,
+) -> None:
     """Restore files from the staging area (undo a clean operation).
 
     \b
     Files are staged in ~/.mac_cleaner_trash/ during clean.
     Sessions older than 30 days are purged automatically.
     """
+    from core.dry_run import dry_run_enabled
     from core.undo import list_sessions, restore_session, purge_old_sessions, purge_all_sessions
+
+    dry_run = dry_run_enabled(ctx)
+    if dry_run and (purge or purge_all or not list_only):
+        console.print("[yellow]Dry-run enabled; restore and purge actions are skipped.[/yellow]")
+        purge = False
+        purge_all = False
+        list_only = True
 
     sessions = list_sessions()
 
@@ -1274,8 +1766,12 @@ def cmd_schedule() -> None:
 
 @cmd_schedule.command("install")
 @click.option("--no-notify", is_flag=True, default=False)
-def schedule_install(no_notify: bool) -> None:
+@click.pass_context
+def schedule_install(ctx: click.Context, no_notify: bool) -> None:
     """Install a weekly LaunchAgent to run scans automatically."""
+    from core.dry_run import skip_if_dry_run
+    if skip_if_dry_run(ctx, console, "schedule install"):
+        return
     from core.scheduler import install_schedule
     ok, msg = install_schedule(notify=not no_notify)
     color = "green" if ok else "red"
@@ -1283,8 +1779,12 @@ def schedule_install(no_notify: bool) -> None:
 
 
 @cmd_schedule.command("remove")
-def schedule_remove() -> None:
+@click.pass_context
+def schedule_remove(ctx: click.Context) -> None:
     """Remove the weekly scan LaunchAgent."""
+    from core.dry_run import skip_if_dry_run
+    if skip_if_dry_run(ctx, console, "schedule removal"):
+        return
     from core.scheduler import remove_schedule
     ok, msg = remove_schedule()
     color = "green" if ok else "yellow"
@@ -1315,9 +1815,11 @@ def schedule_status() -> None:
               help="Check only — do not upgrade.")
 @click.option("--yes", "-y", is_flag=True, default=False,
               help="Upgrade without prompting.")
-def cmd_update(check: bool, yes: bool) -> None:
+@click.pass_context
+def cmd_update(ctx: click.Context, check: bool, yes: bool) -> None:
     """Check for a newer version on PyPI and optionally upgrade."""
     from core.updater import check_for_update, perform_upgrade
+    from core.dry_run import dry_run_enabled
 
     console.print()
     console.print(f"  Current version: [bold cyan]{__version__}[/bold cyan]")
@@ -1338,6 +1840,10 @@ def cmd_update(check: bool, yes: bool) -> None:
     console.print(f"  [yellow]Update available:[/yellow] {__version__} → [bold]{latest}[/bold]")
 
     if check:
+        return
+
+    if dry_run_enabled(ctx):
+        console.print("  [yellow]Dry-run enabled; upgrade skipped.[/yellow]")
         return
 
     do_it = yes

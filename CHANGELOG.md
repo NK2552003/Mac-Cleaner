@@ -3,11 +3,25 @@
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
 ## Unreleased
+
+## v1.3.0 (2026-05-12)
 ### Added
+- Global dry-run flag that blocks destructive actions (`--dry-run`)
+- Shell completions command for bash/zsh/fish
+- Full app uninstaller command with undo staging support
+- Browser data cleaner command (cache, cookies, history, sessions)
+- Disk space map command for folder usage summaries
+- Photos library analyzer command for Photos bundles
+- iOS simulator cleaner command (devices, caches, logs)
+- P0/P1 modules in core/scanners with CLI wiring
+- Tests for the new P0/P1 features
 - Debug logging flags (`--verbose`, `--log-file`) with file rotation
 - Basic test coverage for utilities and matching
 
 ### Changed
+- CLI wiring for new P0/P1 commands and dry-run behavior
+- Module layout aligned to core/scanners (removed features package)
+- README, checklist, and roadmap paths updated for the new layout
 - Improved error handling with debug logs across filesystem and subprocess paths
 - Dev junk scanner traversal now uses a deque for better performance
 
