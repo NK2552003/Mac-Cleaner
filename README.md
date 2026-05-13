@@ -440,14 +440,14 @@ Licensed under the [Apache License 2.0](LICENSE).
 
 -  **Documentation:** [docs/](docs/)
 -  **Issues:** [GitHub Issues](https://github.com/NK2552003/Mac-Cleaner/issues)
--  **Discussions:** [GitHub Discussions](https://github.com/NK2552003/Mac-Cleaner/discussions)
-
 ---
 
 <div align="center">
 
 **Made with ❤️ for the macOS community**
 
-[⭐ Star this repo](https://github.com/NK2552003/Mac-Cleaner) • [ Read the docs](docs/FEATURES.md) • [Report an issue](https://github.com/NK2552003/Mac-Cleaner/issues)
+[⭐ Star this repo](https://github.com/NK2552003/Mac-Cleaner) 
+[Read the COMMAND REFERENCE](docs/COMMAND_REFERENCE.md) 
+[Report an issue](https://github.com/NK2552003/Mac-Cleaner/issues)
 
 </div>
