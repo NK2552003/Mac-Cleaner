@@ -1,6 +1,18 @@
+<div align="center">
+  
 # Mac Deep Cleaner v1.5.0
 
 **Professional macOS cleanup tool — Smart App Orphan Detector**
+
+![GitHub license](https://img.shields.io/github/license/NK2552003/Mac-Cleaner?style=flat-square)
+![GitHub last commit](https://img.shields.io/github/last-commit/NK2552003/Mac-Cleaner?style=flat-square)
+![GitHub repo size](https://img.shields.io/github/repo-size/NK2552003/Mac-Cleaner?style=flat-square)
+![Platform](https://img.shields.io/badge/platform-macOS-lightgrey?style=flat-square&logo=apple)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/mac-deep-cleaner?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=ORANGE&left_text=downloads)](https://pepy.tech/projects/mac-deep-cleaner)
+
+---
+
+</div>
 
 Detects and removes leftover files from uninstalled apps, stale caches, crash reports, logs, and other system junk — safely, with multiple layers of protection and full undo support.
 
