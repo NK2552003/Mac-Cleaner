@@ -1,16 +1,12 @@
-"""
-Mac Deep Cleaner v1.5.0 — Constants & Configuration
-=================================================
-All safelists, alias tables, search roots, and configuration constants.
 
-"""
+"""Constants and configuration data for scans and safety rules."""
 
 from pathlib import Path
 from typing import Dict, List, Set
 
 HOME = Path.home()
 LOG_FILE = HOME / ".mac_cleaner_deleted.log"
-CONFIG_DIR = HOME / ".config" / "mac-cleaner"          # NEW in v1.5.0
+CONFIG_DIR = HOME / ".config" / "mac-cleaner"   
 
 # ── Scan roots ────────────────────────────────────────────────────────────────
 
@@ -68,7 +64,7 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "microsoft teams":                  "com.microsoft.teams",
     "microsoft teams (work or school)": "com.microsoft.teams2",
     "microsoft teams classic":          "com.microsoft.teams",
-    # v1.5.0: short-form aliases for Microsoft apps
+    # short-form aliases for Microsoft apps
     "excel":                            "com.microsoft.excel",
     "word":                             "com.microsoft.word",
     "powerpoint":                       "com.microsoft.powerpoint",
@@ -86,7 +82,7 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "google chrome canary":             "com.google.chrome.canary",
     "google drive":                     "com.google.drivefs",
     "google earth pro":                 "com.google.googleearthpro",
-    # v1.5.0
+    # v2.0.0
     "googledrive":                      "com.google.drivefs",
 
     # ── JetBrains ─────────────────────────────────────────────────────────
@@ -105,7 +101,6 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "appcode":                          "com.jetbrains.appcode",
     "fleet":                            "com.jetbrains.fleet",
     "jetbrains toolbox":                "com.jetbrains.toolbox",
-    # v1.5.0
     "jetbrains toolbox app":            "com.jetbrains.toolbox",
 
     # ── Browsers ──────────────────────────────────────────────────────────
@@ -123,7 +118,7 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "tor browser":                      "org.torproject.torbrowser",
     "waterfox":                         "net.nickolaj.nickelodeon",
     "sidekick":                         "com.nicklodeon.nickelodeon",
-    # v1.5.0: extra short-form browser aliases
+    # extra short-form browser aliases
     "brave":                            "com.brave.browser",
     "edge":                             "com.microsoft.edgemac",
 
@@ -173,7 +168,6 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "ia writer":                        "pro.writer.mac",
     "devonthink 3":                     "com.devon-technologies.think3",
     "devonthink":                       "com.devon-technologies.think3",
-    # v1.5.0
     "linear":                           "com.linear.linear",
     "superhuman":                       "com.superhuman.desktop",
 
@@ -193,7 +187,6 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "gimp":                             "org.gimp.gimp-2.10",
     "canva":                            "com.canva.canva",
     "principle":                        "com.principleformac.principle",
-    # v1.5.0
     "pixelmator":                       "com.pixelmatorteam.pixelmator",
 
     # ── Dev tools ─────────────────────────────────────────────────────────
@@ -225,7 +218,6 @@ APP_DIR_ALIASES: Dict[str, str] = {
     "coderunner":                       "com.krill.coderunner",
     "coteditor":                        "com.coteditor.coteditor",
     "textedit":                         "com.apple.textedit",
-    # v1.5.0
     "simulator":                        "com.apple.iphonesimulator",
     "xcode":                            "com.apple.dt.xcode",
     "textmate":                         "com.macromates.textmate",
@@ -342,7 +334,7 @@ APP_DIR_ALIASES: Dict[str, str] = {
 # ── Apple Developer Team ID → owner name ─────────────────────────────────────
 
 TEAM_ID_MAP: Dict[str, str] = {
-    # ── v1.5.0 original entries (verbatim) ────────────────────────────────────
+    # ── original entries (verbatim) ────────────────────────────────────
     "ubf8t346g9": "Microsoft Office",
     "2bua8c4s2c": "1Password",
     "7pkpll4vld": "Dropbox",
@@ -382,7 +374,7 @@ TEAM_ID_MAP: Dict[str, str] = {
     "t9um3f5r6t": "Spark / Readdle",
     "w5364u7y5r": "Canva",
 
-    # ── v1.5.0 additions ──────────────────────────────────────────────────────
+    # ── additions ──────────────────────────────────────────────────────
     "ug75gva3v9": "Microsoft (general)",
     "jq525l2msd": "Adobe",
     "g7hh3359t7": "Dropbox",
@@ -489,7 +481,7 @@ SYSTEM_KEYWORD_SAFELIST: Set[str] = {
 # ── Exact-stem safelist — the stem (lowercased) matches exactly ───────────────
 
 SYSTEM_EXACT_SAFELIST: Set[str] = {
-    # ── v1.5.0 original entries (verbatim) ────────────────────────────────────
+    # ── original entries (verbatim) ────────────────────────────────────
 
     # Networking / directory
     "systemconfiguration", "opendirectory", "directoryservice",
@@ -587,7 +579,7 @@ SYSTEM_EXACT_SAFELIST: Set[str] = {
     "storedownloadd",
     "commerced",
 
-    # ── v1.5.0 additions ──────────────────────────────────────────────────────
+    # ── additions ──────────────────────────────────────────────────────
     "apsd",
     "appleid",
     "airplay",

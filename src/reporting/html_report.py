@@ -1,6 +1,4 @@
 """
-Mac Deep Cleaner v1.5.0 — HTML Report Exporter
-============================================
 Generates a self-contained HTML report with:
 - Collapsible sections per category
 - Doughnut chart (Chart.js via CDN) for space breakdown
@@ -94,7 +92,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 <header>
   <div>
     <h1>◆ Mac Deep Cleaner — Scan Report</h1>
-    <div class="meta">Generated {generated_at} &nbsp;·&nbsp; v1.5.0</div>
+    <div class="meta">Generated {generated_at} &nbsp;·&nbsp; v2.0.0</div>
   </div>
 </header>
 
@@ -144,7 +142,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
 </div>
 
-<footer>Mac Deep Cleaner v1.5.0 &nbsp;·&nbsp; Report generated {generated_at}</footer>
+<footer>Mac Deep Cleaner v2.0.0 &nbsp;·&nbsp; Report generated {generated_at}</footer>
 
 <script>
 const chartData = {chart_data};

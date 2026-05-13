@@ -1,52 +1,16 @@
-"""
-Mac Deep Cleaner v1.5.0 — Configuration Manager
-=============================================
-Reads and writes a YAML config file at ~/.config/mac-cleaner/config.yaml.
 
-Config schema (all keys optional)
-----------------------------------
-whitelist:
-  - ~/Library/Application Support/Slack
-  - ~/Library/Caches/MyApp
+"""Manage on-disk configuration for Mac Deep Cleaner.
 
-skip_categories:
-  - "System Cache"
-  - "Log File"
+Configuration is stored as YAML at ~/.config/mac-cleaner/config.yaml.
 
-dev_junk_roots:
-    - ~/Projects
-    - ~/Code
+Example:
+        whitelist:
+            - ~/Library/Application Support/Slack
+            - ~/Library/Caches/MyApp
 
-scan_dev_junk: false
-scan_dev_junk_global: false
-dev_junk_max_depth: 6
-
-custom_scan_roots:
-  - ~/Projects/tools
-  - /opt/company
-
-profile: developer     # name of an active profile (merged on top of base config)
-
-profiles:
-  minimal:
-    skip_categories: ["Xcode Junk", "npm Cache", "Cargo Cache"]
-  developer:
-    custom_scan_roots: [~/Projects]
-    skip_categories: []
-
-undo_mode: true        # stage deletions in ~/.mac_cleaner_trash instead of permanent delete
-retention_days: 30     # how long staged files are kept
-large_file_threshold_mb: 100
-duplicate_min_size_kb: 4
-notify_after_scan: false
-
-Usage
------
-    from mac_cleaner.config import load_config, Config
-
-    cfg = load_config()               # reads file or returns defaults
-    cfg = load_config(profile="developer")
-    cfg.save()                        # writes back to disk
+        scan_dev_junk: false
+        scan_dev_junk_global: false
+        dev_junk_max_depth: 6
 """
 
 from __future__ import annotations
@@ -137,7 +101,25 @@ _BUILTIN_PROFILES: Dict[str, Dict[str, Any]] = {
 
 @dataclass
 class Config:
-    """Resolved configuration, ready for use by the CLI."""
+    """Resolved configuration, ready for use by the CLI.
+
+    Attributes:
+        whitelist: Explicit paths to exclude from deletion.
+        custom_scan_roots: Extra root folders to scan.
+        skip_categories: Categories of junk to skip.
+        scan_orphans: Whether to scan for app leftovers.
+        scan_junk: Whether to scan for general junk.
+        scan_dev_junk: Whether to scan for developer junk.
+        scan_dev_junk_global: Whether to include global caches.
+        undo_mode: Stage deletions for undo instead of removing permanently.
+        retention_days: Days to keep staged deletions.
+        notify_after_scan: Post a notification after scans.
+        profile: Active profile name if any.
+        dev_junk_roots: Roots to scan for developer junk.
+        dev_junk_max_depth: Max depth for dev junk scanning.
+        large_file_threshold_mb: Minimum size for large-file scans.
+        duplicate_min_size_kb: Minimum size for duplicate detection.
+    """
 
     # Paths
     whitelist: List[Path] = field(default_factory=list)
@@ -187,7 +169,12 @@ class Config:
     # ── Persistence ────────────────────────────────────────────────────────
 
     def save(self) -> None:
-        """Write the current config to disk as YAML."""
+        """Write the current config to disk as YAML.
+
+        Raises:
+            RuntimeError: If PyYAML is not installed.
+            OSError: If the file cannot be written.
+        """
         if not _YAML_OK:
             raise RuntimeError("pyyaml is required to save config. pip install pyyaml")
 
@@ -213,10 +200,11 @@ class Config:
         if self.profile:
             data["profile"] = self.profile
 
-        with open(_CONFIG_FILE, "w") as f:
+        with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize the resolved config to a JSON-safe dictionary."""
         return {
             "whitelist": [str(p) for p in self.whitelist],
             "skip_categories": sorted(self.skip_categories),
@@ -238,7 +226,14 @@ class Config:
 # ── Loader ─────────────────────────────────────────────────────────────────────
 
 def _expand(paths: List[Any]) -> List[Path]:
-    """Expand a list of path strings into Path objects."""
+    """Expand a list of path-like values into resolved Path objects.
+
+    Args:
+        paths: List of values that can be converted to Path.
+
+    Returns:
+        List of resolved Path objects.
+    """
     result = []
     for p in paths:
         try:
@@ -249,22 +244,47 @@ def _expand(paths: List[Any]) -> List[Path]:
 
 
 def _merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-    """Shallow merge: override keys win."""
+    """Shallow merge: override keys win.
+
+    Args:
+        base: Base dictionary.
+        override: Overrides applied on top of base.
+
+    Returns:
+        Merged dictionary.
+    """
     merged = copy.copy(base)
     merged.update(override)
     return merged
+
+
+def _coerce_int(value: Any, default: int, min_value: int = 0) -> int:
+    """Coerce a value to int with a lower bound.
+
+    Args:
+        value: Value to coerce.
+        default: Fallback when conversion fails.
+        min_value: Minimum allowed value.
+
+    Returns:
+        Coerced integer value.
+    """
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(min_value, coerced)
 
 
 def load_config(
     path: Optional[Path] = None,
     profile: Optional[str] = None,
 ) -> Config:
-    """
-    Load configuration from disk (YAML) and apply profile overrides.
+    """Load configuration from disk and apply profile overrides.
 
     Args:
-        path:    Path to the config file. Defaults to ~/.config/mac-cleaner/config.yaml.
-        profile: Profile name to activate (overrides file's 'profile' key).
+        path: Path to the config file. Defaults to ~/.config/mac-cleaner/config.yaml.
+        profile: Profile name to activate (overrides file's "profile" key).
 
     Returns:
         Config object with all settings resolved.
@@ -274,11 +294,11 @@ def load_config(
 
     if config_path.exists() and _YAML_OK:
         try:
-            with open(config_path) as f:
+            with open(config_path, encoding="utf-8") as f:
                 loaded = yaml.safe_load(f) or {}
             if isinstance(loaded, dict):
                 raw = loaded
-        except Exception as exc:
+        except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
             logger.debug("Failed to load config %s: %s", config_path, exc)
 
     # Resolve active profile
@@ -307,13 +327,13 @@ def load_config(
         scan_dev_junk=bool(effective.get("scan_dev_junk", False)),
         scan_dev_junk_global=bool(effective.get("scan_dev_junk_global", False)),
         undo_mode=bool(effective.get("undo_mode", True)),
-        retention_days=int(effective.get("retention_days", 30)),
+        retention_days=_coerce_int(effective.get("retention_days", 30), 30, min_value=0),
         notify_after_scan=bool(effective.get("notify_after_scan", False)),
-        large_file_threshold_mb=int(effective.get("large_file_threshold_mb", 100)),
-        duplicate_min_size_kb=int(effective.get("duplicate_min_size_kb", 4)),
+        large_file_threshold_mb=_coerce_int(effective.get("large_file_threshold_mb", 100), 100, min_value=0),
+        duplicate_min_size_kb=_coerce_int(effective.get("duplicate_min_size_kb", 4), 4, min_value=1),
         profile=active_profile,
         dev_junk_roots=_expand(effective.get("dev_junk_roots", [])),
-        dev_junk_max_depth=int(effective.get("dev_junk_max_depth", 6)),
+        dev_junk_max_depth=_coerce_int(effective.get("dev_junk_max_depth", 6), 6, min_value=1),
     )
     cfg._raw_profiles = all_profiles
     return cfg
@@ -336,8 +356,13 @@ def ensure_config_dir() -> Path:
 
 
 def init_default_config(profile: Optional[str] = None) -> Config:
-    """
-    Write a default config file if none exists, then load and return it.
+    """Write a default config file if none exists, then load and return it.
+
+    Args:
+        profile: Optional profile name to set on first run.
+
+    Returns:
+        Loaded configuration.
     """
     if not _CONFIG_FILE.exists():
         cfg = default_config()

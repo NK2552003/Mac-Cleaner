@@ -1,6 +1,4 @@
 """
-Mac Deep Cleaner v1.5.0 — System Inspector
-========================================
 Three sub-features bundled together because they share macOS system queries:
 
 1. LaunchAgent / LaunchDaemon Manager

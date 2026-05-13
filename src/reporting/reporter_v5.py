@@ -1,9 +1,4 @@
 """
-Backward-compatible shim for v1.5.0 reporter additions.
-
-The project now consolidates all reporting helpers into:
-    mac_cleaner.reporting.reporter
-
 This module re-exports the merged functions so older imports keep working.
 """
 

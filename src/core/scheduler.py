@@ -1,7 +1,4 @@
 """
-Mac Deep Cleaner v1.5.0 — Notifications & Scheduler
-=================================================
-
 Notifications
 -------------
 Posts a native macOS notification after a scan completes using

@@ -1,4 +1,4 @@
-# Publishing to PyPI (pypi.org) — mac-deep-cleaner (v1.5.0)
+# Publishing to PyPI (pypi.org) — mac-deep-cleaner (v2.0.0)
 
 ## What you’ll publish
 This project is configured to build with `setuptools` from `pyproject.toml` (PEP 621). The package name is:
@@ -50,8 +50,8 @@ pip install mac-deep-cleaner==1.2.0
 If you want to keep credentials out of shell history:
 - Use your CI secret store to set `TWINE_USERNAME` and `TWINE_PASSWORD`.
 
-## Quick checklist for v1.5.0
+## Quick checklist for v2.0.0
 - `pyproject.toml` → `project.version = "1.2.0"`
-- `README.md` / docs reflect v1.5.0
+- `README.md` / docs reflect v2.0.0
 - `python3 -m build` produces valid wheel + sdist
 - `twine upload dist/*` succeeds

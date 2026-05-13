@@ -1,7 +1,4 @@
 """
-Mac Deep Cleaner v1.5.0 — iOS Backup & Language Pack Scanner
-==========================================================
-
 iOS Backup Finder
 -----------------
 Locates iTunes / Finder iPhone/iPad backups stored in:

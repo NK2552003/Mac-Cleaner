@@ -1,6 +1,4 @@
 """
-Mac Deep Cleaner v1.5.0 — Export Module
-=====================================
 Exports scan results to JSON or YAML format.
 """
 
@@ -27,7 +25,7 @@ def export_json(
 ) -> None:
     """Export full scan results to JSON."""
     data = {
-        "tool": "Mac Deep Cleaner v1.5.0",
+        "tool": "Mac Deep Cleaner v2.0.0",
         "generated_at": datetime.now().isoformat(),
         "orphaned_apps": {
             name: {
@@ -84,7 +82,7 @@ def export_yaml(
         return
 
     data = {
-        "tool": "Mac Deep Cleaner v1.5.0",
+        "tool": "Mac Deep Cleaner v2.0.0",
         "generated_at": datetime.now().isoformat(),
         "orphaned_apps": {
             name: [e.to_dict() for e in entries]
