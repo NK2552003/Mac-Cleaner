@@ -216,3 +216,170 @@ jobs:
           echo "### 🚀 Published mac-deep-cleaner ${{ needs.version-check.outputs.local_version }} to PyPI" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "📦 https://pypi.org/project/mac-deep-cleaner/${{ needs.version-check.outputs.local_version }}/" >> $GITHUB_STEP_SUMMARY
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Creates a GitHub Release tagged v<version> with the matching CHANGELOG entry.
+  # Runs after a successful publish.
+  # ─────────────────────────────────────────────────────────────────────────────
+  github-release:
+    name: Create GitHub Release (v${{ needs.version-check.outputs.local_version }})
+    needs: [version-check, publish]
+    if: needs.version-check.outputs.should_publish == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # needed to create tags + releases
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # full history so the tag can be pushed
+          persist-credentials: true
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Extract changelog section for this version
+        id: changelog
+        run: |
+          python - <<'EOF'
+          import re, os, sys
+
+          version = "${{ needs.version-check.outputs.local_version }}"
+          tag     = f"v{version}"
+
+          try:
+              with open("CHANGELOG.md", "r") as f:
+                  content = f.read()
+          except FileNotFoundError:
+              print("CHANGELOG.md not found — using empty release notes.")
+              body = f"Release {tag}"
+              with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+                  out.write(f"tag={tag}\n")
+              with open("release_notes.md", "w") as rn:
+                  rn.write(body)
+              sys.exit(0)
+
+          # Match the section that starts with "## v<version>" up to the next "## v" heading
+          pattern = rf"(## {re.escape(tag)}.*?)(?=\n## v|\Z)"
+          match = re.search(pattern, content, re.DOTALL)
+
+          if match:
+              body = match.group(1).strip()
+              print(f"✅  Found changelog section for {tag}")
+          else:
+              body = f"Release {tag}\n\nNo changelog entry found for this version."
+              print(f"⚠️  No changelog section found for {tag} — using fallback.")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"tag={tag}\n")
+
+          with open("release_notes.md", "w") as rn:
+              rn.write(body)
+          EOF
+
+      - name: Create and push tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.changelog.outputs.tag }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Only create the tag if it doesn't already exist
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists — skipping tag creation."
+          else
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+            echo "✅  Pushed tag $TAG"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   ${{ steps.changelog.outputs.tag }}
+          name:       "mac-deep-cleaner ${{ steps.changelog.outputs.tag }}"
+          body_path:  release_notes.md
+          draft:      false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Auto-bumps the patch version on `develop` after a successful main publish
+  # so the branch is always ahead of what's on PyPI.
+  # Commits directly to develop via the default GITHUB_TOKEN.
+  # ─────────────────────────────────────────────────────────────────────────────
+  auto-version-bump:
+    name: Auto-bump patch version on develop
+    needs: [version-check, publish]
+    if: needs.version-check.outputs.should_publish == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # needed to push the commit
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Bump patch version in pyproject.toml
+        id: bump
+        run: |
+          python - <<'EOF'
+          import re, os
+
+          published = "${{ needs.version-check.outputs.local_version }}"
+          major, minor, patch = map(int, published.split("."))
+          next_version = f"{major}.{minor}.{patch + 1}"
+
+          with open("pyproject.toml", "r") as f:
+              content = f.read()
+
+          # Replace the version field — matches: version = "x.y.z"
+          updated = re.sub(
+              r'^(version\s*=\s*")[^"]+(")',
+              rf'\g<1>{next_version}\g<2>',
+              content,
+              flags=re.MULTILINE,
+          )
+
+          if updated == content:
+              print(f"⚠️  version field not found or already bumped — no change written.")
+          else:
+              with open("pyproject.toml", "w") as f:
+                  f.write(updated)
+              print(f"✅  Bumped {published} → {next_version} in pyproject.toml")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"next_version={next_version}\n")
+          EOF
+
+      - name: Commit and push version bump
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEXT="${{ steps.bump.outputs.next_version }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          # Only commit if there's an actual change
+          if git diff --cached --quiet; then
+            echo "Nothing to commit — develop is already at $NEXT or bump failed."
+          else
+            git commit -m "chore: bump version to $NEXT [skip ci]"
+            git push origin develop
+            echo "✅  Pushed version bump to develop: $NEXT"
+          fi
