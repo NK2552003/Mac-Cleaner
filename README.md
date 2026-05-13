@@ -1,12 +1,16 @@
+<div align="center">
 
-# 🧹 Mac Deep Cleaner
+# Mac Deep Cleaner
 
-> **Reclaim gigabytes of disk space with confidence — the safest, smartest macOS cleanup tool ever built.**
+**Reclaim gigabytes of disk space with confidence — the safest, smartest macOS cleanup tool ever built.**
 
 [![PyPI Version](https://img.shields.io/pypi/v/mac-deep-cleaner.svg)](https://pypi.org/project/mac-deep-cleaner/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![macOS 10.15+](https://img.shields.io/badge/macOS-10.15+-silver.svg)](https://www.apple.com/macos/)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/mac-deep-cleaner?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=ORANGE&left_text=downloads)](https://pepy.tech/projects/mac-deep-cleaner)
+
+</div>
 
 **Mac Deep Cleaner** is a professional-grade macOS utility that intelligently detects and removes leftover files from uninstalled apps, stale caches, crash reports, logs, and system junk — with **multiple layers of protection** and **full undo support**.
 
