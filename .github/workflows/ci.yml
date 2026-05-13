@@ -46,10 +46,8 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
         os: [macos-14, macos-latest]
         exclude:
-          # Python 3.9 not available on macos-14 (arm64 runner)
           - os: macos-14
             python-version: "3.9"
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -108,3 +106,113 @@ jobs:
           path: dist/
           retention-days: 7
 
+  version-check:
+    name: Version Gate (PyPI vs local)
+    needs: build-check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    timeout-minutes: 10
+    outputs:
+      should_publish: ${{ steps.compare.outputs.should_publish }}
+      local_version:  ${{ steps.compare.outputs.local_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Compare versions
+        id: compare
+        run: |
+          python - <<'EOF'
+          import json, sys, urllib.request
+
+          try:
+              import tomllib
+          except ImportError:
+              import tomli as tomllib
+
+          with open("pyproject.toml", "rb") as f:
+              data = tomllib.load(f)
+
+          local = data["project"]["version"]
+          print(f"Local version : {local}")
+
+          package = "mac-deep-cleaner"
+          url = f"https://pypi.org/pypi/{package}/json"
+          try:
+              with urllib.request.urlopen(url, timeout=15) as r:
+                  pypi = json.load(r)["info"]["version"]
+          except urllib.error.HTTPError as e:
+              if e.code == 404:
+                  pypi = "0.0.0"
+                  print("Package not found on PyPI — treating as new release.")
+              else:
+                  raise
+
+          print(f"PyPI version  : {pypi}")
+
+          import os
+          out = os.environ["GITHUB_OUTPUT"]
+          publish = "true" if local != pypi else "false"
+          with open(out, "a") as f:
+              f.write(f"should_publish={publish}\n")
+              f.write(f"local_version={local}\n")
+
+          if publish == "true":
+              print(f"✅  New version detected ({pypi} → {local}). Will publish.")
+          else:
+              print(f"⏭  Version {local} already on PyPI. Skipping publish.")
+          EOF
+
+  publish:
+    name: Publish to PyPI (${{ needs.version-check.outputs.local_version }})
+    needs: version-check
+    if: needs.version-check.outputs.should_publish == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 20
+    environment:
+      name: pypi
+      url: https://pypi.org/project/mac-deep-cleaner/
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install build tools
+        run: pip install --upgrade pip && pip install build twine
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Verify distributions
+        run: twine check dist/*
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
+
+      - name: Summary
+        run: |
+          echo "### 🚀 Published mac-deep-cleaner ${{ needs.version-check.outputs.local_version }} to PyPI" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📦 https://pypi.org/project/mac-deep-cleaner/${{ needs.version-check.outputs.local_version }}/" >> $GITHUB_STEP_SUMMARY

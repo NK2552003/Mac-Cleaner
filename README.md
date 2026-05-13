@@ -9,6 +9,7 @@ Use either command name:
 mac-cleaner scan
 mdc scan
 ```
+
 `mdc` is a shorter alias for every command, for example `mdc dashboard`,
 `mdc clean`, and `mdc scan --ci --threshold-mb 500`.
 
