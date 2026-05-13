@@ -2,7 +2,7 @@
 
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
-## v2.0.0 (2026-05-15)
+## v2.0.0 (2026-05-14)
 
 ### Added
 
@@ -33,11 +33,17 @@ All notable changes to **mac-deep-cleaner** will be documented in this file.
 - Minimum supported macOS version for system commands
 - CI mode via `mdc uninstall-cli` ti uninstall this package
 
+##DOUCMENTATIONS
+-Added the documentations for the command references and architecture
+
+
 ### Changed 
 - CLI wiring for new feature commands
 - Added reporting utilities
 - Updated Readme for new features
 - Version bump to v2.0.0 across docs and UI
+- Updated the ci/cd pipelining to publish the newer version to pypi directly
+- Updated the readme.md file for the references too
 
 ## v1.5.0 (2026-05-12)
 ### Added
