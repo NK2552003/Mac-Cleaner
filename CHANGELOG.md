@@ -2,6 +2,15 @@
 
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
+## v2.0.1 (2026-05-22)
+
+### Added
+- APFS clone-aware duplicate detection (opt-in) with sampling profiles
+- Duplicate export fields for logical vs physical wasted space when available
+
+### Changed
+- Duplicates CLI output shows physical group counts and estimated wasted space
+
 ## v2.0.0 (2026-05-14)
 
 ### Added

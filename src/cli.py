@@ -182,7 +182,7 @@ def main(
     log_file: Optional[str],
     dry_run: bool,
 ) -> None:
-    """Mac Deep Cleaner v2.0.0 — Professional macOS cleanup tool."""
+    """Mac Deep Cleaner v2.0.1 — Professional macOS cleanup tool."""
     from core.dry_run import set_dry_run
     configure_logging(
         verbose=verbose,
@@ -1156,6 +1156,12 @@ def cmd_simulators(
               help="Directories to scan (default: ~/Downloads, ~/Documents, ~/Desktop, ~/Pictures).")
 @click.option("--min-size", default=100, show_default=True,
               help="Minimum file size in KB to consider.")
+@click.option("--clone-aware/--no-clone-aware", default=False, show_default=True,
+              help="Estimate APFS shared extents (macOS only).")
+@click.option("--clone-sampling",
+              type=click.Choice(["fast", "balanced", "thorough"], case_sensitive=False),
+              default="balanced", show_default=True,
+              help="Sampling profile for clone detection.")
 @click.option("--export", "export_path", type=click.Path(), default=None,
               help="Export results to JSON.")
 @click.option("--delete", is_flag=True, default=False,
@@ -1165,6 +1171,8 @@ def cmd_duplicates(
     ctx: click.Context,
     paths: Tuple[str, ...],
     min_size: int,
+    clone_aware: bool,
+    clone_sampling: str,
     export_path: Optional[str],
     delete: bool,
 ) -> None:
@@ -1191,18 +1199,30 @@ def cmd_duplicates(
 
     with _progress() as prog:
         task = prog.add_task(f"Scanning for duplicates (min {min_size} KB)…", total=None)
-        groups = find_duplicates(roots=roots, min_size=min_bytes, progress_callback=_cb)
+        groups = find_duplicates(
+            roots=roots,
+            min_size=min_bytes,
+            progress_callback=_cb,
+            clone_detect=clone_aware,
+            clone_sampling=clone_sampling,
+        )
         prog.update(task, completed=100, total=100)
 
     if not groups:
         console.print("[green]✓ No duplicate files found![/green]")
         return
 
+    any_physical = any(g.physical_group_count is not None for g in groups)
     wasted = total_wasted(groups)
+    wasted_label = "estimated wasted" if any_physical else "wasting"
     console.print(
         f"  Found [bold red]{len(groups)}[/bold red] duplicate groups "
-        f"wasting [yellow]{bytes_human(wasted)}[/yellow]\n"
+        f"{wasted_label} [yellow]{bytes_human(wasted)}[/yellow]\n"
     )
+    if any_physical:
+        console.print(
+            "  [dim]Wasted space uses APFS shared-extent estimates when available.[/dim]\n"
+        )
 
     table = Table(
         title="Duplicate Groups",
@@ -1211,18 +1231,28 @@ def cmd_duplicates(
     )
     table.add_column("#", style="dim", width=4, justify="right")
     table.add_column("Copies", justify="right", width=7)
+    if any_physical:
+        table.add_column("Phys", justify="right", width=7, style="dim")
     table.add_column("Wasted", justify="right", style="yellow", width=10)
     table.add_column("Size Each", justify="right", style="dim", width=10)
     table.add_column("First Path", style="dim")
 
     for i, g in enumerate(groups[:50], 1):
-        table.add_row(
+        row = [
             str(i),
             str(len(g.paths)),
+        ]
+        if any_physical:
+            phys = "-"
+            if g.physical_group_count is not None:
+                phys = f"{g.physical_group_count}/{len(g.paths)}"
+            row.append(phys)
+        row.extend([
             bytes_human(g.wasted_bytes),
             bytes_human(g.size),
             str(g.paths[0]),
-        )
+        ])
+        table.add_row(*row)
 
     console.print(table)
 
@@ -1246,7 +1276,15 @@ def cmd_duplicates(
         console.print()
         for g in groups:
             total_g = bytes_human(g.wasted_bytes)
-            console.print(f"  [bold]Duplicates of:[/bold] {g.paths[0].name} ({total_g} wasted)")
+            g_label = "est. wasted" if g.physical_group_count is not None else "wasted"
+            shared_note = " (APFS shared extents)" if g.has_shared_extents else ""
+            console.print(
+                f"  [bold]Duplicates of:[/bold] {g.paths[0].name} ({total_g} {g_label}{shared_note})"
+            )
+            if g.has_shared_extents:
+                console.print(
+                    "    [dim]Shared extents detected; deleting may free little or no space.[/dim]"
+                )
             for extra in g.paths[1:]:
                 console.print(f"    [dim]{extra}[/dim]")
             if Confirm.ask(f"  Delete {len(g.paths)-1} extra copy/copies?", default=False):

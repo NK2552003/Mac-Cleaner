@@ -1,6 +1,6 @@
 # Mac Deep Cleaner — Architecture & Implementation Guide
 
-**Version:** 2.0.0
+**Version:** 2.0.1
 
 This document provides a comprehensive overview of the internal architecture, module structure, and implementation details of Mac Deep Cleaner.
 
@@ -22,100 +22,91 @@ This document provides a comprehensive overview of the internal architecture, mo
 ## Project Structure
 
 ```
-mac-deep-cleaner/
-├── src/
-│   ├── __init__.py          # Package initialization, version
-│   ├── cli.py               # Main CLI entry point (Click-based)
-│   ├── constants.py         # Global constants, paths, defaults
-│   ├── utils.py             # Utility functions (logging, bytes formatting)
-│   │
-│   ├── config/
-│   │   ├── __init__.py
-│   │   ├── config.py        # Configuration loading, profiles
-│   │   ├── history.py       # Scan history management
-│   │   └── models.py        # Data models (JunkEntry, etc.)
-│   │
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── scanner.py       # Orphan and junk scanning logic
-│   │   ├── cleaner.py       # Cleanup execution engine
-│   │   ├── safety.py        # Safety checks, path validation
-│   │   ├── dry_run.py       # Dry-run mode handling
-│   │   ├── undo.py          # Undo/restore session management
-│   │   ├── uninstaller.py   # App uninstallation logic
-│   │   ├── system_inspector.py  # Launch items, SIP checks
-│   │   ├── memory_pressure.py   # Memory stats, purge
-│   │   ├── brew_manager.py      # Homebrew integration
-│   │   ├── completions.py       # Shell completion generation
-│   │   ├── scheduler.py         # LaunchAgent scheduling
-│   │   ├── updater.py           # PyPI update checking
-│   │   ├── menubar.py           # SwiftBar/xbar plugin
-│   │   ├── config_sync.py       # Multi-Mac config sync
-│   │   ├── permissions_auditor.py  # TCC database audit
-│   │   ├── apfs_snapshots.py    # APFS snapshot management
-│   │   ├── breach_monitor.py    # HIBP API integration
-│   │   ├── dns_cache.py         # DNS flush operations
-│   │   ├── font_cache.py        # Font cache rebuild
-│   │   ├── spotlight.py         # Spotlight index management
-│   │   ├── power_optimizer.py   # Power settings management
-│   │   ├── update_checker.py    # App update detection
-│   │   ├── pkg_receipts.py      # PKG receipt management
-│   │   └── time_machine_guard.py  # Time Machine status
-│   │
-│   ├── scanners/
-│   │   ├── __init__.py
-│   │   ├── discovery.py     # App discovery (bundle IDs)
-│   │   ├── matching.py      # Bundle ID matching logic
-│   │   ├── dev_junk.py      # Developer junk detection
-│   │   ├── duplicates.py    # Duplicate file finder
-│   │   ├── large_files.py   # Large file scanner
-│   │   ├── symlinks.py      # Broken symlink detector
-│   │   ├── space_map.py     # Disk usage tree builder
-│   │   ├── photos_analyzer.py  # Photos library analyzer
-│   │   ├── simulators.py    # iOS simulator data scanner
-│   │   ├── extras.py        # iOS backups, language packs
-│   │   ├── binary_thinner.py  # Fat binary detector
-│   │   ├── browser_data.py  # Browser cache scanner
-│   │   ├── cloud_junk.py    # Cloud storage caches
-│   │   ├── installer_hunter.py  # Installer file finder
-│   │   ├── xcode_cleaner.py  # Xcode derived data
-│   │   ├── purgeable.py     # Purgeable space analysis
-│   │   └── recent_activity.py  # Recent items scanner
-│   │
-│   └── reporting/
-│       ├── __init__.py
-│       ├── reporter.py      # Console report formatting
-│       ├── exporter.py      # JSON/YAML export
-│       ├── html_report.py   # HTML report generation
-│       ├── weekly_digest.py  # Weekly digest reports
-│       ├── impact_score.py  # Impact score calculation
-│       └── storage_trend.py  # Storage trend tracking
-│
-├── tests/
-│   ├── test_scanner.py
-│   ├── test_features_p0_p1.py
-│   └── test_features_p2_p3.py
-│
-├── docs/
+├── CHANGELOG.md
+├── Formula
+│   └── mac-deep-cleaner.rb
+├── LICENSE
+├── README.md
+├── SECURITY.md
+├── checklist.md
+├── docs
+│   ├── ARCHITECTURE.md
 │   ├── COMMAND_REFERENCE.md
-│   ├── FEATURES.md
-│   ├── ARCHITECTURE.md (this file)
-│   └── PYPI_PUBLISHING.md
-│
-├── scripts/
+├── pyproject.toml
+├── requirements.txt
+├── roadmap.md
+├── scripts
 │   ├── build.sh
 │   └── build_pkg.sh
-│
-├── Formula/
-│   └── mac-deep-cleaner.rb
-│
-├── pyproject.toml
 ├── setup.py
-├── requirements.txt
-├── README.md
-├── CHANGELOG.md
-├── LICENSE
-└── SECURITY.md
+├── src
+│   ├── __init__.py
+│   ├── cli.py
+│   ├── config
+│   │   ├── config.py
+│   │   ├── history.py
+│   │   └── models.py
+│   ├── constants.py
+│   ├── core
+│   │   ├── apfs_snapshots.py
+│   │   ├── breach_monitor.py
+│   │   ├── brew_manager.py
+│   │   ├── cleaner.py
+│   │   ├── completions.py
+│   │   ├── config_sync.py
+│   │   ├── dns_cache.py
+│   │   ├── dry_run.py
+│   │   ├── font_cache.py
+│   │   ├── memory_pressure.py
+│   │   ├── menubar.py
+│   │   ├── permissions_auditor.py
+│   │   ├── pkg_receipts.py
+│   │   ├── power_optimizer.py
+│   │   ├── restore_checksums.py
+│   │   ├── safety.py
+│   │   ├── scanner.py
+│   │   ├── scheduler.py
+│   │   ├── spotlight.py
+│   │   ├── system_inspector.py
+│   │   ├── time_machine_guard.py
+│   │   ├── tui_picker.py
+│   │   ├── undo.py
+│   │   ├── uninstaller.py
+│   │   ├── update_checker.py
+│   │   └── updater.py
+│   ├── reporting
+│   │   ├── exporter.py
+│   │   ├── html_report.py
+│   │   ├── impact_score.py
+│   │   ├── reporter.py
+│   │   ├── reporter_v5.py
+│   │   ├── storage_trend.py
+│   │   └── weekly_digest.py
+│   ├── scanners
+│   │   ├── binary_thinner.py
+│   │   ├── browser_data.py
+│   │   ├── cloud_junk.py
+│   │   ├── dev_junk.py
+│   │   ├── discovery.py
+│   │   ├── duplicates.py
+│   │   ├── extras.py
+│   │   ├── installer_hunter.py
+│   │   ├── large_files.py
+│   │   ├── matching.py
+│   │   ├── photos_analyzer.py
+│   │   ├── purgeable.py
+│   │   ├── recent_activity.py
+│   │   ├── simulators.py
+│   │   ├── space_map.py
+│   │   ├── symlinks.py
+│   │   └── xcode_cleaner.py
+│   └── utils.py
+└── tests
+    ├── test_features_p0_p1.py
+    ├── test_features_p2_p3.py
+    └── test_scanner.py
+
+10 directories, 74 files
 ```
 
 ---

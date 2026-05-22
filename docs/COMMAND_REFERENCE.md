@@ -1,6 +1,6 @@
 # Mac Deep Cleaner — Command Reference
 
-**Version:** 2.0.0  
+**Version:** 2.0.1  
 **CLI Commands:** `mac-cleaner` or `mdc`
 
 This document provides comprehensive reference documentation for all available commands in Mac Deep Cleaner.
@@ -150,6 +150,8 @@ mac-cleaner duplicates [OPTIONS]
 **Options:**
 - `--path PATH` — Directories to scan (default: ~/Downloads, ~/Documents, ~/Desktop, ~/Pictures)
 - `--min-size KB` — Minimum file size in KB to consider (default: 100)
+- `--clone-aware/--no-clone-aware` — Estimate APFS shared extents (macOS only)
+- `--clone-sampling` — Sampling profile: fast, balanced, thorough (default: balanced)
 - `--export PATH` — Export results to JSON
 - `--delete` — Interactively delete duplicates (keeps first copy)
 
@@ -157,12 +159,14 @@ mac-cleaner duplicates [OPTIONS]
 - Two-phase hashing for speed and accuracy
 - Only scans user directories (never /System)
 - Groups identical files by hash
+- Optional APFS clone-aware estimates to avoid overstating wasted space
 
 **Examples:**
 ```bash
 mac-cleaner duplicates
 mac-cleaner duplicates --path ~/Photos --min-size 1024
 mac-cleaner duplicates --delete --export dupes.json
+mac-cleaner duplicates --clone-aware --clone-sampling balanced
 ```
 
 ---

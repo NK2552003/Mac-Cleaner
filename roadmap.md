@@ -1,9 +1,10 @@
-# Mac Deep Cleaner v2.x Roadmap
+## Roadmap
 
-Date: 2026-05-15
+### Near Term
+- Performance optimization for duplicate detection and scan traversal
+- CLI visual refresh (tables, panels, progress, and status cues)
+- Fix reported issues with permission handling and edge-case paths
 
-## Goals
-- Ship a full v2.x feature set with professional-grade safety, logging, and undo support.
-- Keep destructive actions opt-in and gated by explicit flags and confirmations.
-- Keep new dependencies minimal and justified; document when optional.
-- Add a feature module per roadmap item, grouped by domain.
+### Mid Term
+- Expand regression test coverage for scanners and CLI outputs
+- Add performance benchmarks for key scan workflows
