@@ -3,8 +3,8 @@ class MacDeepCleaner < Formula
 
   desc "Professional macOS cleanup CLI with safe undo, reports, and scanners"
   homepage "https://github.com/NK2552003/Mac-Cleaner"
-  url "https://files.pythonhosted.org/packages/source/m/mac-deep-cleaner/mac-deep-cleaner-1.0.0.tar.gz"
-  sha256 "REPLACE_WITH_PYPI_SDIST_SHA256"
+  url "https://files.pythonhosted.org/packages/source/m/mac-deep-cleaner/mac-deep-cleaner-2.0.1.tar.gz"
+  sha256 "NONE_FOR_NOW"
   license "MIT"
 
   depends_on "python@3.12"

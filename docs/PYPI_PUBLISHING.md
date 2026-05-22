@@ -1,4 +1,4 @@
-# Publishing to PyPI (pypi.org) — mac-deep-cleaner (v2.0.0)
+# Publishing to PyPI (pypi.org) — mac-deep-cleaner (v2.0.1)
 
 ## What you’ll publish
 This project is configured to build with `setuptools` from `pyproject.toml` (PEP 621). The package name is:

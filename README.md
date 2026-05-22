@@ -6,7 +6,7 @@
 
 [![PyPI Version](https://img.shields.io/pypi/v/mac-deep-cleaner.svg)](https://pypi.org/project/mac-deep-cleaner/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](https://github.com/NK2552003/Mac-Cleaner/blob/main/LICENSE)
 [![macOS 10.15+](https://img.shields.io/badge/macOS-10.15+-silver.svg)](https://www.apple.com/macos/)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/mac-deep-cleaner?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=ORANGE&left_text=downloads)](https://pepy.tech/projects/mac-deep-cleaner)
 
@@ -82,10 +82,10 @@ Comprehensive guides for every use case:
 
 | Document | Description |
 |----------|-------------|
-| **[Features Guide](docs/FEATURES.md)** | Complete list of all 60+ features with examples |
-| **[Command Reference](docs/COMMAND_REFERENCE.md)** | Detailed CLI documentation for every command |
-| **[Architecture Guide](docs/ARCHITECTURE.md)** | Internal structure, modules, and extension points |
-| **[PyPI Publishing](docs/PYPI_PUBLISHING.md)** | Build and publish instructions |
+| **[Features Guide](https://github.com/NK2552003/Mac-Cleaner/blob/main/docs/FEATURES.md)** | Complete list of all 60+ features with examples |
+| **[Command Reference](https://github.com/NK2552003/Mac-Cleaner/blob/main/docs/COMMAND_REFERENCE.md)** | Detailed CLI documentation for every command |
+| **[Architecture Guide](https://github.com/NK2552003/Mac-Cleaner/blob/main/docs/ARCHITECTURE.md)** | Internal structure, modules, and extension points |
+| **[PyPI Publishing](https://github.com/NK2552003/Mac-Cleaner/blob/main/docs/PYPI_PUBLISHING.md)** | Build and publish instructions |
 
 ---
 
@@ -96,7 +96,7 @@ Comprehensive guides for every use case:
 - **General Junk** — Caches, logs, crash reports, `.DS_Store`, Xcode artifacts, package manager caches
 - **Developer Junk** — `node_modules`, `venv`, build outputs, coverage dirs (opt-in)
 - **Global Dev Caches** — `~/.npm`, `~/.gradle`, `~/.m2`, `~/.cargo`, `~/.nuget` (opt-in)
-- **Duplicate Finder** — SHA-256 hashing with two-phase optimization
+- **Duplicate Finder** — SHA-256 hashing with two-phase optimization, optional APFS clone-aware estimates
 - **Large File Scanner** — Find files ≥100 MB, categorized by type
 - **Broken Symlink Detector** — Scans Homebrew, `/usr/local`, `~/bin`, and more
 
@@ -436,13 +436,13 @@ We welcome contributions! Please read our contributing guidelines before submitt
 
 Copyright © 2024 Mac Deep Cleaner Contributors
 
-Licensed under the [Apache License 2.0](LICENSE).
+Licensed under the [Apache License 2.0](https://github.com/NK2552003/Mac-Cleaner/blob/main/LICENSE).
 
 ---
 
 ## Support
 
--  **Documentation:** [docs/](docs/)
+-  **Documentation:** [docs/](https://github.com/NK2552003/Mac-Cleaner/tree/main/docs)
 -  **Issues:** [GitHub Issues](https://github.com/NK2552003/Mac-Cleaner/issues)
 ---
 
@@ -451,7 +451,7 @@ Licensed under the [Apache License 2.0](LICENSE).
 **Made with ❤️ for the macOS community**
 
 [⭐ Star this repo](https://github.com/NK2552003/Mac-Cleaner) 
-[Read the COMMAND REFERENCE](docs/COMMAND_REFERENCE.md) 
+[Read the COMMAND REFERENCE](https://github.com/NK2552003/Mac-Cleaner/blob/main/docs/COMMAND_REFERENCE.md) 
 [Report an issue](https://github.com/NK2552003/Mac-Cleaner/issues)
 
 </div>

@@ -1,6 +1,6 @@
 # Mac Deep Cleaner — Architecture & Implementation Guide
 
-**Version:** 2.0.0
+**Version:** 2.0.1
 
 This document provides a comprehensive overview of the internal architecture, module structure, and implementation details of Mac Deep Cleaner.
 
