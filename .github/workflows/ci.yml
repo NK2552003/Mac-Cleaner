@@ -104,6 +104,7 @@ jobs:
         with:
           name: dist-packages
           path: dist/
+          if-no-files-found: error
           retention-days: 7
 
   version-check:
@@ -242,6 +243,19 @@ jobs:
           python-version: "3.11"
           cache: pip
 
+      - name: Download dist-packages artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-packages
+          path: dist
+
+      - name: Verify release artifacts exist
+        run: |
+          if ! ls -1 dist/* >/dev/null 2>&1; then
+            echo "dist artifacts missing after download" >&2
+            exit 1
+          fi
+
       - name: Extract changelog section for this version
         id: changelog
         run: |
@@ -303,6 +317,7 @@ jobs:
           tag_name:   ${{ steps.changelog.outputs.tag }}
           name:       "mac-deep-cleaner ${{ steps.changelog.outputs.tag }}"
           body_path:  release_notes.md
+          files:      dist/*
           draft:      false
           prerelease: false
         env:
@@ -322,20 +337,37 @@ jobs:
     permissions:
       contents: write   # needed to push the commit
     steps:
-      - name: Checkout develop
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: develop
           fetch-depth: 1
           persist-credentials: true
 
+      - name: Check develop branch exists
+        id: develop_check
+        run: |
+          if git ls-remote --heads origin develop | grep -q develop; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Develop branch not found; skipping auto-bump."
+          fi
+
+      - name: Checkout develop
+        if: steps.develop_check.outputs.exists == 'true'
+        run: |
+          git fetch --depth=1 origin develop
+          git checkout -B develop FETCH_HEAD
+
       - name: Set up Python 3.11
+        if: steps.develop_check.outputs.exists == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
       - name: Bump patch version in pyproject.toml
+        if: steps.develop_check.outputs.exists == 'true'
         id: bump
         run: |
           python - <<'EOF'
@@ -368,6 +400,7 @@ jobs:
           EOF
 
       - name: Commit and push version bump
+        if: steps.develop_check.outputs.exists == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
