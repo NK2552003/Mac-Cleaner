@@ -2,6 +2,25 @@
 
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
+## v2.2.0 (2026-06-06)
+
+### Added
+- Docker Cleanup scanner via `mdc clean --docker` to reclaim space from dangling images and unused volumes.
+- Interactive Terminal User Interface (TUI) via `mdc tui` (requires `textual`).
+- Deep App Uninstaller via `mdc uninstall` to simultaneously hunt and remove app bundles and their dependencies.
+- Background Scheduling enhancement via `mdc schedule install --clean` to automatically clean junk weekly.
+- DNS Cache Flushing via `mdc flush-dns` to troubleshoot networking routing issues.
+- `--auto-with-cache` flag to `clean` command to prompt for clearing System Caches.
+- Beautified CLI UI with rounded boxes, rich colors, and emojis for `reporter.py` and `cli.py`.
+- Dozens of modern apps (AI tools, dev environments, productivity apps) added to aliases and safe lists to improve detection.
+
+### Fixed
+- Fixed bug where Brave Browser configurations (`BraveSoftware`) were incorrectly flagged as orphaned leftovers.
+- Fixed UI bug where an empty table was rendered for the "General Junk" category when no user-actionable junk was found.
+
+### Changed
+- Refactored monolithic `constants.py` into a modular `src/constants/` package for better maintainability.
+
 ## v2.0.1 (2026-05-22)
 
 ### Added

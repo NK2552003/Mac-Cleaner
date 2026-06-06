@@ -113,11 +113,15 @@ def _find_mac_cleaner_binary() -> str:
     return "mac-cleaner"   # Hope it's in PATH at runtime
 
 
-def _build_plist(binary: str, notify: bool) -> dict:
+def _build_plist(binary: str, notify: bool, clean: bool) -> dict:
     """Construct the LaunchAgent plist dictionary."""
     log_path = str(HOME / ".config" / "mac-cleaner" / "scheduler.log")
-    args = [binary, "scan", "--export",
-            str(HOME / ".config" / "mac-cleaner" / "history" / "scheduled_scan.json")]
+    if clean:
+        args = [binary, "clean", "--auto"]
+    else:
+        args = [binary, "scan", "--export",
+                str(HOME / ".config" / "mac-cleaner" / "history" / "scheduled_scan.json")]
+    
     if notify:
         args.append("--notify")
 
@@ -131,18 +135,19 @@ def _build_plist(binary: str, notify: bool) -> dict:
     }
 
 
-def install_schedule(notify: bool = True) -> Tuple[bool, str]:
+def install_schedule(notify: bool = True, clean: bool = False) -> Tuple[bool, str]:
     """
     Install a weekly LaunchAgent for automatic scanning.
 
     Args:
         notify: If True, schedule will post a notification after each scan.
+        clean: If True, schedule will run 'clean --auto' instead of 'scan'.
 
     Returns:
         (success, message)
     """
     binary = _find_mac_cleaner_binary()
-    plist_data = _build_plist(binary, notify)
+    plist_data = _build_plist(binary, notify, clean)
 
     # Ensure LaunchAgents directory exists
     _AGENT_PLIST.parent.mkdir(parents=True, exist_ok=True)
