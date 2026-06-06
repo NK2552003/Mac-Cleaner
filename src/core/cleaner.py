@@ -49,6 +49,7 @@ def do_cleanup(
     junk: List[JunkEntry],
     auto: bool = False,
     session=None,   # Optional[DeletionSession] — import avoided to prevent circular dep
+    clean_system_caches: bool = False,
 ) -> int:
     """
     Perform interactive or automatic cleanup.
@@ -121,7 +122,10 @@ def do_cleanup(
                         console.print(f"  [yellow]⚠ Failed[/yellow]  {e.path.name}")
 
     # ── User junk ────────────────────────────────────────────────────────
-    user_junk = [j for j in junk if not j.is_system]
+    if clean_system_caches:
+        user_junk = junk
+    else:
+        user_junk = [j for j in junk if not j.is_system]
     if user_junk:
         junk_total = sum(j.size for j in user_junk)
         console.print(

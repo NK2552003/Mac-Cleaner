@@ -11,6 +11,7 @@ from typing import Dict, List
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich import box
 from rich.text import Text
 from rich.tree import Tree
 
@@ -104,15 +105,15 @@ DEV_JUNK_ICONS: Dict[str, str] = {
 def print_banner() -> None:
     """Print the application banner."""
     banner = Text()
-    banner.append("Mac Deep Cleaner", style="bold cyan")
-    banner.append("  v2.0.0", style="dim cyan")
-    banner.append("  —  Professional Edition", style="dim")
+    banner.append("✨ Mac Deep Cleaner", style="bold magenta")
+    banner.append("  v2.2.0", style="bold cyan")
+    banner.append("  —  Professional Edition ✨", style="dim")
 
     console.print()
     console.print(
         Panel(
             banner,
-            border_style="cyan",
+            border_style="magenta",
             padding=(1, 2),
             title="[bold white]◆ Smart App Orphan Detector[/bold white]",
             title_align="center",
@@ -126,12 +127,13 @@ def print_banner() -> None:
 def print_installed_apps(apps: dict, compact: bool = True) -> None:
     """Print discovered installed applications."""
     table = Table(
-        title="Installed Applications",
+        title="✨ Installed Applications",
         show_header=True,
         header_style="bold cyan",
-        border_style="dim",
+        border_style="cyan",
         title_style="bold",
         padding=(0, 1),
+        box=box.ROUNDED,
     )
     table.add_column("#", style="dim", width=4, justify="right")
     table.add_column("Application", style="bold white", min_width=28)
@@ -235,37 +237,47 @@ def print_junk_report(junk: List[JunkEntry]) -> int:
 
     grand = 0
 
-    table = Table(
-        title="General Junk",
-        show_header=True,
-        header_style="bold yellow",
-        border_style="dim",
-        title_style="bold",
-        padding=(0, 1),
-    )
-    table.add_column("Category", style="bold", min_width=18)
-    table.add_column("Items", justify="right", style="cyan", width=8)
-    table.add_column("Size", justify="right", style="yellow", width=12)
-    table.add_column("Top Items", style="dim", min_width=30)
-
-    for cat in sorted(by_cat.keys()):
-        items = by_cat[cat]
-        cat_total = sum(j.size for j in items)
-        grand += cat_total
-
-        icon = JUNK_ICONS.get(cat, "○")
-        top = ", ".join(j.path.name for j in sorted(items, key=lambda x: x.size, reverse=True)[:3])
-        if len(items) > 3:
-            top += f" (+{len(items) - 3} more)"
-
-        table.add_row(
-            f"{icon} {cat}",
-            str(len(items)),
-            bytes_human(cat_total),
-            top,
+    if user_junk:
+        table = Table(
+            title="🗑️ General Junk",
+            show_header=True,
+            header_style="bold yellow",
+            border_style="yellow",
+            title_style="bold",
+            padding=(0, 1),
+            box=box.ROUNDED,
         )
+        table.add_column("Category", style="bold", min_width=18)
+        table.add_column("Items", justify="right", style="cyan", width=8)
+        table.add_column("Size", justify="right", style="yellow", width=12)
+        table.add_column("Top Items", style="dim", min_width=30)
 
-    console.print(table)
+        for cat in sorted(by_cat.keys()):
+            items = by_cat[cat]
+            cat_total = sum(j.size for j in items)
+            grand += cat_total
+
+            icon = JUNK_ICONS.get(cat, "○")
+            top = ", ".join(j.path.name for j in sorted(items, key=lambda x: x.size, reverse=True)[:3])
+            if len(items) > 3:
+                top += f" (+{len(items) - 3} more)"
+
+            table.add_row(
+                f"{icon} {cat}",
+                str(len(items)),
+                bytes_human(cat_total),
+                top,
+            )
+
+        console.print(table)
+    else:
+        console.print(
+            Panel(
+                "[green]✓ No user-actionable junk found![/green]",
+                border_style="green",
+                padding=(0, 2),
+            )
+        )
 
     # System caches (informational only)
     if system_junk:

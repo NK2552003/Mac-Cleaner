@@ -182,7 +182,7 @@ def main(
     log_file: Optional[str],
     dry_run: bool,
 ) -> None:
-    """Mac Deep Cleaner v2.0.1 — Professional macOS cleanup tool."""
+    """Mac Deep Cleaner v2.2.0 — Professional macOS cleanup tool."""
     from core.dry_run import set_dry_run
     configure_logging(
         verbose=verbose,
@@ -478,6 +478,10 @@ def cmd_dashboard(
 @click.option("--notify", is_flag=True, default=False)
 @click.option("--no-undo", is_flag=True, default=False,
               help="Permanently delete instead of staging for undo.")
+@click.option("--docker", is_flag=True, default=False,
+              help="Clean unused Docker containers, images, and networks.")
+@click.option("--auto-with-cache", is_flag=True, default=False,
+              help="Prompt to delete system caches when using auto clean.")
 @click.pass_context
 def clean(
     ctx: click.Context,
@@ -492,6 +496,8 @@ def clean(
     custom_roots: Tuple[str, ...],
     notify: bool,
     no_undo: bool,
+    auto_with_cache: bool,
+    docker: bool,
 ) -> None:
     """Interactively clean orphaned app leftovers and junk.
 
@@ -513,6 +519,14 @@ def clean(
     if dry_run:
         console.print("[yellow]Dry-run enabled; clean will run in preview mode.[/yellow]")
 
+    clean_system_caches = False
+    if auto_with_cache and not dry_run:
+        from rich.prompt import Confirm
+        clean_system_caches = Confirm.ask(
+            "[bold red]Do you want to delete ~/Library/Caches as well? (System caches)[/bold red]",
+            default=False
+        )
+
     _run(
         delete=not dry_run,
         auto=auto,
@@ -527,8 +541,76 @@ def clean(
         undo_mode=undo_mode,
         dev_junk=dev_junk,
         dev_junk_global=dev_junk_global,
+        clean_system_caches=clean_system_caches,
+        docker=docker,
     )
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
+# UNINSTALL & DNS FLUSH
+# ══════════════════════════════════════════════════════════════════════════════
+
+@main.command()
+@click.argument("app_name")
+@click.option("--auto", is_flag=True, default=False, help="Skip confirmation prompt")
+@click.option("--no-undo", is_flag=True, default=False, help="Permanently delete instead of staging for undo")
+@click.pass_context
+def uninstall(ctx: click.Context, app_name: str, auto: bool, no_undo: bool) -> None:
+    """Deep uninstall an application and all its data."""
+    from core.uninstaller import find_app_candidates, build_uninstall_plan, execute_uninstall
+    from core.scanner import discover_installed_apps
+    from core.undo import new_session
+    from rich.prompt import Confirm
+    from utils import bytes_human
+
+    apps = discover_installed_apps()
+    candidates = find_app_candidates(app_name, apps)
+    if not candidates:
+        console.print(f"[red]Could not find an installed app matching '{app_name}'.[/red]")
+        return
+    
+    app = candidates[0]
+    if len(candidates) > 1:
+        console.print(f"[yellow]Multiple apps matched. Selecting {app.name} ({app.bundle_id}).[/yellow]")
+    
+    plan = build_uninstall_plan(app)
+    
+    console.print(f"\n[bold red]Uninstall Plan for {app.name}[/bold red]")
+    console.print(f"Total size: {bytes_human(plan.total_size)}")
+    for item in plan.deletable_items:
+        console.print(f"  [dim]- {item.path}[/dim] ([yellow]{bytes_human(item.size)}[/yellow])")
+        
+    do_it = auto or Confirm.ask(f"\nUninstall {app.name} and delete {bytes_human(plan.total_size)}?", default=False)
+    if do_it:
+        cfg = load_config()
+        session = new_session() if (cfg.undo_mode and not no_undo) else None
+        res = execute_uninstall(plan, session=session)
+        console.print(f"\n[green]✓ Freed {bytes_human(res.bytes_freed)}. Removed {res.deleted} items. Staged {res.staged}.[/green]")
+
+@main.command("flush-dns")
+def flush_dns() -> None:
+    """Flush DNS and network caches."""
+    from core.dns_cache import flush_dns_cache
+    
+    console.print("Flushing DNS caches...")
+    res = flush_dns_cache()
+    if res.success:
+        console.print("[bold green]✓ DNS cache flushed successfully.[/bold green]")
+    else:
+        console.print("[bold red]✗ Failed to flush DNS cache.[/bold red]")
+
+@main.command("tui")
+def tui() -> None:
+    """Launch the interactive Terminal User Interface."""
+    try:
+        import textual
+    except ImportError:
+        console.print("[red]Textual is not installed. Run 'poetry install' or install textual manually.[/red]")
+        return
+        
+    from tui.app import run_tui
+    run_tui()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DEVELOPER JUNK
@@ -3622,14 +3704,15 @@ def cmd_schedule() -> None:
 
 @cmd_schedule.command("install")
 @click.option("--no-notify", is_flag=True, default=False)
+@click.option("--clean", is_flag=True, default=False, help="Run background clean instead of just scan.")
 @click.pass_context
-def schedule_install(ctx: click.Context, no_notify: bool) -> None:
+def schedule_install(ctx: click.Context, no_notify: bool, clean: bool) -> None:
     """Install a weekly LaunchAgent to run scans automatically."""
     from core.dry_run import skip_if_dry_run
     if skip_if_dry_run(ctx, console, "schedule install"):
         return
     from core.scheduler import install_schedule
-    ok, msg = install_schedule(notify=not no_notify)
+    ok, msg = install_schedule(notify=not no_notify, clean=clean)
     color = "green" if ok else "red"
     console.print(f"\n  [{color}]{msg}[/{color}]\n")
 
@@ -3779,6 +3862,8 @@ def _run(
     dev_junk_global: bool = False,
     ci: bool = False,
     threshold_mb: int = 0,
+    clean_system_caches: bool = False,
+    docker: bool = False,
 ) -> None:
     """Core scan + optional cleanup logic (shared by scan and clean)."""
     # Local import to satisfy static analysis and avoid name-resolution issues.
@@ -3984,9 +4069,30 @@ def _run(
         except Exception as exc:
             logger.debug("Failed to send notification: %s", exc)
 
-    if grand == 0:
+    if grand == 0 and not docker:
         console.print("\n[bold green]✓ Your Mac is spotless! Nothing to clean.[/bold green]\n")
         return
+
+    if docker:
+        from scanners.docker_cleaner import scan_docker_bloat, clean_docker_bloat
+        bloat = scan_docker_bloat()
+        if bloat:
+            console.print()
+            console.rule("[bold]Docker Junk", style="blue")
+            docker_total = sum(e.size for e in bloat)
+            console.print(f"  [blue]Docker Bloat:[/blue] {bytes_human(docker_total)}")
+            
+            do_del = auto
+            if not do_del:
+                from rich.prompt import Confirm
+                do_del = Confirm.ask(
+                    f"  Delete Docker bloat ([yellow]{bytes_human(docker_total)}[/yellow])?",
+                    default=False,
+                )
+            if do_del:
+                freed_docker = clean_docker_bloat()
+                console.print(f"  [green]✓ Freed {bytes_human(freed_docker)} from Docker[/green]")
+                grand += freed_docker
 
     # Diff hint
     try:
@@ -4035,7 +4141,11 @@ def _run(
                             if ok:
                                 freed += sz
 
-            user_junk = [j for j in junk if not j.is_system]
+            if clean_system_caches:
+                user_junk = junk
+            else:
+                user_junk = [j for j in junk if not j.is_system]
+            
             if user_junk:
                 do_del = auto
                 if not do_del:
@@ -4087,7 +4197,7 @@ def _run(
                 f"[dim]Restore with: mac-cleaner undo --session {session.session_id[:8]}[/dim]"
             )
         else:
-            freed = do_cleanup(orphans, junk, auto=auto)
+            freed = do_cleanup(orphans, junk, auto=auto, clean_system_caches=clean_system_caches)
             if dev_junk_entries:
                 from rich.prompt import Confirm
                 do_del = auto or Confirm.ask(
