@@ -339,6 +339,22 @@ def validate_path_for_deletion(path: Path) -> Tuple[bool, str]:
     """
     path_str = str(path).lower()
 
+    # Never delete root /
+    try:
+        if path.resolve() == Path("/"):
+            return False, "Root filesystem directory"
+    except OSError:
+        if path_str.rstrip("/") in ("", "/"):
+            return False, "Root filesystem directory"
+
+    # Never delete Home directory
+    try:
+        if path == HOME or path.resolve() == HOME.resolve():
+            return False, "Home directory"
+    except OSError:
+        if path == HOME:
+            return False, "Home directory"
+
     # Never delete anything in /System
     if path_str.startswith("/system"):
         return False, "System directory"
@@ -347,18 +363,26 @@ def validate_path_for_deletion(path: Path) -> Tuple[bool, str]:
     if path_str.startswith("/usr") and not path_str.startswith("/usr/local"):
         return False, "Protected /usr directory"
 
-    # Never delete anything in /bin, /sbin, /etc
-    for protected in ("/bin", "/sbin", "/etc", "/var"):
+    # Never delete temporary directory roots
+    if path_str.rstrip("/") in ("/tmp", "/private/tmp", "/var/folders", "/private/var/folders"):
+        return False, "Temporary root directory"
+
+    # Never delete anything in /bin, /sbin, /etc, /var, /dev, /private
+    for protected in ("/bin", "/sbin", "/etc", "/var", "/dev", "/private/etc", "/private/var"):
         if path_str.startswith(protected):
+            if path_str.startswith(("/var/folders", "/private/var/folders")):
+                if path_str.rstrip("/") in ("/var/folders", "/private/var/folders"):
+                    return False, f"Protected {protected} directory"
+                continue
             return False, f"Protected {protected} directory"
+
+    # Never delete the Volumes root
+    if path_str.rstrip("/") in ("/volumes",):
+        return False, "Volumes root directory"
 
     # Never delete the Library directory itself
     if path_str.rstrip("/") in ("/library", str(HOME / "Library").lower()):
         return False, "Library root directory"
-
-    # Never delete Home directory
-    if path == HOME:
-        return False, "Home directory"
 
     # Check for Apple-owned files in user's Library
     apple_protected, reason = is_apple_user_library_path(path)

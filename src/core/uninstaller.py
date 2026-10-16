@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from config.models import AppInfo
-from constants import SEARCH_ROOTS
+from constants import HOME, SEARCH_ROOTS
 from core.safety import validate_path_for_deletion
 from core.scanner import classify_root
 from scanners.matching import match_to_app
@@ -128,7 +128,12 @@ def _identifier_set(app: AppInfo) -> Tuple[str, str, Set[str], str]:
 def _matches_bundle_prefix(name: str, bundle_id: str) -> bool:
     if not bundle_id:
         return False
-    return name == bundle_id or name.startswith(bundle_id + ".") or name.startswith(bundle_id + "-")
+    return (
+        name == bundle_id
+        or name.startswith(bundle_id + ".")
+        or name.startswith(bundle_id + "-")
+        or name.startswith(bundle_id + "_")
+    )
 
 
 def _matches_bundle_suffix(name: str, bundle_id: str) -> bool:
@@ -180,6 +185,10 @@ def _root_kind(root: Path) -> str:
         return "Synced Prefs"
     if s.endswith("/webkit"):
         return "WebKit Data"
+    if s.endswith("/application scripts"):
+        return "Application Scripts"
+    if s.endswith("/diagnosticreports"):
+        return "Crash Logs"
     return classify_root(root)
 
 
@@ -223,6 +232,21 @@ def _matching_paths(
 
         if kind in {"HTTP Storage", "Cookies", "Synced Prefs", "WebKit Data"}:
             if _matches_bundle_prefix(name, bundle_id) or _matches_bundle_suffix(name, bundle_id):
+                matches.append(item)
+            continue
+
+        if kind == "Crash Logs":
+            if (
+                _matches_bundle_prefix(name, bundle_id)
+                or _matches_direct_name(name, bundle_id, tokens, app_name)
+                or (app_name and (name.startswith(app_name + "_") or name.startswith(app_name + "-") or name.startswith(app_name + ".")))
+                or any(name.startswith(t + "_") or name.startswith(t + "-") for t in tokens)
+            ):
+                matches.append(item)
+            continue
+
+        if kind == "Application Scripts":
+            if name == bundle_id or _matches_bundle_prefix(name, bundle_id):
                 matches.append(item)
             continue
 
@@ -283,7 +307,16 @@ def build_uninstall_plan(
     _add_item(app.path, "App Bundle")
 
     bundle_id, vendor, tokens, app_name = _identifier_set(app)
-    for root in roots or SEARCH_ROOTS:
+    search_dirs = list(roots) if roots is not None else list(SEARCH_ROOTS)
+    extra_dirs = [
+        HOME / "Library" / "Application Scripts",
+        HOME / "Library" / "Logs" / "DiagnosticReports",
+    ]
+    for ed in extra_dirs:
+        if ed not in search_dirs:
+            search_dirs.append(ed)
+
+    for root in search_dirs:
         if not root.exists():
             continue
         category = _label_root(root, _root_kind(root))

@@ -38,11 +38,19 @@ _DEFAULT_PATHS = {
     "Xcode Cache": _XCODE_ROOT / "Cache",
     "Xcode Logs": _XCODE_ROOT / "Logs",
     "Xcode Caches (System)": HOME / "Library" / "Caches" / "com.apple.dt.Xcode",
+    "CoreSimulator Caches": HOME / "Library" / "Developer" / "CoreSimulator" / "Caches",
+    "XCTest Run Data": HOME / "Library" / "Caches" / "com.apple.dt.XCTest",
+    "Xcode Git Cache": HOME / "Library" / "Caches" / "com.apple.dt.Xcode.sourcecontrol.Git",
+    "Documentation Cache": HOME / "Library" / "Caches" / "com.apple.dt.Xcode.DocC",
 }
 
 _ALLOWED_ROOTS: List[Path] = [
     _XCODE_ROOT,
+    HOME / "Library" / "Developer" / "CoreSimulator",
     HOME / "Library" / "Caches" / "com.apple.dt.Xcode",
+    HOME / "Library" / "Caches" / "com.apple.dt.XCTest",
+    HOME / "Library" / "Caches" / "com.apple.dt.Xcode.sourcecontrol.Git",
+    HOME / "Library" / "Caches" / "com.apple.dt.Xcode.DocC",
 ]
 
 
@@ -90,10 +98,13 @@ def delete_xcode_junk(
 ) -> DeleteResult:
     """Delete selected Xcode junk items."""
     result = DeleteResult()
-    category_set = {c.lower() for c in (categories or [])}
+    def _norm(s: str) -> str:
+        return s.lower().replace("-", "").replace("_", "").replace(" ", "")
+
+    category_set = {_norm(c) for c in (categories or [])}
 
     for item in items:
-        if category_set and item.category.lower() not in category_set:
+        if category_set and _norm(item.category) not in category_set:
             continue
         allowed = any(_is_within(item.path, root) for root in _ALLOWED_ROOTS)
         if not allowed:

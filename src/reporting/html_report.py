@@ -19,6 +19,15 @@ from typing import Any, Dict, List, Optional
 from config.models import DevJunkEntry, JunkEntry, OrphanEntry
 from utils import bytes_human
 
+try:
+    from __init__ import __version__
+except ImportError:
+    try:
+        from importlib.metadata import version
+        __version__ = version("mac-deep-cleaner")
+    except Exception:
+        __version__ = "2.5.0"
+
 
 # ── HTML template ──────────────────────────────────────────────────────────────
 
@@ -92,7 +101,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 <header>
   <div>
     <h1>◆ Mac Deep Cleaner — Scan Report</h1>
-    <div class="meta">Generated {generated_at} &nbsp;·&nbsp; v2.0.0</div>
+    <div class="meta">Generated {generated_at} &nbsp;·&nbsp; v{version}</div>
   </div>
 </header>
 
@@ -142,7 +151,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
 </div>
 
-<footer>Mac Deep Cleaner v2.0.0 &nbsp;·&nbsp; Report generated {generated_at}</footer>
+<footer>Mac Deep Cleaner v{version} &nbsp;·&nbsp; Report generated {generated_at}</footer>
 
 <script>
 const chartData = {chart_data};
@@ -392,6 +401,7 @@ def export_html(
         orphan_sections += _orphan_section(app_name, entries)
 
     html = _HTML_TEMPLATE.format(
+        version=__version__,
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         grand_total=bytes_human(grand_total_bytes),
         orphan_total=bytes_human(orphan_total_bytes),

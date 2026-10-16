@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,8 @@ class InstallerItem:
     kind: str
     modified_at: str
     age_days: int
+    is_installed: bool = False
+    installed_app: str = ""
 
     @property
     def size_human(self) -> str:
@@ -116,6 +119,35 @@ def _classify(path: Path, include_archives: bool) -> Optional[str]:
     return None
 
 
+def _installed_app_names() -> Set[str]:
+    names: Set[str] = set()
+    for root in [Path("/Applications"), HOME / "Applications"]:
+        if not root.exists():
+            continue
+        try:
+            for item in root.iterdir():
+                if item.suffix == ".app":
+                    names.add(item.stem.lower())
+        except OSError:
+            continue
+    return names
+
+
+def _check_already_installed(path: Path, app_names: Set[str]) -> Tuple[bool, str]:
+    raw_stem = path.stem.lower()
+    cleaned = re.sub(
+        r"[-_](v?\d+[\d._]*|arm64|x86_64|universal|darwin|mac|intel|silicon|setup|installer).*",
+        "",
+        raw_stem,
+        flags=re.IGNORECASE,
+    ).strip()
+    if len(cleaned) >= 3:
+        for app in app_names:
+            if app == cleaned or app.startswith(cleaned) or cleaned.startswith(app):
+                return True, app.title()
+    return False, ""
+
+
 def find_installers(
     roots: Optional[Iterable[Path]] = None,
     min_age_days: Optional[int] = None,
@@ -130,6 +162,7 @@ def find_installers(
 
     min_size_bytes = max(min_size_mb, 0) * 1024 * 1024
     now = datetime.now()
+    app_names = _installed_app_names()
 
     for root in targets:
         for path in _walk(root, max_depth=max_depth):
@@ -146,12 +179,16 @@ def find_installers(
             age = (now - mtime).days
             if min_age_days is not None and age < min_age_days:
                 continue
+
+            is_inst, inst_app = _check_already_installed(path, app_names)
             items.append(InstallerItem(
                 path=path,
                 size=sz,
                 kind=kind,
                 modified_at=mtime.isoformat(timespec="seconds"),
                 age_days=age,
+                is_installed=is_inst,
+                installed_app=inst_app,
             ))
             if len(items) >= limit:
                 return sorted(items, key=lambda i: i.size, reverse=True)
@@ -166,12 +203,18 @@ def delete_installers(
     """Delete installer files under allowed roots."""
     result = DeleteResult()
     roots = list(allowed_roots) if allowed_roots else _DEFAULT_ROOTS
+    from core.safety import validate_path_for_deletion
 
     for item in items:
         allowed = any(_is_within(item.path, root) for root in roots)
         if not allowed:
             result.skipped += 1
             result.errors.append(f"Blocked outside roots: {item.path}")
+            continue
+        safe, reason = validate_path_for_deletion(item.path)
+        if not safe:
+            result.skipped += 1
+            result.errors.append(f"{item.path}: {reason}")
             continue
         ok, freed = safe_remove(item.path)
         if ok:

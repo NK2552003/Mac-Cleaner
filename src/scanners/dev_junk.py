@@ -55,6 +55,12 @@ _RUBY_MARKERS: Set[str] = {"Gemfile", "Gemfile.lock"}
 
 _PHP_MARKERS: Set[str] = {"composer.json", "composer.lock"}
 
+_DART_MARKERS: Set[str] = {"pubspec.yaml", "pubspec.lock"}
+
+_ZIG_MARKERS: Set[str] = {"build.zig"}
+
+_SWIFT_MARKERS: Set[str] = {"Package.swift"}
+
 _GENERIC_MARKERS: Set[str] = (
     _NODE_MARKERS
     | _PY_MARKERS
@@ -64,6 +70,9 @@ _GENERIC_MARKERS: Set[str] = (
     | _DOTNET_MARKERS
     | _RUBY_MARKERS
     | _PHP_MARKERS
+    | _DART_MARKERS
+    | _ZIG_MARKERS
+    | _SWIFT_MARKERS
 )
 
 
@@ -78,6 +87,9 @@ _RULES: List[DevJunkRule] = [
     DevJunkRule("Dotnet Build", {"bin", "obj"}, _DOTNET_MARKERS),
     DevJunkRule("PHP Vendor", {"vendor"}, _PHP_MARKERS),
     DevJunkRule("Ruby Bundle", {"vendor"}, _RUBY_MARKERS),
+    DevJunkRule("Dart/Flutter Tool", {".dart_tool"}, _DART_MARKERS),
+    DevJunkRule("Zig Cache", {".zig-cache", "zig-out"}, _ZIG_MARKERS),
+    DevJunkRule("Swift Build", {".build"}, _SWIFT_MARKERS),
     DevJunkRule("Build Output", {"dist", "out", "release", "debug"}, _GENERIC_MARKERS),
     DevJunkRule("Coverage", {"coverage", ".coverage", ".nyc_output"}, _GENERIC_MARKERS),
 ]
@@ -88,6 +100,7 @@ _GLOBAL_CACHE_DIRS: List[Tuple[str, Path]] = [
     ("Global Cache (Node)", HOME / ".pnpm-store"),
     ("Global Cache (Node)", HOME / ".pnpm"),
     ("Global Cache (Node)", HOME / ".node-gyp"),
+    ("Global Cache (Bun)", HOME / ".bun" / "install" / "cache"),
     ("Global Cache (Python)", HOME / ".cache" / "pip"),
     ("Global Cache (Python)", HOME / ".cache" / "pypoetry"),
     ("Global Cache (Python)", HOME / ".cache" / "uv"),
@@ -102,6 +115,15 @@ _GLOBAL_CACHE_DIRS: List[Tuple[str, Path]] = [
     ("Global Cache (Dotnet)", HOME / ".nuget" / "packages"),
     ("Global Cache (Ruby)", HOME / ".bundle" / "cache"),
     ("Global Cache (PHP)", HOME / ".composer" / "cache"),
+    ("Global Cache (Cocoapods)", HOME / ".cocoapods"),
+    ("Global Cache (Cocoapods)", HOME / "Library" / "Caches" / "CocoaPods"),
+    ("Global Cache (SwiftPM)", HOME / "Library" / "Caches" / "org.swift.swiftpm"),
+    ("Global Cache (Dart/Flutter)", HOME / ".pub-cache"),
+    ("Global Cache (AI Models)", HOME / ".cache" / "huggingface"),
+    ("Global Cache (AI Models)", HOME / ".cache" / "torch"),
+    ("Global Cache (Zig)", HOME / ".cache" / "zig"),
+    ("Global Cache (Deno)", HOME / "Library" / "Caches" / "deno"),
+    ("Global Cache (Ollama)", HOME / ".ollama" / "models"),
 ]
 
 

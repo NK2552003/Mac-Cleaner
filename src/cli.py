@@ -55,6 +55,7 @@ Subcommands
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -127,6 +128,10 @@ def _ensure_first_run_profile(profile: Optional[str], ci: bool) -> Optional[str]
     if cfg_path.exists():
         return profile
 
+    if not sys.stdin.isatty() or os.environ.get("CI") or os.environ.get("DEBIAN_FRONTEND") == "noninteractive":
+        init_default_config(profile="beginner")
+        return "beginner"
+
     choices = ["beginner", "developer", "professional", "designer", "student", "children"]
     descriptions = {
         "beginner": "Safe defaults, skips dev caches",
@@ -182,7 +187,20 @@ def main(
     log_file: Optional[str],
     dry_run: bool,
 ) -> None:
-    """Mac Deep Cleaner v2.2.0 — Professional macOS cleanup tool."""
+    """Mac Deep Cleaner v2.5.0 — Professional macOS cleanup tool.
+
+    \b
+    Core Commands:
+      scan           Preview orphaned app leftovers, junk, and dev caches
+      clean          Clean detected leftovers with safe undo staging
+      dashboard      Real-time interactive monitoring dashboard
+      tui            Interactive Terminal User Interface
+      uninstall      Full app uninstaller removing bundles and dependencies
+      duplicates     Find byte-identical files with APFS clone detection
+      large-files    Locate space-consuming files across your drives
+      developer      Deep developer cache management (npm, cargo, uv, etc.)
+      flush-dns      Quick flush of macOS DNS and routing caches
+    """
     from core.dry_run import set_dry_run
     configure_logging(
         verbose=verbose,
@@ -203,7 +221,8 @@ def main(
               help="Export to JSON / YAML / HTML (by extension).")
 @click.option("--whitelist", multiple=True, type=click.Path())
 @click.option("--show-apps", is_flag=True, default=False)
-@click.option("--profile", default=None, help="Config profile to use.")
+@click.option("--profile", default=None,
+              help="Config profile to use (beginner|developer|professional|designer|student|children|aggressive).")
 @click.option("--dev-junk", is_flag=True, default=False,
               help="Scan developer junk (node_modules, venv, build dirs).")
 @click.option("--dev-junk-global", is_flag=True, default=False,
@@ -222,6 +241,8 @@ def main(
               help="Emit machine-readable JSON summary and fail when over threshold.")
 @click.option("--threshold-mb", default=0, show_default=True,
               help="CI threshold. Exit 1 when reclaimable junk exceeds this many MB.")
+@click.option("--docker", is_flag=True, default=False,
+              help="Scan Docker bloat (containers, images, volumes).")
 def scan(
     skip_junk: bool,
     export_path: Optional[str],
@@ -237,12 +258,13 @@ def scan(
     save_history: bool,
     ci: bool,
     threshold_mb: int,
+    docker: bool,
 ) -> None:
     """Scan for orphaned app leftovers and junk (preview only — safe).
 
     \b
     --dry-run is an explicit alias for scan behaviour.
-    --profile developer|minimal|aggressive applies preset settings.
+    --profile beginner|developer|professional|designer|student|children|aggressive applies preset settings.
     """
     profile = _ensure_first_run_profile(profile=profile, ci=ci)
     cfg = load_config(profile=profile)
@@ -269,6 +291,7 @@ def scan(
         dev_junk_global=dev_junk_global,
         ci=ci,
         threshold_mb=threshold_mb,
+        docker=docker,
     )
 
 
@@ -466,7 +489,8 @@ def cmd_dashboard(
 @click.option("--skip-junk", is_flag=True, default=False)
 @click.option("--whitelist", multiple=True, type=click.Path())
 @click.option("--export", "export_path", type=click.Path(), default=None)
-@click.option("--profile", default=None)
+@click.option("--profile", default=None,
+              help="Config profile to use (beginner|developer|professional|designer|student|children|aggressive).")
 @click.option("--dev-junk", is_flag=True, default=False,
               help="Scan and clean developer junk (node_modules, venv, build dirs).")
 @click.option("--dev-junk-global", is_flag=True, default=False,
@@ -482,6 +506,8 @@ def cmd_dashboard(
               help="Clean unused Docker containers, images, and networks.")
 @click.option("--auto-with-cache", is_flag=True, default=False,
               help="Prompt to delete system caches when using auto clean.")
+@click.option("--save-history/--no-save-history", default=True, show_default=True,
+              help="Save clean run to history.")
 @click.pass_context
 def clean(
     ctx: click.Context,
@@ -498,6 +524,7 @@ def clean(
     no_undo: bool,
     auto_with_cache: bool,
     docker: bool,
+    save_history: bool,
 ) -> None:
     """Interactively clean orphaned app leftovers and junk.
 
@@ -536,7 +563,7 @@ def clean(
         show_apps=False,
         profile=profile,
         notify=notify,
-        save_history=True,
+        save_history=save_history,
         cfg=cfg,
         undo_mode=undo_mode,
         dev_junk=dev_junk,
@@ -548,45 +575,8 @@ def clean(
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ══════════════════════════════════════════════════════════════════════════════
-# UNINSTALL & DNS FLUSH
+# FLUSH DNS
 # ══════════════════════════════════════════════════════════════════════════════
-
-@main.command()
-@click.argument("app_name")
-@click.option("--auto", is_flag=True, default=False, help="Skip confirmation prompt")
-@click.option("--no-undo", is_flag=True, default=False, help="Permanently delete instead of staging for undo")
-@click.pass_context
-def uninstall(ctx: click.Context, app_name: str, auto: bool, no_undo: bool) -> None:
-    """Deep uninstall an application and all its data."""
-    from core.uninstaller import find_app_candidates, build_uninstall_plan, execute_uninstall
-    from core.scanner import discover_installed_apps
-    from core.undo import new_session
-    from rich.prompt import Confirm
-    from utils import bytes_human
-
-    apps = discover_installed_apps()
-    candidates = find_app_candidates(app_name, apps)
-    if not candidates:
-        console.print(f"[red]Could not find an installed app matching '{app_name}'.[/red]")
-        return
-    
-    app = candidates[0]
-    if len(candidates) > 1:
-        console.print(f"[yellow]Multiple apps matched. Selecting {app.name} ({app.bundle_id}).[/yellow]")
-    
-    plan = build_uninstall_plan(app)
-    
-    console.print(f"\n[bold red]Uninstall Plan for {app.name}[/bold red]")
-    console.print(f"Total size: {bytes_human(plan.total_size)}")
-    for item in plan.deletable_items:
-        console.print(f"  [dim]- {item.path}[/dim] ([yellow]{bytes_human(item.size)}[/yellow])")
-        
-    do_it = auto or Confirm.ask(f"\nUninstall {app.name} and delete {bytes_human(plan.total_size)}?", default=False)
-    if do_it:
-        cfg = load_config()
-        session = new_session() if (cfg.undo_mode and not no_undo) else None
-        res = execute_uninstall(plan, session=session)
-        console.print(f"\n[green]✓ Freed {bytes_human(res.bytes_freed)}. Removed {res.deleted} items. Staged {res.staged}.[/green]")
 
 @main.command("flush-dns")
 def flush_dns() -> None:
@@ -606,7 +596,7 @@ def tui() -> None:
     try:
         import textual
     except ImportError:
-        console.print("[red]Textual is not installed. Run 'poetry install' or install textual manually.[/red]")
+        console.print("[red]Textual is not installed. Run 'pip install textual' or install textual manually.[/red]")
         return
         
     from tui.app import run_tui
@@ -800,7 +790,7 @@ def cmd_completions(shell: Optional[str], instructions: bool) -> None:
 
 @main.command("uninstall")
 @click.argument("app_query")
-@click.option("--yes", is_flag=True, default=False,
+@click.option("--yes", "--auto", is_flag=True, default=False,
               help="Skip confirmation and uninstall immediately.")
 @click.option("--no-undo", is_flag=True, default=False,
               help="Permanently delete instead of staging for undo.")
@@ -923,7 +913,7 @@ def cmd_uninstall(
 
 @main.command("browser-data")
 @click.option("--browser", "browsers", multiple=True,
-              type=click.Choice(["safari", "chrome", "firefox", "edge", "brave"],
+              type=click.Choice(["safari", "chrome", "firefox", "edge", "brave", "arc", "zen", "opera", "vivaldi", "orion"],
                                 case_sensitive=False),
               help="Limit to specific browsers.")
 @click.option("--category", "categories", multiple=True,
@@ -1248,6 +1238,8 @@ def cmd_simulators(
               help="Export results to JSON.")
 @click.option("--delete", is_flag=True, default=False,
               help="Interactively delete duplicates (keeps the first copy).")
+@click.option("--no-undo", is_flag=True, default=False,
+              help="Permanently delete duplicates instead of staging for undo.")
 @click.pass_context
 def cmd_duplicates(
     ctx: click.Context,
@@ -1257,6 +1249,7 @@ def cmd_duplicates(
     clone_sampling: str,
     export_path: Optional[str],
     delete: bool,
+    no_undo: bool,
 ) -> None:
     """Find duplicate files by content hash.
 
@@ -1355,6 +1348,15 @@ def cmd_duplicates(
         if skip_if_dry_run(ctx, console, "duplicate deletions"):
             return
         from rich.prompt import Confirm
+        from core.safety import validate_path_for_deletion
+        from core.undo import new_session, stage_file
+        from core.cleaner import write_deletion_log
+
+        session = None if no_undo else new_session()
+        freed = 0
+        deleted_count = 0
+        deleted_logs = []
+
         console.print()
         for g in groups:
             total_g = bytes_human(g.wasted_bytes)
@@ -1371,11 +1373,42 @@ def cmd_duplicates(
                 console.print(f"    [dim]{extra}[/dim]")
             if Confirm.ask(f"  Delete {len(g.paths)-1} extra copy/copies?", default=False):
                 for extra in g.paths[1:]:
+                    safe, reason = validate_path_for_deletion(extra)
+                    if not safe:
+                        console.print(f"  [yellow]⚠ Skipped[/yellow] {extra.name}: {reason}")
+                        continue
                     try:
-                        extra.unlink()
-                        console.print(f"  [green]✓ Deleted[/green] {extra.name}")
+                        if session is not None:
+                            ok, sz = stage_file(extra, session, category="Duplicate")
+                            if ok:
+                                freed += sz
+                                deleted_count += 1
+                                deleted_logs.append((str(extra), sz))
+                                console.print(f"  [green]✓ Staged[/green] {extra.name} ([yellow]{bytes_human(sz)}[/yellow])")
+                            else:
+                                console.print(f"  [yellow]⚠ Failed to stage[/yellow] {extra.name}")
+                        else:
+                            sz = extra.stat().st_size
+                            extra.unlink()
+                            freed += sz
+                            deleted_count += 1
+                            deleted_logs.append((str(extra), sz))
+                            console.print(f"  [green]✓ Deleted[/green] {extra.name}")
                     except OSError as e:
                         console.print(f"  [yellow]⚠ Failed[/yellow] {extra.name}: {e}")
+
+        if session is not None and session.files:
+            session.save()
+            write_deletion_log([(f.original_path, f.size) for f in session.files])
+            console.print(
+                f"\n[bold green]✓ Done! Staged {deleted_count} duplicate(s) ({bytes_human(freed)}) "
+                f"(session: {session.session_id[:8]})[/bold green]"
+            )
+            console.print(f"[dim]Restore with: mac-cleaner undo --session {session.session_id[:8]}[/dim]")
+        elif deleted_count > 0:
+            if deleted_logs:
+                write_deletion_log(deleted_logs)
+            console.print(f"\n[bold green]✓ Done! Permanently deleted {deleted_count} duplicate(s) ({bytes_human(freed)})[/bold green]")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2527,11 +2560,13 @@ def cmd_installer_hunter(
 
     table = Table(show_header=True, header_style="bold cyan", border_style="dim")
     table.add_column("Kind", width=12)
+    table.add_column("Status", width=18)
     table.add_column("Age (days)", justify="right", width=9)
     table.add_column("Size", justify="right", style="yellow", width=10)
     table.add_column("Path", style="dim")
     for item in items:
-        table.add_row(item.kind, str(item.age_days), item.size_human, str(item.path))
+        status = f"[green]Installed ({item.installed_app})[/green]" if getattr(item, "is_installed", False) else "[dim]Standalone[/dim]"
+        table.add_row(item.kind, status, str(item.age_days), item.size_human, str(item.path))
     console.print(table)
 
     if export_path:
@@ -2546,6 +2581,8 @@ def cmd_installer_hunter(
                     "kind": i.kind,
                     "modified_at": i.modified_at,
                     "age_days": i.age_days,
+                    "is_installed": getattr(i, "is_installed", False),
+                    "installed_app": getattr(i, "installed_app", ""),
                 }
                 for i in items
             ],
@@ -3637,7 +3674,7 @@ def cmd_breach(
 
 @main.command("cloud-junk")
 @click.option("--provider", "providers", multiple=True,
-              type=click.Choice(["dropbox", "google-drive", "onedrive", "box"], case_sensitive=False),
+              type=click.Choice(["dropbox", "google-drive", "onedrive", "box", "icloud", "icloud-drive"], case_sensitive=False),
               help="Limit to a specific provider.")
 @click.option("--clean", is_flag=True, default=False,
               help="Delete detected cache/log directories.")
@@ -4069,30 +4106,33 @@ def _run(
         except Exception as exc:
             logger.debug("Failed to send notification: %s", exc)
 
-    if grand == 0 and not docker:
-        console.print("\n[bold green]✓ Your Mac is spotless! Nothing to clean.[/bold green]\n")
-        return
-
+    bloat = []
+    docker_total = 0
     if docker:
         from scanners.docker_cleaner import scan_docker_bloat, clean_docker_bloat
         bloat = scan_docker_bloat()
+        docker_total = sum(e.size for e in bloat)
         if bloat:
             console.print()
             console.rule("[bold]Docker Junk", style="blue")
-            docker_total = sum(e.size for e in bloat)
             console.print(f"  [blue]Docker Bloat:[/blue] {bytes_human(docker_total)}")
             
-            do_del = auto
-            if not do_del:
-                from rich.prompt import Confirm
-                do_del = Confirm.ask(
-                    f"  Delete Docker bloat ([yellow]{bytes_human(docker_total)}[/yellow])?",
-                    default=False,
-                )
-            if do_del:
-                freed_docker = clean_docker_bloat()
-                console.print(f"  [green]✓ Freed {bytes_human(freed_docker)} from Docker[/green]")
-                grand += freed_docker
+            if delete:
+                do_del = auto
+                if not do_del:
+                    from rich.prompt import Confirm
+                    do_del = Confirm.ask(
+                        f"  Delete Docker bloat ([yellow]{bytes_human(docker_total)}[/yellow])?",
+                        default=False,
+                    )
+                if do_del:
+                    freed_docker = clean_docker_bloat()
+                    console.print(f"  [green]✓ Freed {bytes_human(freed_docker)} from Docker[/green]")
+                    grand += freed_docker
+
+    if grand == 0 and docker_total == 0:
+        console.print("\n[bold green]✓ Your Mac is spotless! Nothing to clean.[/bold green]\n")
+        return
 
     # Diff hint
     try:

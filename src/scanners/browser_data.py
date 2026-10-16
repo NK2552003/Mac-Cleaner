@@ -16,6 +16,11 @@ BROWSER_LABELS = {
     "firefox": "Firefox",
     "edge": "Microsoft Edge",
     "brave": "Brave Browser",
+    "arc": "Arc",
+    "zen": "Zen Browser",
+    "opera": "Opera",
+    "vivaldi": "Vivaldi",
+    "orion": "Orion",
 }
 
 CATEGORY_LABELS = {
@@ -33,9 +38,23 @@ _ALLOWED_ROOTS: List[Path] = [
     HOME / "Library" / "Containers" / "com.apple.Safari",
     HOME / "Library" / "Cookies",
     HOME / "Library" / "Application Support" / "Google" / "Chrome",
+    HOME / "Library" / "Caches" / "Google" / "Chrome",
     HOME / "Library" / "Application Support" / "Microsoft Edge",
+    HOME / "Library" / "Caches" / "Microsoft Edge",
     HOME / "Library" / "Application Support" / "BraveSoftware",
+    HOME / "Library" / "Caches" / "BraveSoftware",
     HOME / "Library" / "Application Support" / "Firefox",
+    HOME / "Library" / "Caches" / "Firefox",
+    HOME / "Library" / "Application Support" / "Arc",
+    HOME / "Library" / "Caches" / "company.thebrowser.Browser",
+    HOME / "Library" / "Application Support" / "zen",
+    HOME / "Library" / "Caches" / "app.zen-browser.zen",
+    HOME / "Library" / "Application Support" / "com.operasoftware.Opera",
+    HOME / "Library" / "Caches" / "com.operasoftware.Opera",
+    HOME / "Library" / "Application Support" / "Vivaldi",
+    HOME / "Library" / "Caches" / "com.vivaldi.Vivaldi",
+    HOME / "Library" / "Application Support" / "Orion",
+    HOME / "Library" / "WebKit" / "com.kagi.kagimacOS",
 ]
 
 
@@ -115,8 +134,7 @@ def _collect_chromium(browser: str, base: Path) -> List[BrowserDataItem]:
     return items
 
 
-def _collect_firefox() -> List[BrowserDataItem]:
-    base = HOME / "Library" / "Application Support" / "Firefox" / "Profiles"
+def _collect_gecko(browser: str, base: Path) -> List[BrowserDataItem]:
     items: List[BrowserDataItem] = []
     seen: Set[Path] = set()
 
@@ -127,12 +145,98 @@ def _collect_firefox() -> List[BrowserDataItem]:
         if not profile.is_dir():
             continue
         profile_name = profile.name
-        _add_item(items, seen, "firefox", "cache", profile / "cache2", profile=profile_name)
-        _add_item(items, seen, "firefox", "cookies", profile / "cookies.sqlite", profile=profile_name)
-        _add_item(items, seen, "firefox", "history", profile / "places.sqlite", profile=profile_name)
-        _add_item(items, seen, "firefox", "site-data", profile / "storage", profile=profile_name)
-        _add_item(items, seen, "firefox", "sessions", profile / "sessionstore-backups", profile=profile_name)
+        _add_item(items, seen, browser, "cache", profile / "cache2", profile=profile_name)
+        _add_item(items, seen, browser, "cookies", profile / "cookies.sqlite", profile=profile_name)
+        _add_item(items, seen, browser, "history", profile / "places.sqlite", profile=profile_name)
+        _add_item(items, seen, browser, "site-data", profile / "storage", profile=profile_name)
+        _add_item(items, seen, browser, "sessions", profile / "sessionstore-backups", profile=profile_name)
 
+    return items
+
+
+def _collect_firefox() -> List[BrowserDataItem]:
+    items = _collect_gecko("firefox", HOME / "Library" / "Application Support" / "Firefox" / "Profiles")
+    seen = {i.path for i in items}
+    cache_path = HOME / "Library" / "Caches" / "Firefox"
+    if cache_path.exists():
+        _add_item(items, seen, "firefox", "cache", cache_path)
+    return items
+
+
+def _collect_chrome() -> List[BrowserDataItem]:
+    items = _collect_chromium("chrome", HOME / "Library" / "Application Support" / "Google" / "Chrome")
+    seen = {i.path for i in items}
+    cache_path = HOME / "Library" / "Caches" / "Google" / "Chrome"
+    if cache_path.exists():
+        _add_item(items, seen, "chrome", "cache", cache_path)
+    return items
+
+
+def _collect_edge() -> List[BrowserDataItem]:
+    items = _collect_chromium("edge", HOME / "Library" / "Application Support" / "Microsoft Edge")
+    seen = {i.path for i in items}
+    cache_path = HOME / "Library" / "Caches" / "Microsoft Edge"
+    if cache_path.exists():
+        _add_item(items, seen, "edge", "cache", cache_path)
+    return items
+
+
+def _collect_brave() -> List[BrowserDataItem]:
+    items = _collect_chromium("brave", HOME / "Library" / "Application Support" / "BraveSoftware" / "Brave-Browser")
+    seen = {i.path for i in items}
+    cache_path = HOME / "Library" / "Caches" / "BraveSoftware" / "Brave-Browser"
+    if cache_path.exists():
+        _add_item(items, seen, "brave", "cache", cache_path)
+    return items
+
+
+def _collect_zen() -> List[BrowserDataItem]:
+    items = _collect_gecko("zen", HOME / "Library" / "Application Support" / "zen" / "Profiles")
+    seen = {i.path for i in items}
+    cache_path = HOME / "Library" / "Caches" / "app.zen-browser.zen"
+    if cache_path.exists():
+        _add_item(items, seen, "zen", "cache", cache_path)
+    return items
+
+
+def _collect_arc() -> List[BrowserDataItem]:
+    items = _collect_chromium("arc", HOME / "Library" / "Application Support" / "Arc" / "User Data")
+    seen = {i.path for i in items}
+    cache_path = HOME / "Library" / "Caches" / "company.thebrowser.Browser"
+    if cache_path.exists():
+        _add_item(items, seen, "arc", "cache", cache_path)
+    return items
+
+
+def _collect_opera() -> List[BrowserDataItem]:
+    items = _collect_chromium("opera", HOME / "Library" / "Application Support" / "com.operasoftware.Opera")
+    seen = {i.path for i in items}
+    cache_path = HOME / "Library" / "Caches" / "com.operasoftware.Opera"
+    if cache_path.exists():
+        _add_item(items, seen, "opera", "cache", cache_path)
+    return items
+
+
+def _collect_vivaldi() -> List[BrowserDataItem]:
+    items = _collect_chromium("vivaldi", HOME / "Library" / "Application Support" / "Vivaldi")
+    seen = {i.path for i in items}
+    cache_path = HOME / "Library" / "Caches" / "com.vivaldi.Vivaldi"
+    if cache_path.exists():
+        _add_item(items, seen, "vivaldi", "cache", cache_path)
+    return items
+
+
+def _collect_orion() -> List[BrowserDataItem]:
+    items: List[BrowserDataItem] = []
+    seen: Set[Path] = set()
+    orion_base = HOME / "Library" / "Application Support" / "Orion"
+    if orion_base.exists():
+        _add_item(items, seen, "orion", "history", orion_base / "Defaults" / "history")
+        _add_item(items, seen, "orion", "cache", orion_base / "Defaults" / "Cache")
+        _add_item(items, seen, "orion", "site-data", orion_base / "Defaults" / "WebsiteData")
+    webkit_base = HOME / "Library" / "WebKit" / "com.kagi.kagimacOS"
+    if webkit_base.exists():
+        _add_item(items, seen, "orion", "cache", webkit_base / "WebsiteData")
     return items
 
 
@@ -169,31 +273,31 @@ def collect_browser_data(browsers: Optional[List[str]] = None) -> List[BrowserDa
         items.extend(_collect_safari())
 
     if "chrome" in selected:
-        items.extend(
-            _collect_chromium(
-                "chrome",
-                HOME / "Library" / "Application Support" / "Google" / "Chrome",
-            )
-        )
+        items.extend(_collect_chrome())
 
     if "edge" in selected:
-        items.extend(
-            _collect_chromium(
-                "edge",
-                HOME / "Library" / "Application Support" / "Microsoft Edge",
-            )
-        )
+        items.extend(_collect_edge())
 
     if "brave" in selected:
-        items.extend(
-            _collect_chromium(
-                "brave",
-                HOME / "Library" / "Application Support" / "BraveSoftware" / "Brave-Browser",
-            )
-        )
+        items.extend(_collect_brave())
 
     if "firefox" in selected:
         items.extend(_collect_firefox())
+
+    if "arc" in selected:
+        items.extend(_collect_arc())
+
+    if "zen" in selected:
+        items.extend(_collect_zen())
+
+    if "opera" in selected:
+        items.extend(_collect_opera())
+
+    if "vivaldi" in selected:
+        items.extend(_collect_vivaldi())
+
+    if "orion" in selected:
+        items.extend(_collect_orion())
 
     return items
 
@@ -227,10 +331,10 @@ def delete_browser_data(
 
     result = DeleteResult()
     targets: List[BrowserDataItem] = []
-    category_set = {c.lower() for c in (categories or [])}
+    category_set = {c.lower().replace("_", "-") for c in (categories or [])}
 
     for item in items:
-        if category_set and item.category not in category_set:
+        if category_set and item.category.lower().replace("_", "-") not in category_set:
             continue
         targets.append(item)
 

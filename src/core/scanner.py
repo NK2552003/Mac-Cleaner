@@ -23,7 +23,7 @@ from core.safety import (
     resolve_group_container,
     validate_path_for_deletion,
 )
-from utils import derive_display_name, iterdir_safe
+from utils import derive_display_name, iterdir_safe, size_of
 
 
 def _is_app_owned_junk(item: Path, apps: Dict[str, AppInfo]) -> bool:
@@ -187,12 +187,15 @@ def scan_orphans(
                 if not safe:
                     continue
 
-                # Confirm it's an orphan
+                # Confirm it's an orphan and calculate real size
                 try:
-                    fsize = item.stat().st_size
+                    if item.is_dir() and not item.is_symlink():
+                        fsize = size_of(item)
+                    else:
+                        fsize = item.stat().st_size
                 except OSError:
                     continue
-                if fsize == 0:
+                if fsize <= 0:
                     continue
                 leaf = OrphanEntry(
                     path=item,

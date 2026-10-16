@@ -1,6 +1,6 @@
 # Mac Deep Cleaner — Architecture & Implementation Guide
 
-**Version:** 2.0.1
+**Version:** 2.5.0
 
 This document provides a comprehensive overview of the internal architecture, module structure, and implementation details of Mac Deep Cleaner.
 
@@ -1054,4 +1054,4 @@ pytest tests/test_features_p0_p1.py -k "test_orphan_detection"
 
 ---
 
-*Documentation generated for Mac Deep Cleaner v2.0.0*
+*Documentation generated for Mac Deep Cleaner v2.5.0*
