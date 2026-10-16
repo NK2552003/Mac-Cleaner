@@ -1,6 +1,6 @@
 # Mac Deep Cleaner — Command Reference
 
-**Version:** 2.0.1  
+**Version:** 2.5.0  
 **CLI Commands:** `mac-cleaner` or `mdc`
 
 This document provides comprehensive reference documentation for all available commands in Mac Deep Cleaner.
@@ -1153,4 +1153,4 @@ Built-in profiles for different user types:
 
 ---
 
-*Documentation generated for Mac Deep Cleaner v2.0.0*
+*Documentation generated for Mac Deep Cleaner v2.5.0*

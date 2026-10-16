@@ -36,6 +36,9 @@ _PROVIDER_ALIASES: Dict[str, str] = {
     "drive": "Google Drive",
     "onedrive": "OneDrive",
     "box": "Box",
+    "icloud": "iCloud Drive",
+    "icloud-drive": "iCloud Drive",
+    "iclouddrive": "iCloud Drive",
 }
 
 _ALLOWED_ROOTS: List[Path] = [
@@ -50,6 +53,10 @@ _ALLOWED_ROOTS: List[Path] = [
     HOME / "Library" / "Application Support" / "OneDrive" / "Caches",
     HOME / "Library" / "Caches" / "com.box.desktop",
     HOME / "Library" / "Logs" / "Box",
+    HOME / "Library" / "Caches" / "CloudKit",
+    HOME / "Library" / "Caches" / "com.apple.bird",
+    HOME / "Library" / "Caches" / "com.apple.cloudd",
+    HOME / "Library" / "Logs" / "CloudDocs",
 ]
 
 
@@ -125,6 +132,15 @@ def _collect_box(home: Path) -> List[CloudJunkItem]:
     return items
 
 
+def _collect_icloud(home: Path) -> List[CloudJunkItem]:
+    items: List[CloudJunkItem] = []
+    _add_item(items, "iCloud Drive", "Cache", home / "Library" / "Caches" / "CloudKit")
+    _add_item(items, "iCloud Drive", "Cache", home / "Library" / "Caches" / "com.apple.bird")
+    _add_item(items, "iCloud Drive", "Cache", home / "Library" / "Caches" / "com.apple.cloudd")
+    _add_item(items, "iCloud Drive", "Logs", home / "Library" / "Logs" / "CloudDocs")
+    return items
+
+
 def collect_cloud_junk(
     providers: Optional[Iterable[str]] = None,
     home: Optional[Path] = None,
@@ -147,6 +163,8 @@ def collect_cloud_junk(
         items.extend(_collect_onedrive(base))
     if not providers or "Box" in selected:
         items.extend(_collect_box(base))
+    if not providers or "iCloud Drive" in selected:
+        items.extend(_collect_icloud(base))
 
     return items
 

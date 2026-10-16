@@ -97,11 +97,14 @@ def bytes_human(n: int) -> str:
     """
     if n < 0:
         return "0 B"
+    val = float(n)
     for unit in ("B", "KB", "MB", "GB", "TB"):
-        if n < 1024:
-            return f"{n:.1f} {unit}"
-        n = int(n/1024)
-    return f"{n:.1f} PB"
+        if val < 1024.0 or unit == "TB":
+            if unit == "B":
+                return f"{int(val)} B"
+            return f"{val:.1f} {unit}"
+        val /= 1024.0
+    return f"{val:.1f} PB"
 
 
 def actual_disk_usage(path: Path) -> int:
@@ -120,23 +123,26 @@ def actual_disk_usage(path: Path) -> int:
         return 0
     if path.is_file():
         try:
-            return path.stat().st_blocks * 512
-        except (OSError, AttributeError):
-            try:
-                return path.stat().st_size
-            except OSError:
-                return 0
+            st = path.stat()
+            blocks = getattr(st, "st_blocks", 0)
+            if blocks > 0:
+                return blocks * 512
+            return st.st_size
+        except OSError:
+            return 0
     total = 0
     try:
         for child in path.rglob("*"):
             if child.is_file() and not child.is_symlink():
                 try:
-                    total += child.stat().st_blocks * 512
-                except (OSError, AttributeError):
-                    try:
-                        total += child.stat().st_size
-                    except OSError:
-                        pass
+                    st = child.stat()
+                    blocks = getattr(st, "st_blocks", 0)
+                    if blocks > 0:
+                        total += blocks * 512
+                    else:
+                        total += st.st_size
+                except OSError:
+                    pass
     except (PermissionError, OSError) as exc:
         logger.debug("actual_disk_usage failed for %s: %s", path, exc)
     return total

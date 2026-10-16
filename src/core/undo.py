@@ -36,9 +36,15 @@ STAGING_DIR = TRASH_ROOT / "files"
 SESSION_DIR = TRASH_ROOT / "sessions"
 RETENTION_DAYS = 30   # Sessions older than this are purged automatically
 
-TRASH_ROOT.mkdir(parents=True, exist_ok=True)
-STAGING_DIR.mkdir(parents=True, exist_ok=True)
-SESSION_DIR.mkdir(parents=True, exist_ok=True)
+
+def ensure_trash_dirs() -> None:
+    """Ensure staging and session directories exist."""
+    try:
+        TRASH_ROOT.mkdir(parents=True, exist_ok=True)
+        STAGING_DIR.mkdir(parents=True, exist_ok=True)
+        SESSION_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.debug("Failed to create trash directories: %s", exc)
 
 
 # ── Data models ────────────────────────────────────────────────────────────────
@@ -81,6 +87,7 @@ class DeletionSession:
 
     def save(self) -> None:
         """Persist this session to disk."""
+        ensure_trash_dirs()
         data = {
             "session_id": self.session_id,
             "created_at": self.created_at,
@@ -121,6 +128,8 @@ def new_session() -> DeletionSession:
 
 def list_sessions() -> List[DeletionSession]:
     """Return all stored sessions, newest first."""
+    if not SESSION_DIR.exists():
+        return []
     sessions: List[DeletionSession] = []
     for manifest in sorted(SESSION_DIR.glob("*.json"), reverse=True):
         s = DeletionSession.load(manifest)
@@ -190,6 +199,7 @@ def stage_file(
     if not path.exists():
         return False, 0
 
+    ensure_trash_dirs()
     sz = size_of(path)
     unique_name = f"{uuid.uuid4().hex}_{path.name}"
     staging_path = STAGING_DIR / unique_name

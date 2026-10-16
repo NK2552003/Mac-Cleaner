@@ -18,6 +18,15 @@ from rich.tree import Tree
 from config.models import DevJunkEntry, JunkEntry, OrphanEntry
 from utils import bytes_human
 
+try:
+    from __init__ import __version__
+except ImportError:
+    try:
+        from importlib.metadata import version
+        __version__ = version("mac-deep-cleaner")
+    except Exception:
+        __version__ = "2.5.0"
+
 console = Console()
 
 # ── Category icons (Nerd Font / Unicode box-drawing) ─────────────────────────
@@ -106,7 +115,7 @@ def print_banner() -> None:
     """Print the application banner."""
     banner = Text()
     banner.append("✨ Mac Deep Cleaner", style="bold magenta")
-    banner.append("  v2.2.0", style="bold cyan")
+    banner.append(f"  v{__version__}", style="bold cyan")
     banner.append("  —  Professional Edition ✨", style="dim")
 
     console.print()

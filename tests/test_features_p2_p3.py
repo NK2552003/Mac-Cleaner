@@ -162,3 +162,112 @@ def test_menubar_format_swiftbar() -> None:
     output = format_swiftbar(status)
     assert "---" in output
     assert "mac-cleaner" in output
+
+
+def test_cloud_junk_icloud(tmp_path: pathlib.Path) -> None:
+    from scanners.cloud_junk import collect_cloud_junk
+
+    bird_cache = tmp_path / "Library" / "Caches" / "com.apple.bird"
+    bird_cache.mkdir(parents=True)
+    (bird_cache / "cache.db").write_bytes(b"c" * 256)
+
+    clouddocs_logs = tmp_path / "Library" / "Logs" / "CloudDocs"
+    clouddocs_logs.mkdir(parents=True)
+    (clouddocs_logs / "sync.log").write_bytes(b"l" * 128)
+
+    items = collect_cloud_junk(providers=["icloud"], home=tmp_path)
+    assert len(items) == 2
+    providers = {i.provider for i in items}
+    assert providers == {"iCloud Drive"}
+
+
+def test_dev_junk_new_languages(tmp_path: pathlib.Path) -> None:
+    from scanners.dev_junk import find_dev_junk
+
+    # Dart project
+    dart_proj = tmp_path / "dart_app"
+    dart_proj.mkdir()
+    (dart_proj / "pubspec.yaml").write_text("name: my_app")
+    dart_tool = dart_proj / ".dart_tool"
+    dart_tool.mkdir()
+    (dart_tool / "package_config.json").write_bytes(b"d" * 256)
+
+    # Zig project
+    zig_proj = tmp_path / "zig_app"
+    zig_proj.mkdir()
+    (zig_proj / "build.zig").write_text("const std = @import(\"std\");")
+    zig_cache = zig_proj / ".zig-cache"
+    zig_cache.mkdir()
+    (zig_cache / "z").write_bytes(b"z" * 128)
+
+    # Swift project
+    swift_proj = tmp_path / "swift_app"
+    swift_proj.mkdir()
+    (swift_proj / "Package.swift").write_text("// swift-tools-version: 5.9")
+    swift_build = swift_proj / ".build"
+    swift_build.mkdir()
+    (swift_build / "b").write_bytes(b"s" * 512)
+
+    entries = find_dev_junk(roots=[tmp_path], max_depth=3)
+    categories = {e.category for e in entries}
+    assert "Dart/Flutter Tool" in categories
+    assert "Zig Cache" in categories
+    assert "Swift Build" in categories
+
+
+def test_uninstaller_scripts_and_crashlogs(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from config.models import AppInfo
+    from core.uninstaller import build_uninstall_plan
+    import core.uninstaller as un
+
+    monkeypatch.setattr(un, "HOME", tmp_path)
+
+    app_path = tmp_path / "Applications" / "SuperApp.app"
+    app_path.mkdir(parents=True)
+    (app_path / "Contents").mkdir()
+    (app_path / "Contents" / "Info.plist").write_bytes(b"x" * 64)
+
+    app = AppInfo(
+        name="SuperApp",
+        bundle_id="com.supercorp.superapp",
+        path=app_path,
+    )
+
+    scripts_dir = tmp_path / "Library" / "Application Scripts" / "com.supercorp.superapp"
+    scripts_dir.mkdir(parents=True)
+    (scripts_dir / "script.scpt").write_bytes(b"s" * 100)
+
+    crash_dir = tmp_path / "Library" / "Logs" / "DiagnosticReports"
+    crash_dir.mkdir(parents=True)
+    (crash_dir / "SuperApp_2026-05-12.crash").write_bytes(b"c" * 200)
+
+    plan = build_uninstall_plan(app=app, roots=[scripts_dir.parent, crash_dir.parent])
+    paths = {str(i.path) for i in plan.deletable_items}
+    assert str(app_path) in paths
+    assert str(scripts_dir) in paths
+    assert str(crash_dir / "SuperApp_2026-05-12.crash") in paths
+
+
+def test_first_run_profile_no_os_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    import types
+    from unittest.mock import MagicMock
+
+    class MockModule(types.ModuleType):
+        def __getattr__(self, name: str):
+            return MagicMock()
+
+    for mod in [
+        "click", "rich", "rich.console", "rich.panel", "rich.progress",
+        "rich.table", "rich.text", "rich.prompt", "rich.rule", "rich.live",
+        "rich.align", "rich.layout", "rich.tree", "rich.box",
+    ]:
+        if mod not in sys.modules:
+            m = MockModule(mod)
+            m.__path__ = []
+            sys.modules[mod] = m
+
+    from cli import _ensure_first_run_profile
+
+    # Should not raise NameError: name 'os' is not defined in CI mode
+    res = _ensure_first_run_profile(profile=None, ci=True)
+    assert res is None

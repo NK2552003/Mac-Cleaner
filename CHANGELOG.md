@@ -2,24 +2,38 @@
 
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
-## v2.2.0 (2026-06-06)
+## v2.5.0 (2026-10-16)
 
 ### Added
-- Docker Cleanup scanner via `mdc clean --docker` to reclaim space from dangling images and unused volumes.
-- Interactive Terminal User Interface (TUI) via `mdc tui` (requires `textual`).
-- Deep App Uninstaller via `mdc uninstall` to simultaneously hunt and remove app bundles and their dependencies.
-- Background Scheduling enhancement via `mdc schedule install --clean` to automatically clean junk weekly.
-- DNS Cache Flushing via `mdc flush-dns` to troubleshoot networking routing issues.
-- `--auto-with-cache` flag to `clean` command to prompt for clearing System Caches.
-- Beautified CLI UI with rounded boxes, rich colors, and emojis for `reporter.py` and `cli.py`.
-- Dozens of modern apps (AI tools, dev environments, productivity apps) added to aliases and safe lists to improve detection.
+- **Docker Bloat Cleaner**: Added scanner and cleanup for unused Docker containers, dangling images, build caches, and volumes via `mac-cleaner clean --docker` and `mac-cleaner scan --docker`.
+- **Interactive Terminal User Interface (TUI)**: Added `mac-cleaner tui` interactive dashboard powered by Textual.
+- **Deep App Uninstaller**: Added `mac-cleaner uninstall <app>` with multi-root scanning across Preferences, Containers, Group Containers, Application Scripts, and DiagnosticReports crash logs.
+- **Expanded Browser Support**: Added data and cache detection for Arc, Zen Browser, Opera, Vivaldi, and Orion, alongside Safari, Google Chrome, Microsoft Edge, and Firefox.
+- **Dedicated Browser Cache Cleaning**: Added discovery and cleanup of `~/Library/Caches` for Chrome, Edge, Brave, and Firefox.
+- **Modern Dev Junk Ecosystem**: Added project-level clean detection for Dart/Flutter (`.dart_tool`), Zig (`.zig-cache`, `zig-out`), and Swift (`.build`), plus global caches for Bun, CocoaPods, SwiftPM, Dart/Flutter Pub, Hugging Face, Torch, Deno, and Ollama models.
+- **Xcode Deep Cleaner**: Added specialized cache and derived data scanner/cleaner (`mac-cleaner xcode-cleaner`).
+- **Installer Hunter**: Added scanner to identify obsolete `.dmg`, `.pkg`, `.iso`, and archive files with installed app detection (`mac-cleaner installer-hunter`).
+- **Background Scheduled Cleaning**: Added `--clean` option to `mac-cleaner schedule install` to run automatic unattended weekly cleanups.
+- **DNS Cache Flushing**: Added `mac-cleaner flush-dns` / `mac-cleaner dns-cache --flush`.
+- **System Caches Cleaning Option**: Added `--auto-with-cache` flag to `clean` command to safely prompt for system cache clearing.
+- **Modern UI Styling**: Beautified terminal reporting with rounded Unicode boxes, badges, and colors.
+- **Extensive App Ecosystem Registry**: Added dozens of modern developer tools, AI applications, and productivity apps to `src/constants/aliases.py` and system safelists.
 
 ### Fixed
-- Fixed bug where Brave Browser configurations (`BraveSoftware`) were incorrectly flagged as orphaned leftovers.
-- Fixed UI bug where an empty table was rendered for the "General Junk" category when no user-actionable junk was found.
+- **Safety Gate Temporary Paths**: Fixed `validate_path_for_deletion` falsely blocking user temporary directories under `/private/var/folders/` and `/var/folders/` while preserving protection for OS directories and temporary roots.
+- **Crash Log Matching in Uninstaller**: Resolved crash report matching in `DiagnosticReports` by supporting app names, identifier tokens, and bundle ID prefix separators (`_`, `.`, `-`).
+- **Decimal Precision in Size Formatting**: Fixed `bytes_human` decimal truncation so sizes like `1.5 MB` and `2.5 GB` report correct fractional values.
+- **Disk Usage Fallback**: Fixed `actual_disk_usage` falling back to `st_size` when block allocation is 0 (mock files, small files, sparse files).
+- **Missing `os` Import in CLI**: Fixed `NameError: name 'os' is not defined` during CI first-run profile checks.
+- **CLI Options Validation**: Added missing browsers (`arc`, `zen`, `opera`, `vivaldi`, `orion`) and cloud providers (`icloud`, `icloud-drive`) to Click choice options.
+- **Cloud Junk iCloud Logs**: Corrected iCloud logs path from live state `Application Support/CloudDocs` to `Library/Logs/CloudDocs`.
+- **Dynamic Versioning in Reports**: Replaced static hardcoded versions in deletion logs, HTML reports, and JSON/YAML exports with dynamic package version.
+- **Empty Junk Table UI**: Replaced empty tables with a clean success panel when no user junk is found.
+- **Category Filter Normalization**: Allowed flexible category inputs (`derived-data`, `deriveddata`, `Derived Data`, `site_data`, `site-data`) in browser and Xcode cleaners.
 
 ### Changed
-- Refactored monolithic `constants.py` into a modular `src/constants/` package for better maintainability.
+- **Modular Constants Architecture**: Refactored monolithic `src/constants.py` into a modular package (`aliases.py`, `paths.py`, `system.py`, `team_ids.py`, `vendors.py`).
+- **Updated Package Metadata**: Bumped version to `2.5.0` across `pyproject.toml`, `Formula/mac-deep-cleaner.rb`, `src/__init__.py`, `scripts/build.sh`, and documentation.
 
 ## v2.0.1 (2026-05-22)
 

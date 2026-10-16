@@ -14,6 +14,15 @@ from rich.console import Console
 from config.models import DevJunkEntry, JunkEntry, OrphanEntry
 from utils import bytes_human
 
+try:
+    from __init__ import __version__
+except ImportError:
+    try:
+        from importlib.metadata import version
+        __version__ = version("mac-deep-cleaner")
+    except Exception:
+        __version__ = "2.5.0"
+
 console = Console()
 
 
@@ -25,7 +34,7 @@ def export_json(
 ) -> None:
     """Export full scan results to JSON."""
     data = {
-        "tool": "Mac Deep Cleaner v2.0.0",
+        "tool": f"Mac Deep Cleaner v{__version__}",
         "generated_at": datetime.now().isoformat(),
         "orphaned_apps": {
             name: {
@@ -82,7 +91,7 @@ def export_yaml(
         return
 
     data = {
-        "tool": "Mac Deep Cleaner v2.0.0",
+        "tool": f"Mac Deep Cleaner v{__version__}",
         "generated_at": datetime.now().isoformat(),
         "orphaned_apps": {
             name: [e.to_dict() for e in entries]

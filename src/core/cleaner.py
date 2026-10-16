@@ -20,6 +20,15 @@ from config.models import JunkEntry, OrphanEntry
 from core.safety import validate_path_for_deletion
 from utils import bytes_human, safe_remove
 
+try:
+    from __init__ import __version__
+except ImportError:
+    try:
+        from importlib.metadata import version
+        __version__ = version("mac-deep-cleaner")
+    except Exception:
+        __version__ = "2.5.0"
+
 logger = logging.getLogger(__name__)
 
 console = Console()
@@ -32,7 +41,7 @@ def write_deletion_log(entries: List[Tuple[str, int]]) -> None:
     try:
         with open(LOG_FILE, "a") as f:
             f.write(f"\n{'=' * 60}\n")
-            f.write(f"Mac Deep Cleaner v2.0.0 — Deletion Log\n")
+            f.write(f"Mac Deep Cleaner v{__version__} — Deletion Log\n")
             f.write(f"Timestamp: {datetime.now().isoformat()}\n")
             f.write(f"Items deleted: {len(entries)}\n")
             f.write(f"Total freed: {bytes_human(sum(s for _, s in entries))}\n")
