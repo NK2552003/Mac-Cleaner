@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="100%" height="100%">
+  <defs>
+    <linearGradient id="totoroBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#939da6"/>
+      <stop offset="100%" stop-color="#6a747d"/>
+    </linearGradient>
+    <linearGradient id="totoroBelly" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fdfbf7"/>
+      <stop offset="100%" stop-color="#eae2d4"/>
+    </linearGradient>
+    <linearGradient id="totoroLeaf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#84e28c"/>
+      <stop offset="100%" stop-color="#3fa744"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <!-- Left Ear -->
+    <path d="M 42 48 C 38 28, 45 8, 49 9 C 54 10, 56 26, 54 48 Z" fill="url(#totoroBody)"/>
+    <path d="M 44 42 C 43 28, 47 16, 49 16 C 51 16, 52 28, 51 42 Z" fill="#586169" opacity="0.25"/>
+
+    <!-- Right Ear -->
+    <path d="M 74 48 C 72 26, 74 10, 79 9 C 83 8, 90 28, 86 48 Z" fill="url(#totoroBody)"/>
+    <path d="M 77 42 C 76 28, 77 16, 79 16 C 81 16, 85 28, 84 42 Z" fill="#586169" opacity="0.25"/>
+
+    <!-- Body -->
+    <path d="M 64 36 C 38 36, 26 56, 26 82 C 26 108, 38 120, 64 120 C 90 120, 102 108, 102 82 C 102 56, 90 36, 64 36 Z" fill="url(#totoroBody)"/>
+
+    <!-- Arms -->
+    <path d="M 26 76 C 22 81, 23 93, 29 97 C 31 93, 30 83, 30 76 Z" fill="#5c656e"/>
+    <path d="M 102 76 C 106 81, 105 93, 99 97 C 97 93, 98 83, 98 76 Z" fill="#5c656e"/>
+
+    <!-- Belly -->
+    <ellipse cx="64" cy="88" rx="29" ry="26" fill="url(#totoroBelly)"/>
+
+    <!-- Belly Chevrons -->
+    <path d="M 51 72 Q 54 68 57 72" stroke="#67717a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+    <path d="M 61 71 Q 64 67 67 71" stroke="#67717a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+    <path d="M 71 72 Q 74 68 77 72" stroke="#67717a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+    <path d="M 46 81 Q 49 77 52 81" stroke="#67717a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+    <path d="M 56 80 Q 59 76 62 80" stroke="#67717a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+    <path d="M 66 80 Q 69 76 72 80" stroke="#67717a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+    <path d="M 76 81 Q 79 77 82 81" stroke="#67717a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+
+    <!-- Big Expressive Eyes -->
+    <ellipse cx="47" cy="56" rx="6.2" ry="6.5" fill="#ffffff"/>
+    <ellipse cx="81" cy="56" rx="6.2" ry="6.5" fill="#ffffff"/>
+    <circle cx="47" cy="56" r="2.8" fill="#202428"/>
+    <circle cx="81" cy="56" r="2.8" fill="#202428"/>
+    <circle cx="48.2" cy="54.8" r="1.1" fill="#ffffff"/>
+    <circle cx="82.2" cy="54.8" r="1.1" fill="#ffffff"/>
+
+    <!-- Nose -->
+    <ellipse cx="64" cy="55" rx="3.8" ry="2.2" fill="#23272b"/>
+
+    <!-- Whiskers -->
+    <line x1="21" y1="59" x2="37" y2="60" stroke="#33393f" stroke-width="1.6" stroke-linecap="round"/>
+    <line x1="20" y1="65" x2="36" y2="64" stroke="#33393f" stroke-width="1.6" stroke-linecap="round"/>
+    <line x1="91" y1="60" x2="107" y2="59" stroke="#33393f" stroke-width="1.6" stroke-linecap="round"/>
+    <line x1="92" y1="64" x2="108" y2="65" stroke="#33393f" stroke-width="1.6" stroke-linecap="round"/>
+
+    <!-- Leaf on head -->
+    <path d="M 64 36 C 57 28, 59 20, 67 20 C 75 20, 78 30, 64 36 Z" fill="url(#totoroLeaf)"/>
+    <path d="M 64 36 Q 64 26 68 20" stroke="#348438" stroke-width="1.2" fill="none"/>
+    <path d="M 64 36 Q 61 40 59 41" stroke="#348438" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>
