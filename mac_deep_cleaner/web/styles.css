@@ -2090,6 +2090,12 @@ body:has(dialog[open]) { overflow: hidden; }
 .is-fullscreen .sidebar {
   inset: 10px auto 10px 10px;
 }
+/* Browser mode has no native titlebar to provide the top inset. */
+:root:not(.native-window) .shell {
+  margin-top: 10px;
+  height: calc(100vh - 20px);
+  height: calc(100dvh - 20px);
+}
 .is-fullscreen .shell {
   margin: 10px 10px 10px var(--content-left);
   height: calc(100vh - 20px);

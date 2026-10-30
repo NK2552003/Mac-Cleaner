@@ -1180,7 +1180,7 @@ document.addEventListener(
   true,
 );
 $("brandMark").innerHTML =
-  '<img src="/assets/mascot.png" alt="" width="34" height="34" style="border-radius:8px;">';
+  '<img src="/assets/app_icon.png" alt="" width="34" height="34">';
 $("sidebarToggle").innerHTML = icon("sidebar") + '<span class="rail-label">Sidebar</span>';
 $("localNote").innerHTML =
   icon("shield") + "<span>Only on your Mac.<br>Your files stay yours.</span>";

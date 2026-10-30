@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Mac-Cleaner}",
+            "name": "Debug mac-deep-cleaner",
+            "target": "mac-deep-cleaner",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug mac-deep-cleaner"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Mac-Cleaner}",
+            "name": "Release mac-deep-cleaner",
+            "target": "mac-deep-cleaner",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release mac-deep-cleaner"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Mac-Cleaner}",
+            "name": "Debug app-icon-helper",
+            "target": "app-icon-helper",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug app-icon-helper"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Mac-Cleaner}",
+            "name": "Release app-icon-helper",
+            "target": "app-icon-helper",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release app-icon-helper"
+        }
+    ]
+}

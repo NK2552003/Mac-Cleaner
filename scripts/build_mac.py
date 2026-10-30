@@ -5,12 +5,14 @@ import os
 from pathlib import Path
 import platform
 import re
+import runpy
 import plistlib
 import shutil
 import subprocess
 import sys
 
 root = Path(__file__).resolve().parents[1]
+app_version = runpy.run_path(str(root / 'mac_deep_cleaner/__init__.py'))['__version__']
 parser = argparse.ArgumentParser()
 parser.add_argument('--output', type=Path, default=root / 'dist')
 parser.add_argument('--work', type=Path, default=root / 'build')
@@ -26,6 +28,7 @@ subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '
                 '--name', 'mac-deep-cleaner-engine', '--distpath', str(args.work / 'engine-dist'),
                 '--workpath', str(args.work / 'pyinstaller'), '--specpath', str(args.work),
                 '--add-data', f'{root / "mac_deep_cleaner/web"}:mac_deep_cleaner/web',
+                '--add-data', f'{root / "assets"}:mac_deep_cleaner/assets',
                 '--exclude-module', 'rich', '--exclude-module', 'questionary',
                 *(['--codesign-identity', args.identity] if args.identity != '-' else []),
                 str(root / 'mc.py')], cwd=root, check=True)
@@ -58,11 +61,11 @@ subprocess.run(['xcrun', 'swiftc', '-O', '-target', f'{arch}-apple-macosx{minimu
                 str(root / 'desktop/app_icon.swift'), '-o', str(resources / 'engine/app-icon-helper')], check=True)
 subprocess.run(['codesign', '--force', '--sign', args.identity, str(resources / 'engine/app-icon-helper')], check=True)
 iconset = args.work / 'AppIcon.iconset'
-subprocess.run(['xcrun', 'swift', str(root / 'desktop/make_icon.swift'), str(iconset), str(root / 'mac_deep_cleaner/web/mascot.png')], check=True)
+subprocess.run(['xcrun', 'swift', str(root / 'desktop/make_icon.swift'), str(iconset), str(root / 'assets/app_icon.png')], check=True)
 subprocess.run(['iconutil', '-c', 'icns', str(iconset), '-o', str(resources / 'AppIcon.icns')], check=True)
 info = {'CFBundleName' : 'Mac Deep Cleaner', 'CFBundleDisplayName': 'Mac Deep Cleaner',
         'CFBundleIdentifier': 'com.macdeepcleaner.desktop', 'CFBundleExecutable': 'mac-deep-cleaner',
-        'CFBundleIconFile': 'AppIcon', 'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': '3.0.0', 'CFBundleVersion': '3.0.0',
+        'CFBundleIconFile': 'AppIcon', 'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': app_version, 'CFBundleVersion': app_version,
         'LSMinimumSystemVersion': minimum_version, 'NSHighResolutionCapable': True,
         'NSAppleEventsUsageDescription': 'Mac Deep Cleaner asks Finder to move only the files you review and approve to Trash.',
         'NSDocumentsFolderUsageDescription': 'Analyze storage and review cleanup in your Documents folder.',
@@ -78,6 +81,6 @@ subprocess.run(['codesign', '--force', '--sign', args.identity,
                 str(app)], check=True)
 subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
 result = subprocess.run([str(resources / 'engine/mac-deep-cleaner-engine'), '--version'], capture_output=True, text=True, check=True)
-if result.stdout.strip() != 'mac-deep-cleaner 3.0.0':
+if result.stdout.strip() != f'mac-deep-cleaner {app_version}':
     raise RuntimeError(f'Bundled runtime startup check failed: {result.stdout}')
 print(f'{app} ({arch}, macOS {minimum_version}+)')

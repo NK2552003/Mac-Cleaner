@@ -4,6 +4,7 @@ import argparse
 import os
 import subprocess
 import sys
+from . import __version__
 from .cleanup import execute, select_level
 from .common import CAUTION, IS_MAC, RISKY, SAFE, c, fmt
 from .scanner import Scanner
@@ -31,7 +32,7 @@ def parse_args():
     ap = argparse.ArgumentParser(prog="mac-deep-cleaner", description="Mac Deep Cleaner — local storage analysis and reviewed cleanup.")
     ap.add_argument("--web", action="store_true", help="open the local dashboard (default)")
     ap.add_argument("--terminal", action="store_true", help="use the terminal interface")
-    ap.add_argument("--version", action="version", version="mac-deep-cleaner 3.0.0")
+    ap.add_argument("--version", action="version", version=f"mac-deep-cleaner {__version__}")
     ap.add_argument("--idle-timeout", type=int, default=0, help="stop the server after this many idle seconds; 0 disables")
     ap.add_argument("--port", type=int, default=0, help="local port; 0 chooses a free port")
     ap.add_argument("--no-open", action="store_true", help="with --web: do not open the browser")
