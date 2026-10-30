@@ -1,9 +1,5 @@
-"""Compatibility shim for legacy tooling.
-
-Project metadata lives in pyproject.toml. Keeping this tiny setup.py lets older
-pip/setuptools flows delegate cleanly without duplicating metadata.
-"""
-
+#!/usr/bin/env python3
+"""Setup script for mac-deep-cleaner backward compatibility."""
 from setuptools import setup
 
 setup()

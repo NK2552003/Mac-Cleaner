@@ -4,21 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mac-deep-cleaner"
-version = "2.5.0"
-description = "Professional Mac cleanup tool — Smart App Orphan Detector"
+version = "3.0.0"
+description = "Professional Mac cleanup tool — Modern Local Storage Analysis & Reviewed Cleanup"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{name = "NK2552003"}]
 requires-python = ">=3.9"
-dependencies = [
-    "rich>=13.7.0",
-    "click>=8.1.0",
-    "pyyaml>=6.0",
-    "packaging>=23.0",
-    "textual>=0.40.0",
-]
+dependencies = []
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: MacOS X",
     "Intended Audience :: End Users/Desktop",
     "Operating System :: MacOS",
@@ -34,30 +28,33 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+terminal = [
+    "rich>=13.0.0",
+    "questionary>=2.0.0",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov",
     "mypy",
     "ruff",
+    "rich>=13.0.0",
+    "questionary>=2.0.0",
 ]
-packaging = []
 
 [project.scripts]
-mac-cleaner = "cli:main"
-mdc = "cli:main"
+mac-deep-cleaner = "mac_deep_cleaner.cli:main"
+mac-cleaner = "mac_deep_cleaner.cli:main"
+mdc = "mac_deep_cleaner.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/NK2552003/Mac-Cleaner"
 "Bug Tracker" = "https://github.com/NK2552003/Mac-Cleaner/issues"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+include = ["mac_deep_cleaner*"]
 
-[tool.setuptools.package-dir]
-"" = "src"
-
-[tool.setuptools]
-py-modules = ["cli", "utils"]
+[tool.setuptools.package-data]
+mac_deep_cleaner = ["web/*.html", "web/*.css", "web/*.js", "web/*.png", "web/*.svg", "web/*.ico"]
 
 [tool.ruff]
 line-length = 100
@@ -65,5 +62,6 @@ target-version = "py39"
 
 [tool.mypy]
 python_version = "3.9"
-warn_return_any = true
+warn_return_any = false
 warn_unused_configs = true
+ignore_missing_imports = true

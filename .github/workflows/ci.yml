@@ -85,13 +85,20 @@ jobs:
           cache: pip
 
       - name: Install build tools
-        run: pip install --upgrade pip && pip install build twine
+        run: pip install --upgrade pip && pip install build twine pyinstaller
 
       - name: Build wheel + sdist
         run: python -m build
 
       - name: Check distribution with twine
         run: twine check dist/*
+
+      - name: Build macOS standalone application bundle (.app)
+        run: |
+          pip install -e .
+          python scripts/build_mac.py
+          cd dist
+          zip -r -y "Mac-Deep-Cleaner-macOS.zip" "Mac Deep Cleaner.app"
 
       - name: Verify CLI entry points exist in wheel
         run: |
@@ -317,7 +324,10 @@ jobs:
           tag_name:   ${{ steps.changelog.outputs.tag }}
           name:       "mac-deep-cleaner ${{ steps.changelog.outputs.tag }}"
           body_path:  release_notes.md
-          files:      dist/*
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/Mac-Deep-Cleaner-macOS.zip
           draft:      false
           prerelease: false
         env:

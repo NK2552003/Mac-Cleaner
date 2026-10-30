@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#252525">
+<title>Mac Deep Cleaner — Your Mac, with more room</title>
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<button id="sidebarBackdrop" class="sidebar-backdrop" data-action="collapse-sidebar" aria-label="Close navigation" tabindex="-1"></button>
+<aside id="sidebar" class="sidebar" aria-label="Workspace navigation">
+ <div class="brand"><span class="brand-mark" id="brandMark"></span><span class="brand-name">Mac Deep<br>Cleaner</span></div>
+ <nav class="navigation" id="navigation" aria-label="Main"></nav>
+ <div class="sidebar-bottom"><div id="modeSwitch"></div><div class="local-note" id="localNote" title="Only on your Mac. Your files stay yours."></div><button id="sidebarToggle" class="rail-control" data-action="toggle-sidebar" aria-controls="sidebar" aria-expanded="false" aria-label="Expand sidebar" title="Expand sidebar"></button></div>
+</aside>
+<div class="shell"><header class="topbar"><div class="breadcrumb" id="breadcrumb"></div><div class="status" id="status" role="status">Connecting</div></header><main id="main" tabindex="-1"></main></div>
+<div id="selection" class="selection-bar" hidden aria-label="Selected items"></div>
+<div id="toasts" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
+<dialog id="detailDialog" class="side-dialog" aria-label="Item details"></dialog>
+<dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmTitle"></dialog>
+<script src="/assets/icons.js" defer></script>
+<script src="/assets/controls.js" defer></script>
+<script src="/assets/overlays.js" defer></script>
+<script src="/assets/app.js" defer></script>
+</body>
+</html>

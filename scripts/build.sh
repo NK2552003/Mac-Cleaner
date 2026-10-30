@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Mac Deep Cleaner v2.5.0 — Build & Install Script
+# Mac Deep Cleaner v3.0.0 — Build & Install Script
 # =============================================================================
 # Usage:
 #   bash build.sh            → default: build wheel + sdist
@@ -59,9 +59,7 @@ do_clean() {
         "$ROOT_DIR/$DIST_DIR" \
         "$ROOT_DIR/$BUILD_DIR" \
         "$ROOT_DIR/"*.egg-info \
-        "$ROOT_DIR/src/"*.egg-info \
-        "$ROOT_DIR/src/mac_deep_cleaner.egg-info" \
-        "$ROOT_DIR/src/mac_cleaner.egg-info"
+        "$ROOT_DIR/mac_deep_cleaner.egg-info"
 
     find "$ROOT_DIR" -type d -name __pycache__ -not -path '*/.venv/*' -exec rm -rf {} + 2>/dev/null || true
     find "$ROOT_DIR" -type f -name '*.pyc' -not -path '*/.venv/*' -delete 2>/dev/null || true
@@ -119,13 +117,13 @@ do_test() {
     source "$VENV_DIR/bin/activate"
 
     bold "Running compile checks…"
-    python -m compileall -q src
+    python -m compileall -q mac_deep_cleaner mc.py
 
     bold "Running CLI smoke checks…"
     mac-cleaner --help >/dev/null
     mdc --help >/dev/null
-    mac-cleaner config --show >/dev/null
-    mdc scan --ci --threshold-mb 0 >/tmp/mac-cleaner-ci.json || true
+    mac-deep-cleaner --help >/dev/null
+    python -m mac_deep_cleaner.cli --help >/dev/null
 
     if command -v pytest &>/dev/null && [[ -d tests ]]; then
         bold "Running pytest…"

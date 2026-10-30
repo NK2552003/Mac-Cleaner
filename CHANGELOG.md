@@ -2,6 +2,20 @@
 
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
+## v3.0.0 (2026-10-30)
+
+### Added
+- **Modern Local Dashboard**: Complete redesign featuring a local web-based interface with dark-minimal styling, real-time scanning radar animation, and instant category filters.
+- **Native macOS Desktop Shell**: Bundled Swift window chrome with custom window controls (`desktop/window_chrome.swift`), seamless full-screen handling, and matching sRGB dark background.
+- **Dark Minimal Totoro Mascot & Branding**: High-resolution dark minimal mascot icon (`assets/icon.png`, `desktop/AppIcon.icns`, and `web/mascot.png`).
+- **Flexible Entry Points**: Seamless execution via `mac-deep-cleaner`, `mac-cleaner`, or `mdc` aliases across both CLI, web dashboard, and terminal UI modes.
+- **Enhanced Overlay & Drawer Animations**: Smooth left-to-right drawer slide animations and scrollbar-hidden overlays for reviewing cleanup details.
+- **Interactive Terminal UI**: Optional Rich and Questionary terminal workflows (`mac-cleaner --terminal`).
+
+### Changed
+- Refactored core engine into modern `mac_deep_cleaner` module with zero mandatory third-party runtime dependencies.
+- Standardized Trash moves by default with multi-step review and verification.
+
 ## v2.5.0 (2026-10-16)
 
 ### Added
