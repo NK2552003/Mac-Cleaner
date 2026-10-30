@@ -2,6 +2,17 @@
 
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
+## v3.0.5 (2026-10-30)
+
+### Fixed
+- Added the missing top inset in browser mode while preserving native window and fullscreen spacing.
+- Unified the dashboard, favicon, README, and generated macOS icon around `assets/app_icon.png`; removed redundant branding images.
+- Included shared assets in Python distributions and standalone macOS builds.
+
+### Changed
+- Updated package, CLI, native bundle, build documentation, and Homebrew source URL to version 3.0.5.
+- CLI and native bundle versions now follow the package version constant.
+
 ## v3.0.0 (2026-10-30)
 
 ### Added

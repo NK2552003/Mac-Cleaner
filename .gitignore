@@ -215,3 +215,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 docs/PYPI_PUBLISHING.md
+.build/
+brag-output/

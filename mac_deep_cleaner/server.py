@@ -16,12 +16,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .service import APIError, CleanerService
 
 WEB = Path(__file__).with_name('web')
+BRANDING = Path(__file__).with_name('assets')
+if not BRANDING.is_dir():
+    # Source checkout; wheels and frozen builds ship assets beside this module.
+    BRANDING = Path(__file__).resolve().parent.parent / 'assets'
 ASSETS = {'/': ('index.html', 'text/html; charset=utf-8'),
           '/assets/overlays.js': ('overlays.js', 'text/javascript; charset=utf-8'),
           '/assets/app.js': ('app.js', 'text/javascript; charset=utf-8'),
           '/assets/controls.js': ('controls.js', 'text/javascript; charset=utf-8'),
-          '/assets/totoro.svg': ('totoro.svg', 'image/svg+xml'),
-          '/assets/mascot.png': ('mascot.png', 'image/png'),
           '/assets/icons.js': ('icons.js', 'text/javascript; charset=utf-8'),
           '/assets/styles.css': ('styles.css', 'text/css; charset=utf-8')}
 MAX_BODY = 2_000_000
@@ -126,8 +128,8 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == '/' and hmac.compare_digest(query.get('t', [''])[0], self.server.token):
                 return self._send(303, '', 'text/plain', {'Location': '/', 'Set-Cookie': f'{self.server.cookie_name}={self.server.token}; HttpOnly; SameSite=Strict; Path=/'})
             self._authorized()
-            if url.path == '/favicon.ico':
-                return self._send(204, b'')
+            if url.path in ('/assets/app_icon.png', '/favicon.ico'):
+                return self._send(200, (BRANDING / 'app_icon.png').read_bytes(), 'image/png')
             if url.path in ASSETS:
                 filename, kind = ASSETS[url.path]
                 return self._send(200, (WEB / filename).read_bytes(), kind)

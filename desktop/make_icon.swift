@@ -17,21 +17,10 @@ for points in [16, 32, 128, 256, 512] {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
         let size = CGFloat(pixels)
-        let inset = size * 0.05
-
-        // macOS Squircle tile background with sleek dark styling
-        let tilePath = NSBezierPath(roundedRect: NSRect(x: inset, y: inset, width: size - 2*inset, height: size - 2*inset),
-                                    xRadius: size * 0.224, yRadius: size * 0.224)
-        NSColor(srgbRed: 0x1f/255.0, green: 0x22/255.0, blue: 0x26/255.0, alpha: 1.0).setFill()
-        tilePath.fill()
-
-        // Soft subtle inner border highlight
-        NSColor.white.withAlphaComponent(0.08).setStroke()
-        tilePath.lineWidth = max(1.0, size * 0.012)
-        tilePath.stroke()
-
-        // Draw Totoro character centered inside the app icon squircle
-        character.draw(in: NSRect(x: size * 0.14, y: size * 0.12, width: size * 0.72, height: size * 0.76),
+        // The canonical PNG already contains the complete icon artwork.
+        // Preserve its transparent margins and aspect ratio at every icon size.
+        NSGraphicsContext.current?.imageInterpolation = .high
+        character.draw(in: NSRect(x: 0, y: 0, width: size, height: size),
                        from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
 
         NSGraphicsContext.restoreGraphicsState()

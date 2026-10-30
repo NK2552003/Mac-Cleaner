@@ -20,13 +20,13 @@ let package = Package(
         .executableTarget(
             name: "MacDeepCleanerDesktop",
             path: "desktop",
-            exclude: ["app_icon.swift", "make_icon.swift", "AppIcon.icns"],
+            exclude: ["app_icon.swift", "make_icon.swift"],
             sources: ["main.swift", "window_chrome.swift"]
         ),
         .executableTarget(
             name: "AppIconHelper",
             path: "desktop",
-            exclude: ["main.swift", "window_chrome.swift", "make_icon.swift", "AppIcon.icns"],
+            exclude: ["main.swift", "window_chrome.swift", "make_icon.swift"],
             sources: ["app_icon.swift"]
         ),
     ]

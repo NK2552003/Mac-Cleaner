@@ -1,7 +1,7 @@
 <div align="center">
 
 <p align="center">
-  <img src="assets/totoro.svg" alt="Mac Deep Cleaner Icon" width="130" height="130" style="border-radius: 26px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); margin-bottom: 12px;" />
+  <img src="assets/app_icon.png" alt="Mac Deep Cleaner Icon" width="130" height="130" />
 </p>
 
 # Mac Deep Cleaner
@@ -18,7 +18,9 @@
 
 ---
 
-**Mac Deep Cleaner v3.0** is a modern macOS storage analysis and reviewed cleanup suite combining an interactive local web dashboard, native macOS desktop integration, and powerful command-line tooling with multiple layers of safety and full Trash protection.
+**Mac Deep Cleaner v3.0.5** is a modern macOS storage analysis and reviewed cleanup suite combining an interactive local web dashboard, native macOS desktop integration, and powerful command-line tooling with multiple layers of safety and full Trash protection.
+
+Version 3.0.5 adds consistent top spacing in browser mode and unified branding across the dashboard, browser tab, README, and macOS app.
 
 ```bash
 # Three convenient commands, same powerful tool
@@ -121,6 +123,10 @@ python3 scripts/build_mac.py
 ```
 
 The resulting `Mac Deep Cleaner.app` will be placed in `dist/`.
+
+### Shared App Icon
+
+[`assets/app_icon.png`](assets/app_icon.png) is the single source for the app's branding. The dashboard and browser favicon serve this image directly; the native build generates its `.icns` file from it without adding another background or changing its proportions. Python distributions include the same asset inside `mac_deep_cleaner/assets/`. Replace the source PNG and rebuild to update all of these surfaces.
 
 ---
 
