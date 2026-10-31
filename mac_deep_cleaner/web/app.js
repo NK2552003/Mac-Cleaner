@@ -4,6 +4,28 @@ P.arrow = '<path d="M7 17L17 7M7 7h10v10"/>';
 P.monitor =
   '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>';
 P.sidebar = '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>';
+let theme = "dark";
+function applyTheme(next) {
+  theme = next === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = theme;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = theme === "light" ? "#dadada" : "#252525";
+  try {
+    window.webkit?.messageHandlers?.themeChange?.postMessage(theme);
+  } catch {}
+}
+try { applyTheme(localStorage.getItem("mdc_theme")); } catch { applyTheme("dark"); }
+// Long lists load their next page automatically when the footer scrolls into view.
+let moreObserver = null;
+function watchMore() {
+  moreObserver?.disconnect();
+  const next = document.querySelector('#main [data-action="more"]');
+  if (!next || typeof IntersectionObserver !== "function") return;
+  moreObserver = new IntersectionObserver((entries) => {
+    if (entries.some((e) => e.isIntersecting)) { moreObserver.disconnect(); next.click(); }
+  }, { root: document.getElementById("main"), rootMargin: "400px 0px" });
+  moreObserver.observe(next);
+}
 let sidebarExpanded = false;
 function setSidebar(expanded) {
   sidebarExpanded = expanded;
@@ -49,7 +71,7 @@ const ago = (t) => {
         : `${Math.floor(d / 365)} years ago`;
 };
 const sum = (items) => items.reduce((n, i) => n + i.size, 0);
-const eligible = (i) => i && !i.protected && !i.managed;
+const eligible = (i) => i && !i.protected && !i.managed && i.category !== "Ghost Files";
 const safetyLabel = { safe: "Safe", caution: "Caution", risky: "Risky" };
 const safety = (s) =>
   `<span class="safety ${s}"><i class="dot"></i>${safetyLabel[s] || esc(s)}</span>`;
@@ -70,10 +92,15 @@ const metric = (label, value, note) =>
 const bar = (parts) =>
   `<div class="bar" aria-hidden="true">${parts.map(([pct, color]) => `<i style="width:${Math.min(100, Math.max(0, pct))}%;background:${color}"></i>`).join("")}</div>`;
 const navs = [
-  ["clean", "Storage cleanup", "clean"],
-  ["apps", "Applications", "apps"],
-  ["big", "Large files", "file"],
-  ["dups", "Duplicates", "dup"],
+  ["clean", "Storage cleanup", "nav_clean"],
+  ["optimize", "Optimize your Mac", "nav_optimize"],
+  ["disks", "Disks & volumes", "nav_disks"],
+  ["homebrew", "Homebrew", "nav_homebrew"],
+  ["apps", "Applications", "nav_apps"],
+  ["big", "Large files", "nav_big"],
+  ["dups", "Duplicates", "nav_dups"],
+  ["ghosts", "Ghost Files", "ghost"],
+  ["settings", "Settings", "nav_settings"],
 ];
 let S = {
     items: [],
@@ -146,11 +173,58 @@ function groups() {
     .filter((n) => m.has(n))
     .map((n) => [n, m.get(n)]);
 }
+
+// The feature switch is core UI. Ghost code and assets are loaded only after opt-in.
+let ghostAssets;
+function ensureGhostFeature() {
+  if (!S.features?.ghosts_level) return Promise.resolve();
+  if (!ghostAssets) ghostAssets = new Promise((resolve, reject) => {
+    const style = document.createElement("link");
+    style.rel = "stylesheet"; style.href = "/assets/ghosts.css"; document.head.append(style);
+    const script = document.createElement("script"); script.src = "/assets/ghosts.js";
+    script.onload = resolve;
+    script.onerror = () => { ghostAssets = null; reject(new Error("Ghost Files could not load. Reopen Settings to retry.")); };
+    document.head.append(script);
+  });
+  return ghostAssets;
+}
+function syncGhostFeature() {
+  if (!S.features?.ghosts_level) {
+    window.GhostUI?.leave();
+    if (view === "ghosts") view = "settings";
+  } else if (["ghosts", "settings"].includes(view)) {
+    ensureGhostFeature().then(() => { if (S.features?.ghosts_level) GhostUI.enter(); }).catch(e => toast(e.message, true));
+  }
+}
+async function setGhostLevel(level) {
+  await api("/api/ghosts/config", {level});
+  S.features = {ghosts_level: level};
+  if (level) {
+    await ensureGhostFeature();
+    await GhostUI.enter(true);
+    if (level === 2) await GhostUI.setup();
+  } else window.GhostUI?.leave();
+  await load();
+  draw();
+}
+function settingsView() {
+  const level = S.features?.ghosts_level || 0;
+  return `<div class="pagehead"><div><h1>Settings</h1><p>Choose what runs on your Mac.</p></div></div>${banners()}
+    <section class="tool-section"><div class="section-title"><h2>Appearance</h2></div>
+    <div class="feature-setting"><div><h3>Theme</h3><p>Switch between a dark and a light workspace.</p></div>
+    <button type="button" class="theme-switch ${theme === "light" ? "is-light" : ""}" data-action="theme" role="switch" aria-checked="${theme === "light"}" aria-label="Light mode"><span class="theme-label">${icon(theme === "light" ? "sun" : "moon")}${theme === "light" ? "Light mode" : "Dark mode"}</span><span class="theme-track" aria-hidden="true"><i></i></span></button></div></section>
+    <section class="tool-section"><div class="section-title"><h2>Experimental</h2></div>
+    <div class="feature-setting"><div><h3>Ghost Files</h3><p>Find leftovers from apps you have deleted. Review each one before moving it to the Trash.</p></div>
+    <button class="button ${level ? "primary" : ""}" data-action="feature-ghost-level" data-level="${level ? 0 : 1}" role="switch" aria-checked="${!!level}" aria-label="Ghost Files" ${busy || S.busy ? "disabled" : ""}>${level ? "On" : "Off"}</button></div>
+    ${level ? `<div class="feature-levels" aria-label="Ghost Files mode">${button("Ghosts (no AI)", "feature-ghost-level", {style:level === 1 ? "primary" : "", data:{level:1},disabled:!!S.busy})}${button("Ghosts + AI narration", "feature-ghost-level", {style:level === 2 ? "primary" : "", data:{level:2},disabled:!!S.busy})}${button("Open Ghost Files", "navigate", {data:{view:"ghosts"},symbol:"arrow"})}</div>${window.GhostUI ? GhostUI.settings() : '<p>Loading feature settings…</p>'}` : '<p class="note">Off by default. No Ghost Files scanning, AI probing, or downloads run while disabled.</p>'}
+    </section>`;
+}
+
 async function api(path, body) {
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(),
-    body && path.includes("/clean") ? 960000 : 20000,
+    body && path.includes("/clean") ? 960000 : path === "/api/disks" || path === "/api/health" || path.startsWith("/api/brew") || path.endsWith("/plan") ? 600000 : 20000,
   );
   try {
     const r = await fetch(path, {
@@ -158,7 +232,7 @@ async function api(path, body) {
         ? {}
         : {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "X-MDC-Token": document.querySelector('meta[name="mdc-session"]').content },
             body: JSON.stringify(body),
           }),
       signal: controller.signal,
@@ -202,11 +276,14 @@ async function load() {
       A = { apps: [], ready: false };
       closeDetail();
     }
+    if (!ready && next.initial_view && navs.some(n => n[0] === next.initial_view) && view === "clean") view = next.initial_view;
     if (!ready && next.settings) {
       mode = next.settings.mode;
       minmb = next.settings.min_mb;
+      if (next.settings.theme) applyTheme(next.settings.theme);
     }
     S = next;
+    syncGhostFeature();
     ready = true;
     connectionError = next.error || "";
     selected = new Set(
@@ -217,6 +294,8 @@ async function load() {
     draw();
     if (view === "big" && !S.scanning && !bigReady) loadBig();
     if (view === "apps" && !A.ready) loadApps();
+    if (["optimize", "disks"].includes(view)) ToolkitUI.enter(view);
+    if (view === "homebrew") HomebrewUI.enter();
     stateTimer = setTimeout(load, S.scanning || S.busy ? 1400 : 10000);
   } catch (e) {
     connectionError = e.message;
@@ -280,9 +359,10 @@ function toast(message, error = false) {
 function chrome() {
   const title = navs.find((n) => n[0] === view)[1];
   $("navigation").innerHTML = navs
+    .filter(([v]) => v !== "ghosts" || S.features?.ghosts_level > 0)
     .map(
       ([v, name, symbol]) =>
-        `<button class="nav-button ${view === v ? "active" : ""}" data-action="navigate" data-view="${v}" title="${name}" aria-label="${name}" ${view === v ? 'aria-current="page"' : ""}>${icon(symbol)}<span class="nav-full">${name}</span><span class="nav-short">${{ clean: "Cleanup", apps: "Apps", big: "Large files", dups: "Duplicates" }[v]}</span></button>`,
+        `<button class="nav-button ${view === v ? "active" : ""}" data-action="navigate" data-view="${v}" title="${name}" aria-label="${name}" ${view === v ? 'aria-current="page"' : ""}>${icon(symbol)}<span class="nav-full">${name}</span><span class="nav-short">${{ clean: "Cleanup", apps: "Apps", big: "Large files", dups: "Duplicates", optimize: "Optimize", disks: "Disks", homebrew: "Homebrew", ghosts: "Ghosts", settings: "Settings" }[v]}</span></button>`,
     )
     .join("");
   $("modeSwitch").innerHTML = `<button class="rail-control mode-control ${mode === "dev" ? "enabled" : ""}" data-action="mode" data-mode="${mode === "dev" ? "normal" : "dev"}" role="switch" aria-checked="${mode === "dev"}" aria-label="Developer mode" title="Developer mode: ${mode === "dev" ? "on" : "off"}">${icon("code")}<span class="rail-label">Developer mode</span><span class="mode-indicator" aria-hidden="true"></span></button>`;
@@ -395,6 +475,7 @@ function fileList(rows) {
     )}<div class="list-footer"><span>${Math.min(visibleLimit, rows.length)} of ${rows.length.toLocaleString()} items</span>${rows.length > visibleLimit ? button("Show more", "more", { style: "link" }) : "<span>Sorted by size</span>"}</div>`;
 }
 function inspectorContent(i, { close = true } = {}) {
+  if (i?.category === "Ghost Files") return `<div class="inspect-heading"><h3>${esc(i.name)}</h3>${close ? button("", "close-inspector", {style:"ghost icon-only",symbol:"x",aria:"Close details"}) : ""}</div><div class="inspect-content"><p>${esc(i.reason)}</p><p class="path">${esc(i.path)}</p>${button("Review in Ghost Files", "navigate", {data:{view:"ghosts"},style:"primary"})}</div>`;
   if (!i)
     return `<div class="inspector-empty">${icon("file")}<h3>A closer look</h3><p>Select a file to see its location and what happens when it’s removed.</p><small>${icon("shield")}Protected files stay on your Mac. Every cleanup starts with a review.</small></div>`;
   return `<div class="inspect-heading">${fileIcon(i)}<div><h3>${esc(i.name)}</h3><small>${fmt(i.size)}</small></div>${close ? button("", "close-inspector", { style: "ghost icon-only", symbol: "x", aria: "Close details" }) : ""}</div><div class="inspect-content"><dl class="facts"><div><dt>Safety</dt><dd>${safety(i.safety)}</dd></div><div><dt>Status</dt><dd>${i.protected ? "Protected" : i.managed ? "Managed by macOS" : i.active_project ? "Active project" : i.readonly ? "Read-only" : "Available for review"}</dd></div><div><dt>Category</dt><dd>${esc(group(i))}</dd></div></dl><section class="inspect-section"><h3>Location</h3><p class="path">${esc(i.path || "No local file path")}</p></section><section class="inspect-section"><h3>What happens if removed</h3><p>${esc(i.reason || "Review this item before removing it.")}</p>${i.regen ? `<small>${esc(i.regen)}</small>` : ""}</section>${i.keep ? `<section class="inspect-section"><h3>Original copy kept</h3><p class="path">${esc(i.keep)}</p></section>` : ""}${mode === "dev" && i.cmd ? `<section class="inspect-section"><h3>Terminal command</h3><code>${esc(i.cmd)}</code></section>` : ""}<div class="inspect-actions">${eligible(i) ? button(selected.has(i.id) ? "Remove from selection" : "Add to cleanup", "toggle", { style: selected.has(i.id) ? "" : "primary", symbol: selected.has(i.id) ? "x" : "check", disabled: !canSelect(), data: { id: i.id } }) : ""}${i.path ? button("Reveal in Finder", "reveal", { symbol: "folder", data: { id: i.id } }) + button("Copy path", "copy", { symbol: "dup", data: { id: i.id } }) + button("Keep out of future scans", "pin", { style: "link", symbol: "pin", data: { id: i.id }, disabled: !canSelect() }) : ""}</div></div>`;
@@ -605,9 +686,15 @@ function draw({ animate = false } = {}) {
       apps: appsView,
       big: bigView,
       dups: duplicatesView,
+      optimize: ToolkitUI.optimizeView,
+      disks: ToolkitUI.diskView,
+      homebrew: HomebrewUI.render,
+      settings: settingsView,
+      ghosts: () => window.GhostUI ? GhostUI.render() : empty("Opening Ghost Files…", "Loading the optional workspace."),
     }[view]();
     drawSelection();
     Dropdowns.enhance($("main"));
+    watchMore();
   });
   if (animate) {
     $("main").classList.remove("page-enter");
@@ -634,7 +721,7 @@ function draw({ animate = false } = {}) {
 function drawSelection() {
   const items = selectedItems(),
     el = $("selection");
-  el.hidden = !items.length;
+  el.hidden = !items.length || ["optimize", "disks", "homebrew", "ghosts", "settings"].includes(view);
   if (!items.length) {
     el.innerHTML = "";
     return;
@@ -642,7 +729,8 @@ function drawSelection() {
   el.innerHTML = `<span class="selection-icon">${icon("check")}</span><div class="selection-summary"><strong>${items.length} ${items.length === 1 ? "item" : "items"} selected</strong><small>${fmt(sum(items))} ready for review</small></div><button class="clear" data-action="clear-selection">Clear</button>${button(busy ? "Working…" : "Review cleanup", "review", { style: "primary", symbol: "arrow", disabled: !canSelect() })}`;
 }
 function navigate(v) {
-  if (!navs.some((n) => n[0] === v)) return;
+  if (!navs.some((n) => n[0] === v) || (v === "ghosts" && !S.features?.ghosts_level)) return;
+  window.GhostUI?.leave();
   if (matchMedia("(max-width:900px)").matches) setSidebar(false);
   view = v;
   q = "";
@@ -654,6 +742,9 @@ function navigate(v) {
   closeDetail();
   draw({ animate: true });
   window.scrollTo({ top: 0, behavior: "instant" });
+  if (["optimize", "disks"].includes(v)) ToolkitUI.enter(v);
+  if (v === "homebrew") HomebrewUI.enter();
+  if (["ghosts", "settings"].includes(v) && S.features?.ghosts_level) ensureGhostFeature().then(() => GhostUI.enter()).catch(e => toast(e.message, true));
   if (v === "apps" && !A.ready) loadApps();
   if (v === "big" && !S.scanning && !bigReady) loadBig();
 }
@@ -748,11 +839,12 @@ function ask({
   danger = false,
   phrase = "",
   allowPermanent = false,
+  requiresBackup = false,
 }) {
   return new Promise((resolve) => {
-    pendingAsk = { resolve, phrase, allowPermanent, confirm, danger };
+    pendingAsk = { resolve, phrase, allowPermanent, confirm, danger, requiresBackup };
     $("confirmDialog").innerHTML =
-      `<div class="modal-head"><h2 id="confirmTitle">${esc(title)}</h2>${button("", "cancel-confirm", { style: "ghost icon-only", symbol: "x", aria: "Close confirmation" })}</div><div class="modal-body">${body}${allowPermanent ? '<label class="check-label"><input id="permanent" type="checkbox">Delete permanently instead of using Trash</label><div class="review-warning" id="permanentWarning" hidden>Permanent deletion cannot be undone.</div>' : ""}<label class="phrase-label" id="phraseLabel" ${phrase ? "" : "hidden"}>Type <strong id="phraseText">${esc(phrase)}</strong> to continue<input type="text" id="confirmPhrase" autocomplete="off" spellcheck="false" aria-label="Confirmation phrase"></label></div><div class="modal-actions">${button("Cancel", "cancel-confirm")}${button(confirm, "confirm", { style: danger ? "danger" : "primary", disabled: !!phrase })}</div>`;
+      `<div class="modal-head"><h2 id="confirmTitle">${esc(title)}</h2>${button("", "cancel-confirm", { style: "ghost icon-only", symbol: "x", aria: "Close confirmation" })}</div><div class="modal-body">${body}${allowPermanent ? '<label class="check-label"><input id="permanent" type="checkbox">Delete permanently instead of using Trash</label><div class="review-warning" id="permanentWarning" hidden>Permanent deletion cannot be undone.</div>' : ""}<label class="phrase-label" id="phraseLabel" ${phrase ? "" : "hidden"}>Type <strong id="phraseText">${esc(phrase)}</strong> to continue<input type="text" id="confirmPhrase" autocomplete="off" spellcheck="false" aria-label="Confirmation phrase"></label></div><div class="modal-actions">${button("Cancel", "cancel-confirm")}${button(confirm, "confirm", { style: danger ? "danger" : "primary", disabled: !!phrase || requiresBackup })}</div>`;
     Overlays.open($("confirmDialog"));
     $("confirmDialog").querySelector('[data-action="cancel-confirm"]').focus();
   });
@@ -765,7 +857,7 @@ function updateConfirmation() {
   $("phraseText").textContent = phrase;
   if ($("permanentWarning")) $("permanentWarning").hidden = !perm;
   const btn = $("confirmDialog").querySelector('[data-action="confirm"]');
-  btn.disabled = !!phrase && $("confirmPhrase").value !== phrase;
+  btn.disabled = (!!phrase && $("confirmPhrase").value !== phrase) || (pendingAsk.requiresBackup && !$("diskBackupAck")?.checked);
   btn.className =
     "button " + (pendingAsk.danger || perm ? "danger" : "primary");
   btn.textContent = perm ? "Delete permanently" : pendingAsk.confirm;
@@ -776,8 +868,10 @@ function finishAsk(confirmed) {
     permanent = !!$("permanent")?.checked,
     phrase = pending.phrase || (permanent ? "DELETE" : "");
   if (confirmed && phrase && $("confirmPhrase").value !== phrase) return;
+  const backupAck = !!$("diskBackupAck")?.checked;
+  if (confirmed && pending.requiresBackup && !backupAck) return;
   pendingAsk = null;
-  Overlays.close($("confirmDialog")).then(() => pending.resolve({ confirmed, permanent }));
+  Overlays.close($("confirmDialog")).then(() => pending.resolve({ confirmed, permanent, phrase, backupAck }));
 }
 function reviewList(items) {
   return `<div class="review-total"><span>${items.length} ${items.length === 1 ? "item" : "items"} selected</span><b>${fmt(sum(items))}</b></div><div class="review-items">${items.map((i) => `<div class="review-item"><span>${esc(i.name)}</span><b>${fmt(i.size)}</b></div>`).join("")}</div>`;
@@ -964,6 +1058,10 @@ async function revealPath(path) {
   toast("Location opened in Finder.");
 }
 async function dispatch(action, el) {
+  if (action === "feature-ghost-level") return setGhostLevel(Number(el.dataset.level));
+  if (action.startsWith("ghost-")) return window.GhostUI?.dispatch(action, el);
+  if (action.startsWith("brew-")) return HomebrewUI.dispatch(action, el);
+  if (action.startsWith("toolkit-")) return ToolkitUI.dispatch(action, el);
   const id = Number(el.dataset.id),
     i = S.items.find((x) => x.id === id);
   switch (action) {
@@ -971,6 +1069,13 @@ async function dispatch(action, el) {
     case "collapse-sidebar": return setSidebar(false);
     case "navigate":
       return navigate(el.dataset.view);
+    case "theme": {
+      applyTheme(theme === "light" ? "dark" : "light");
+      try { localStorage.setItem("mdc_theme", theme); } catch {}
+      // Persist best-effort; the choice applies immediately even if a scan holds the lock.
+      api("/api/settings", { theme }).catch(() => {});
+      return draw();
+    }
     case "mode":
       mode = el.dataset.mode;
       await api("/api/settings", { mode });
@@ -1134,7 +1239,7 @@ document.addEventListener("change", (e) => {
     }
     return;
   }
-  if (el.id === "permanent") return updateConfirmation();
+  if (["permanent", "diskBackupAck"].includes(el.id)) return updateConfirmation();
   if (el.id === "categoryFilter") {
     cat = el.value;
     focusId = null;
@@ -1182,8 +1287,6 @@ document.addEventListener(
 $("brandMark").innerHTML =
   '<img src="/assets/app_icon.png" alt="" width="34" height="34">';
 $("sidebarToggle").innerHTML = icon("sidebar") + '<span class="rail-label">Sidebar</span>';
-$("localNote").innerHTML =
-  icon("shield") + "<span>Only on your Mac.<br>Your files stay yours.</span>";
 $("main").addEventListener("animationend", (event) => {
   if (event.target === $("main")) $("main").classList.remove("page-enter");
 });

@@ -1,7 +1,7 @@
 import AppKit
 import WebKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate, NSWindowDelegate, WKScriptMessageHandler {
     private var window: NSWindow!
     private var webView: WKWebView!
     private var chrome: WindowChrome!
@@ -33,9 +33,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.setFrameAutosaveName("MacDeepCleanerMainWindow")
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
-        configuration.userContentController.addUserScript(WKUserScript(
-            source: "document.addEventListener('DOMContentLoaded',()=>document.documentElement.classList.add('native-window'));",
+        let userContent = configuration.userContentController
+        userContent.addUserScript(WKUserScript(
+            source: """
+            document.addEventListener('DOMContentLoaded', () => {
+                document.documentElement.classList.add('native-window');
+                const t = document.documentElement.dataset.theme;
+                if (t) window.webkit?.messageHandlers?.themeChange?.postMessage(t);
+                const observer = new MutationObserver(() => {
+                    const theme = document.documentElement.dataset.theme;
+                    if (theme) window.webkit?.messageHandlers?.themeChange?.postMessage(theme);
+                });
+                observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+            });
+            """,
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        userContent.add(self, name: "themeChange")
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -134,12 +147,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         NSApp.terminate(nil)
     }
 
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "themeChange", let theme = message.body as? String {
+            DispatchQueue.main.async {
+                self.updateTheme(theme == "light")
+            }
+        }
+    }
+
+    func updateTheme(_ isLight: Bool) {
+        window.appearance = NSAppearance(named: isLight ? .aqua : .darkAqua)
+        window.backgroundColor = isLight
+            ? NSColor(srgbRed: 0xda/255.0, green: 0xda/255.0, blue: 0xda/255.0, alpha: 1)
+            : NSColor(srgbRed: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0, alpha: 1)
+        (window.contentView as? WorkspaceContentView)?.updateTheme(isLight: isLight)
+    }
+
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
-        if url.absoluteString == "about:blank" || (url.scheme == "http" && url.host == "127.0.0.1" && url.port == origin?.port) {
+        let local = url.scheme == "http" && url.host == "127.0.0.1" && url.port == origin?.port
+        let localBlob = origin.map { url.absoluteString.hasPrefix("blob:http://127.0.0.1:\($0.port ?? 0)/") } ?? false
+        if navigationAction.shouldPerformDownload && (local || localBlob) {
+            decisionHandler(.download)
+        } else if url.absoluteString == "about:blank" || local {
             decisionHandler(.allow)
+        } else if url.scheme == "https" || url.scheme == "http" {
+            NSWorkspace.shared.open(url)
+            decisionHandler(.cancel)
         } else { decisionHandler(.cancel) }
+    }
+
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction,
+                 didBecome download: WKDownload) {
+        download.delegate = self
+    }
+
+    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse,
+                  suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = URL(fileURLWithPath: suggestedFilename).lastPathComponent
+        panel.canCreateDirectories = true
+        panel.beginSheetModal(for: window) { result in
+            completionHandler(result == .OK ? panel.url : nil)
+        }
+    }
+
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+        let alert = NSAlert(error: error)
+        alert.beginSheetModal(for: window)
     }
 
     func windowDidEnterFullScreen(_ notification: Notification) {
@@ -164,17 +220,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func windowDidResignKey(_ notification: Notification) { chrome?.needsDisplay = true }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        sender.close()
         NSApp.terminate(nil)
-        return true
+        // Keep the window visible while the operation guard decides whether to quit.
+        return false
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard opened, !terminating else { return .terminateNow }
-        webView.evaluateJavaScript("typeof busy !== 'undefined' && (busy || Boolean(S.busy))") { value, _ in
+        webView.evaluateJavaScript("typeof busy !== 'undefined' && (busy || Boolean(S.busy) || (typeof ToolkitUI !== 'undefined' && ToolkitUI.isRunning()) || Boolean(window.GhostUI?.isRunning()))") { value, _ in
             if (value as? Bool) == true {
                 let alert = NSAlert()
-                alert.messageText = "Cleanup is still running"
+                alert.messageText = "An operation is still running"
                 alert.informativeText = "Wait for the current operation to finish before quitting."
                 alert.addButton(withTitle: "Keep running")
                 alert.runModal()

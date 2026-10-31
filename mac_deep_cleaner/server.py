@@ -1,10 +1,8 @@
-"""Authenticated loopback-only HTTP transport; no external services or uploads."""
+"""Authenticated loopback-only dashboard transport. Homebrew jobs may fetch package metadata."""
 import hmac
 import http.cookies
 import json
 import logging
-import os
-from pathlib import Path
 import secrets
 import signal
 import socket
@@ -13,6 +11,8 @@ import time
 import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
 from .service import APIError, CleanerService
 
 WEB = Path(__file__).with_name('web')
@@ -25,6 +25,10 @@ ASSETS = {'/': ('index.html', 'text/html; charset=utf-8'),
           '/assets/app.js': ('app.js', 'text/javascript; charset=utf-8'),
           '/assets/controls.js': ('controls.js', 'text/javascript; charset=utf-8'),
           '/assets/icons.js': ('icons.js', 'text/javascript; charset=utf-8'),
+          '/assets/toolkit.js': ('toolkit.js', 'text/javascript; charset=utf-8'),
+          '/assets/homebrew.js': ('homebrew.js', 'text/javascript; charset=utf-8'),
+          '/assets/ghosts.js': ('ghosts.js', 'text/javascript; charset=utf-8'),
+          '/assets/ghosts.css': ('ghosts.css', 'text/css; charset=utf-8'),
           '/assets/styles.css': ('styles.css', 'text/css; charset=utf-8')}
 MAX_BODY = 2_000_000
 LOG = logging.getLogger(__name__)
@@ -132,8 +136,43 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, (BRANDING / 'app_icon.png').read_bytes(), 'image/png')
             if url.path in ASSETS:
                 filename, kind = ASSETS[url.path]
-                return self._send(200, (WEB / filename).read_bytes(), kind)
+                data = (WEB / filename).read_bytes()
+                if filename == 'index.html':
+                    data = data.replace(b'__MDC_SESSION__', self.server.token.encode())
+                return self._send(200, data, kind)
             service = self.server.service
+            if url.path == '/api/ghosts/config':
+                return self._send(200, service.ghost_config())
+            if url.path == '/api/ghosts/icon':
+                try:
+                    ghost_id = int(query.get('id', ['-1'])[0])
+                except ValueError:
+                    raise APIError(400, 'Invalid ghost ID.')
+                data = service.ghosts().icon(ghost_id)
+                if data:
+                    return self._send(200, data, 'image/png', headers={'Cache-Control': 'public, max-age=86400, immutable'})
+                raise APIError(404, 'Icon not found.')
+            if url.path == '/api/ghosts/explain':
+                try:
+                    ghost_id = int(query.get('id', ['-1'])[0])
+                except ValueError:
+                    raise APIError(400, 'Invalid ghost ID.')
+                force = query.get('refresh', ['0'])[0] in ('1', 'true')
+                return self._send(200, service.ghosts().explain(ghost_id, force_refresh=force))
+            if url.path.startswith('/api/ghosts/'):
+                return self._send(200, service.ghosts().get(url.path))
+            if url.path == '/api/brew':
+                return self._send(200, service.toolkit.brew.report())
+            if url.path == '/api/brew/explain':
+                return self._send(200, service.toolkit.brew.explain(query.get('package', [''])[0]))
+            if url.path == '/api/brew/export':
+                return self._send(200, {'brewfile': service.toolkit.brew.brewfile()})
+            if url.path == '/api/health':
+                return self._send(200, service.toolkit.health())
+            if url.path == '/api/disks':
+                return self._send(200, service.toolkit.disks())
+            if url.path == '/api/jobs':
+                return self._send(200, service.toolkit.history())
             if url.path == '/api/state':
                 return self._send(200, service.state())
             if url.path == '/api/apps':
@@ -158,6 +197,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             self._authorized()
+            if (self.headers.get('Origin') != self.server.origin or
+                    not hmac.compare_digest(self.headers.get('X-MDC-Token', ''), self.server.token)):
+                raise APIError(403, 'A local Origin and session request token are required.')
             if self.headers.get('Transfer-Encoding'):
                 raise APIError(400, 'Chunked request bodies are not supported.')
             lengths = self.headers.get_all('Content-Length', [])

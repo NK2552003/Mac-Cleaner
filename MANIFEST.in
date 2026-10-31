@@ -1,0 +1,8 @@
+include README.md CHANGELOG.md SECURITY.md LICENSE requirements.txt
+include mc.py Package.swift Launch.command
+recursive-include desktop *.swift
+recursive-include scripts *.py *.sh
+recursive-include Formula *.rb
+recursive-include tests *.py *.cjs
+
+recursive-include docs *.md

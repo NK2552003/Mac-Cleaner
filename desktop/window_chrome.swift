@@ -63,6 +63,7 @@ final class WindowControl: NSButton {
 
 final class WindowChrome: NSView {
     private var tracking: NSTrackingArea?
+    var isLight = false { didSet { needsDisplay = true } }
     let controls = [WindowControl(kind: .close, x: 14), WindowControl(kind: .minimize, x: 34), WindowControl(kind: .fullscreen, x: 54)]
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -85,7 +86,11 @@ final class WindowChrome: NSView {
         else { window?.performDrag(with: event) }
     }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(srgbRed: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0, alpha: 1).setFill()
+        if isLight {
+            NSColor(srgbRed: 0xda/255.0, green: 0xda/255.0, blue: 0xda/255.0, alpha: 1).setFill()
+        } else {
+            NSColor(srgbRed: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0, alpha: 1).setFill()
+        }
         bounds.fill()
         controls.forEach { $0.needsDisplay = true }
     }
@@ -122,6 +127,17 @@ final class WorkspaceContentView: NSView {
         resizeSubviews(withOldSize: .zero)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    func updateTheme(isLight: Bool) {
+        chrome.isLight = isLight
+        let bg = isLight
+            ? CGColor(srgbRed: 0xda/255.0, green: 0xda/255.0, blue: 0xda/255.0, alpha: 1)
+            : CGColor(srgbRed: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0, alpha: 1)
+        layer?.backgroundColor = bg
+        layer?.borderColor = isLight
+            ? NSColor.black.withAlphaComponent(0.12).cgColor
+            : NSColor.white.withAlphaComponent(0.13).cgColor
+        needsDisplay = true
+    }
     override func resizeSubviews(withOldSize oldSize: NSSize) {
         // In fullscreen mode, the native hover menubar/titlebar manages actions,
         // so hide our in-window custom chrome strip and expand webView to 100%.
@@ -141,7 +157,13 @@ final class WorkspaceContentView: NSView {
         chrome.isHidden = fullScreen
         layer?.cornerRadius = fullScreen ? 0 : 16
         layer?.borderWidth = fullScreen ? 0 : 1
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.13).cgColor
+        layer?.borderColor = chrome.isLight
+            ? NSColor.black.withAlphaComponent(0.12).cgColor
+            : NSColor.white.withAlphaComponent(0.13).cgColor
+        let bg = chrome.isLight
+            ? CGColor(srgbRed: 0xda/255.0, green: 0xda/255.0, blue: 0xda/255.0, alpha: 1)
+            : CGColor(srgbRed: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0, alpha: 1)
+        layer?.backgroundColor = bg
         needsLayout = true
         resizeSubviews(withOldSize: bounds.size)
     }

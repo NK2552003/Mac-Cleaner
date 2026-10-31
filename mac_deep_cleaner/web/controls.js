@@ -4,6 +4,7 @@ window.Dropdowns = (() => {
   let opened = null;
   let menu = null;
   let active = 0;
+  let sequence = 0;
   let query = "";
   let queryTimer;
   const chevron =
@@ -136,6 +137,7 @@ window.Dropdowns = (() => {
   function enhance(root = document) {
     for (const select of root.querySelectorAll("select:not([data-enhanced])")) {
       select.dataset.enhanced = "true";
+      if (!select.id) select.id = `dropdown${++sequence}`;
       const wrapper = document.createElement("div");
       wrapper.className = `dropdown ${select.className}`;
       select.before(wrapper);

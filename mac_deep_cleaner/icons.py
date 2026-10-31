@@ -37,3 +37,53 @@ def application_icon(path, icon_name=''):
             except (OSError, subprocess.SubprocessError):
                 pass
     return None
+
+
+def ghost_icon(path, bundle_id='', name=''):
+    """Locate or extract the real app icon for an orphaned leftover file."""
+    # 1. Search in ~/.Trash for the deleted .app
+    trash = os.path.expanduser('~/.Trash')
+    if os.path.isdir(trash):
+        candidates = []
+        if name:
+            candidates.extend([f"{name}.app", f"{name.capitalize()}.app", f"{name.title()}.app", f"{name.lower()}.app"])
+            spaced = name.replace('-', ' ').replace('_', ' ')
+            candidates.extend([f"{spaced}.app", f"{spaced.title()}.app"])
+        for cand in dict.fromkeys(candidates):
+            cand_path = os.path.join(trash, cand)
+            if os.path.isdir(cand_path):
+                data = application_icon(cand_path)
+                if data:
+                    return data
+        if bundle_id:
+            try:
+                for entry in os.listdir(trash):
+                    if entry.endswith('.app'):
+                        app_path = os.path.join(trash, entry)
+                        try:
+                            with open(os.path.join(app_path, 'Contents/Info.plist'), 'rb') as f:
+                                import plistlib
+                                info = plistlib.load(f)
+                                if (info.get('CFBundleIdentifier') or '').lower() == bundle_id.lower():
+                                    data = application_icon(app_path)
+                                    if data:
+                                        return data
+                        except Exception:
+                            pass
+            except OSError:
+                pass
+
+    # 2. Try Launch Services / system with bundle identifier
+    if bundle_id:
+        data = application_icon(bundle_id)
+        if data:
+            return data
+
+    # 3. Check if ghost path itself has an icon or is an app
+    if os.path.exists(path):
+        data = application_icon(path)
+        if data:
+            return data
+
+    return None
+

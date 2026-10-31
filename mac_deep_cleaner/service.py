@@ -1,23 +1,22 @@
 """Application state and serialized, versioned operations."""
-from dataclasses import asdict, replace
 import os
 import secrets
 import shutil
 import subprocess
 import threading
+from dataclasses import asdict, replace
+
+from . import __version__
 from .applications import AppAnalyzer, app_items
+from .catalog import CAT_DESC, CAT_NAMES, TOOLCHAIN_NAMES, toolchain
+from .cleanup import eligible, execute, guard_ok
+from .common import HOME, IS_MAC
+from .errors import APIError
+from .feature_config import read_config, update_config
 from .icons import application_icon
-from .catalog import CAT_NAMES, CAT_DESC, TOOLCHAIN_NAMES, toolchain
-from .cleanup import execute, guard_ok, eligible
-from .common import HOME, IS_MAC, fingerprint
 from .scanner import Scanner
 from .settings import reveal, save_settings
-
-
-class APIError(Exception):
-    def __init__(self, status, message):
-        super().__init__(message)
-        self.status = status
+from .toolkit import Toolkit
 
 
 def public_record(value):
@@ -43,6 +42,13 @@ class CleanerService:
         self.scan_thread = None
         self.app_thread = None
         self.closed = False
+        self.toolkit = Toolkit(self.operation, self._ready_to_change)
+        self._ghosts = None
+
+    def _ready_to_change(self):
+        with self.lock:
+            return (not self.closed and (not self.scanner or self.scanner.done)
+                    and (not self.analyzer or self.analyzer.done))
 
     def start_scan(self):
         with self.lock:
@@ -52,6 +58,8 @@ class CleanerService:
                 raise APIError(409, 'A scan is already running.')
             if self.analyzer and not self.analyzer.done:
                 raise APIError(409, 'Wait for application analysis to finish before rescanning.')
+            if self._ghosts:
+                self._ghosts.reset()
             if self.scanner:
                 self.scanner.close()
             self.scanner = self.scanner_factory(self.args.large_mb, self.args.old_days, self.args.dup_min_mb,
@@ -66,6 +74,9 @@ class CleanerService:
 
     def close(self):
         self.closed = True
+        self.toolkit.closed = True
+        if self._ghosts:
+            self._ghosts.close()
         if self.scanner:
             self.scanner.close()
 
@@ -86,15 +97,19 @@ class CleanerService:
                 data['group'] = toolchain(item) if item.category == 'Developer & Pro Tools' else item.category
                 items.append(data)
             disk = shutil.disk_usage(HOME)
-            return {'scanning': not sc.done, 'progress': sc.progress, 'error': sc.error,
+            return {'version': __version__, 'initial_view': getattr(self.args, 'view', 'clean'),
+                    'scanning': not sc.done, 'progress': sc.progress, 'error': sc.error,
                     'items': items, 'cats': CAT_NAMES, 'tools': TOOLCHAIN_NAMES, 'desc': CAT_DESC,
                     'scan_id': self.scan_id, 'revision': self.revision, 'busy': self.operation.locked(),
-                    'settings': {'mode': self.settings['mode'], 'min_mb': self.settings['min_mb']},
+                    'settings': {'mode': self.settings['mode'], 'min_mb': self.settings['min_mb'], 'theme': self.settings.get('theme', 'dark')},
+                    'features': {'ghosts_level': read_config()['level']},
                     'disk': {'total': disk.total, 'used': disk.used, 'free': disk.free}}
 
     def apps(self):
         with self.lock:
             if self.analyzer is None:
+                if self.operation.locked():
+                    raise APIError(409, 'Wait for the current operation before starting application analysis.')
                 sc = self.scanner
                 self.analyzer = self.analyzer_factory(sc)
                 self.apps_id = secrets.token_hex(16)
@@ -161,12 +176,64 @@ class CleanerService:
         if body.get('permanent') and not body.get('permanent_ack'):
             raise APIError(400, 'Permanent deletion requires explicit confirmation.')
 
+    def ghosts(self):
+        if read_config()['level'] == 0:
+            raise APIError(409, 'Ghost Files is off. Enable it in Settings first.')
+        with self.lock:
+            if self._ghosts is None:
+                from .ghosts.controller import GhostController
+                self._ghosts = GhostController(self)
+            return self._ghosts
+
+    def ghost_config(self, body=None):
+        if body is None:
+            return read_config()
+        if not self.operation.acquire(blocking=False):
+            raise APIError(409, 'Cancel or finish the current operation before changing Ghost Files settings.')
+        try:
+            config = update_config(body)
+            if self._ghosts:
+                if config['level'] < 2 and self._ghosts.manager:
+                    self._ghosts.manager.stop()
+                if config['level'] == 0:
+                    with self.lock:
+                        self._ghosts.reset()
+                        self.revision += 1
+                    self._ghosts.close()
+                    self._ghosts = None
+            return config
+        finally:
+            self.operation.release()
+
     def post(self, route, body):
+        if route == '/api/ghosts/config':
+            return self.ghost_config(body)
+        if route.startswith('/api/ghosts/'):
+            return self.ghosts().post(route, body)
+        if route == '/api/brew/refresh':
+            return self.toolkit.brew.report(refresh=True)
+        if route == '/api/brew/plan':
+            return self.toolkit.prepare('brew', body)
+        if route == '/api/tools/plan':
+            return self.toolkit.prepare('tool', body)
+        if route == '/api/disks/plan':
+            return self.toolkit.prepare('disk', body)
+        if route == '/api/tools/run':
+            return self.toolkit.start(body)
+        if route == '/api/tools/open':
+            return self.toolkit.open(body.get('action'))
         if route == '/api/reveal':
             with self.lock:
                 path = body.get('path')
                 known = isinstance(path, str) and path in self._known_paths()
             return {'ok': bool(known and reveal(path))}
+        if route == '/api/open-url':
+            target_url = body.get('url', '')
+            if isinstance(target_url, str) and (target_url.startswith('https://') or target_url.startswith('http://')):
+                import subprocess
+                subprocess.run(['/usr/bin/open', target_url], check=False)
+                return {'ok': True}
+            raise APIError(400, 'Invalid URL.')
         if route not in ('/api/rescan', '/api/pin', '/api/clean', '/api/app/clean', '/api/settings'):
             raise APIError(404, 'Unknown operation.')
         if not self.operation.acquire(blocking=False):
@@ -176,9 +243,14 @@ class CleanerService:
                 self.start_scan()
                 return {'scan_id': self.scan_id}
             if route == '/api/settings':
-                if body.get('mode') not in ('normal', 'dev'):
+                if 'theme' in body:
+                    if body['theme'] not in ('dark', 'light'):
+                        raise APIError(400, 'Unknown theme.')
+                    updated = {**self.settings, 'theme': body['theme']}
+                elif body.get('mode') in ('normal', 'dev'):
+                    updated = {**self.settings, 'mode': body['mode']}
+                else:
                     raise APIError(400, 'Unknown workspace mode.')
-                updated = {**self.settings, 'mode': body['mode']}
                 if not save_settings(updated):
                     raise APIError(500, 'Could not save workspace settings.')
                 self.settings = updated
@@ -212,7 +284,7 @@ class CleanerService:
                     raise APIError(409, 'The selection contains a retained duplicate. Rescan and review it.')
             else:
                 chosen = self._app_selection(body)
-            return self._execute(chosen, body.get('permanent', False))
+            return self._execute(chosen, body.get('permanent', False), body)
         finally:
             self.operation.release()
 
@@ -253,7 +325,9 @@ class CleanerService:
             raise APIError(409, 'The selection overlaps an excluded location.')
         return chosen
 
-    def _execute(self, chosen, permanent):
+    def _execute(self, chosen, permanent, body=None):
+        if self._ghosts:
+            self._ghosts.check_selection(chosen, permanent, body or {})
         if any(i.path and any(self._under(i.path, pin) or self._under(pin, i.path) for pin in self.scanner.pinned) for i in chosen):
             raise APIError(409, 'The selection overlaps an excluded location.')
         done, logs = set(), []
@@ -271,4 +345,5 @@ class CleanerService:
                     app.parts[:] = [p for p in app.parts if not removed(p.path)]
                 self.analyzer.apps[:] = [a for a in self.analyzer.apps if not removed(a.path)]
             self.revision += 1
-        return {'freed': freed, 'root': roots, 'fails': [(i.name, message) for i, message in failures], 'log': logs}
+        warning = self._ghosts.removed(done) if self._ghosts else ''
+        return {'freed': freed, 'root': roots, 'warning': warning, 'fails': [(i.name, message) for i, message in failures], 'log': logs}

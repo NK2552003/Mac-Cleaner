@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mac-deep-cleaner"
-version = "3.0.5"
-description = "Professional Mac cleanup tool — Modern Local Storage Analysis & Reviewed Cleanup"
+version = "3.2.0"
+description = "Local Mac cleanup, system maintenance, and guarded external-disk management"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{name = "NK2552003"}]
@@ -51,7 +51,7 @@ Homepage = "https://github.com/NK2552003/Mac-Cleaner"
 "Bug Tracker" = "https://github.com/NK2552003/Mac-Cleaner/issues"
 
 [tool.setuptools]
-packages = ["mac_deep_cleaner", "mac_deep_cleaner.web", "mac_deep_cleaner.assets"]
+packages = ["mac_deep_cleaner", "mac_deep_cleaner.ghosts", "mac_deep_cleaner.web", "mac_deep_cleaner.assets"]
 
 # Keep one source asset directory while shipping it inside the installed package.
 [tool.setuptools.package-dir]

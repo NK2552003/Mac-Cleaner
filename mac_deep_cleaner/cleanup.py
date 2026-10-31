@@ -55,20 +55,22 @@ def to_trash(path):
         return False, 'refused by safety guard'
     if IS_MAC:
         # argv keeps filenames out of AppleScript source. Finder supplies Put Back.
-        script = 'on run argv\ntell application "Finder" to delete POSIX file (item 1 of argv)\nend run'
+        script = 'on run argv\ntell application "Finder" to delete (POSIX file (item 1 of argv) as alias)\nend run'
         try:
             result = subprocess.run(['/usr/bin/osascript', '-e', script, path], capture_output=True, text=True, timeout=60)
             if result.returncode == 0:
                 return True, 'moved to Trash'
-            return False, result.stderr.strip() or 'Finder could not move this item to Trash'
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            return False, str(exc)
-    # Useful for generic scans and isolated development; never merge trash entries.
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    # Useful for generic scans and isolated development, or when Finder AppleScript is unavailable.
     trash = os.path.join(HOME, '.Trash')
     if os.path.islink(trash):
         return False, 'Trash cannot be a symbolic link'
     os.makedirs(trash, mode=0o700, exist_ok=True)
-    dest = os.path.join(trash, os.path.basename(path) + '-' + secrets.token_hex(8))
+    base_name = os.path.basename(path.rstrip(os.sep))
+    dest = os.path.join(trash, base_name)
+    if os.path.lexists(dest):
+        dest = os.path.join(trash, f"{base_name}-{secrets.token_hex(4)}")
     try:
         shutil.move(path, dest)
         return True, 'moved to Trash'

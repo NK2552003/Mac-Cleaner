@@ -66,6 +66,41 @@ jobs:
           bash scripts/build.sh venv
           bash scripts/build.sh test
 
+  ghost-ui:
+    name: Ghost Files browser flows
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install browser verification tools
+        run: |
+          npm install --prefix /tmp/mdc-ui-check playwright@1.64.1
+          /tmp/mdc-ui-check/node_modules/.bin/playwright install --with-deps chromium
+      - name: Run isolated Ghost Files browser flow
+        run: |
+          python tests/ghosts_fixture.py > /tmp/ghost-fixture.log 2>&1 &
+          fixture_pid=$!
+          trap 'kill "$fixture_pid"' EXIT
+          for attempt in {1..50}; do
+            test -s /tmp/mdc-ghost-check/launch-url && break
+            sleep 0.1
+          done
+          NODE_PATH=/tmp/mdc-ui-check/node_modules node tests/verify_ghosts.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghost-files-browser-evidence
+          path: |
+            /tmp/mdc-ghost-check/*.png
+            /tmp/mdc-ghost-check/ofrenda.md
+            /tmp/ghost-fixture.log
+
   build-check:
     name: Build Distribution Check
     needs: test
