@@ -96,11 +96,11 @@ window.GhostUI = (() => {
       <small>Moving files to Trash keeps them recoverable; space is freed when you empty it yourself.</small>`;
   }
 
-  function renderOfrendaHtml() {
+  function renderHistoryHtml() {
     if (!report || !report.ofrenda || !report.ofrenda.length) {
-      return '<div class="ofrenda-empty">Your first farewell will appear here after a successful move to Trash.</div>';
+      return '<div class="history-empty">Your cleanup history will appear here after a successful move to Trash.</div>';
     }
-    return `<ol>${report.ofrenda.slice().reverse().map(e => `<li><strong>${esc(e.name)}</strong><span>${fmt(e.size_bytes)} · ${esc(e.date.slice(0,10))}</span><p>${esc(e.farewell)}</p></li>`).join("")}</ol>`;
+    return `<ol class="history-list">${report.ofrenda.slice().reverse().map(e => `<li><strong>${esc(e.name)}</strong><span>${fmt(e.size_bytes)} · ${esc(e.date.slice(0,10))}</span><p>${esc(e.farewell || "Moved to Trash")}</p></li>`).join("")}</ol>`;
   }
 
   function renderCardsHtml() {
@@ -211,31 +211,25 @@ window.GhostUI = (() => {
     const listChanged = !prevGhosts ||
       prevScanId !== report.scan_id ||
       prevGhosts.length !== report.ghosts.length ||
-      prevGhosts.some((g, i) => g.id !== report.ghosts[i]?.id || g.hidden !== report.ghosts[i]?.hidden);
+      prevGhosts.some((g, i) => g.id !== report.ghosts[i]?.id || g.hidden !== report.ghosts[i]?.hidden || g.unlocked !== report.ghosts[i]?.unlocked || g.final_verdict !== report.ghosts[i]?.final_verdict);
 
     if (listChanged) {
       updateCards();
     } else {
-      // In-place text update for cards (hauntings & verdicts) - no DOM replacement, no icon re-fetching!
+      // In-place text update for cards (hauntings) - no DOM replacement, no icon re-fetching!
       report.ghosts.forEach(g => {
         const cardEl = document.querySelector(`.ghost-card[data-ghost-id="${g.id}"]`);
         if (cardEl) {
           const hauntEl = cardEl.querySelector(".ghost-haunting");
           if (hauntEl && hauntEl.textContent !== g.haunting) hauntEl.textContent = g.haunting;
-          const verdictEl = cardEl.querySelector(".ghost-verdict");
-          if (verdictEl && !verdictEl.classList.contains(g.final_verdict)) {
-            const keep = g.final_verdict === "keep" && !g.unlocked;
-            verdictEl.className = `ghost-verdict ${g.final_verdict}`;
-            verdictEl.innerHTML = `${icon(keep ? "lock" : "shield")}<strong>${g.unlocked && g.final_verdict === "keep" ? "Unlocked for review" : labels[g.final_verdict]}</strong>${g.reason ? `<span>${esc(g.reason)}</span>` : ""}`;
-          }
         }
       });
     }
 
-    // 6. Update ofrenda
+    // 6. Update cleanup history
     const ofrWrap = document.getElementById("ghostOfrendaWrap");
     if (ofrWrap) {
-      ofrWrap.innerHTML = renderOfrendaHtml();
+      ofrWrap.innerHTML = renderHistoryHtml();
     }
   }
 
@@ -316,13 +310,13 @@ window.GhostUI = (() => {
           </div>
         </section>
 
-        <aside class="ofrenda">
-          <h2>Ofrenda</h2>
-          <p>A small remembrance of what you let go.</p>
+        <aside class="history-panel">
+          <h2>Cleanup History</h2>
+          <p>Recently removed leftovers moved to Trash.</p>
           <div id="ghostOfrendaWrap">
-            ${renderOfrendaHtml()}
+            ${renderHistoryHtml()}
           </div>
-          ${button("Export ofrenda.md", "ghost-export", {symbol:"download"})}
+          ${button("Export history (.md)", "ghost-export", {symbol:"download"})}
         </aside>
       </div>
 
@@ -336,7 +330,7 @@ window.GhostUI = (() => {
 
   function card(g) {
     const keep = g.final_verdict === "keep" && !g.unlocked;
-    return `<article class="ghost-card" data-ghost-id="${g.id}">
+    return `<article class="ghost-card" data-ghost-id="${g.id}" data-action="ghost-inspect" data-id="${g.id}">
       <div class="ghost-card-head">
         <span class="app-icon ghost-emblem" aria-hidden="true">
           <span>${icon("ghost")}</span>
@@ -350,23 +344,142 @@ window.GhostUI = (() => {
       </div>
       <p class="ghost-haunting">${esc(g.haunting)}</p>
       <div class="ghost-verdict ${g.final_verdict}">
-        ${icon(keep ? "lock" : "shield")}
-        <strong>${g.unlocked && g.final_verdict === "keep" ? "Unlocked for review" : labels[g.final_verdict]}</strong>
+        ${icon(keep ? "lock" : g.unlocked && g.final_verdict === "keep" ? "unlock" : "shield")}
         ${g.reason ? `<span>${esc(g.reason)}</span>` : ""}
       </div>
-      <details class="ghost-facts">
-        <summary>Inspect this leftover</summary>
-        ${g.source === "ai" ? `<p>Narrated by ${esc(g.model || config.model)} on this Mac.</p>` : ""}
-        <p class="ghost-path">${esc(g.path)}</p>
-        <p>${g.confidence === "high" ? "Bundle identifier has no installed match in the scanned folders." : "Ownership is unverified; the folder name alone is not enough."}</p>
-        ${g.ai_error ? `<p>${esc(g.ai_error)}</p>` : ""}
-        ${button("Show in Finder", "ghost-reveal", {data:{id:g.id}})}
-      </details>
       <div class="ghost-card-actions">
-        ${keep ? button("Review locked ghost", "ghost-unlock", {symbol:"lock", data:{id:g.id}, disabled:locked()}) : button("Banish to Trash", "ghost-banish", {symbol:"trash", style:"primary", data:{id:g.id}, disabled:locked()})}
-        ${button("Let it rest", "ghost-hide", {style:"ghost", data:{id:g.id}, disabled:locked()})}
+        <div class="ghost-card-buttons">
+          ${button("Inspect", "ghost-inspect", {symbol:"search", style:"ghost", data:{id:g.id}})}
+          ${keep ? button("Review locked ghost", "ghost-unlock", {symbol:"lock", data:{id:g.id}, disabled:locked()}) : button("Banish to Trash", "ghost-banish", {symbol:"trash", style:"primary", data:{id:g.id}, disabled:locked()})}
+          ${button("Let it rest", "ghost-hide", {style:"ghost", data:{id:g.id}, disabled:locked()})}
+        </div>
+        <span class="ghost-status-pill ${g.final_verdict}">${g.unlocked && g.final_verdict === "keep" ? "Unlocked for review" : labels[g.final_verdict]}</span>
       </div>
     </article>`;
+  }
+
+  let activeGhostDrawerId = null;
+
+  async function openGhostDrawer(id, forceRefresh = false) {
+    const g = report?.ghosts.find(x => x.id === id);
+    if (!g) return;
+    activeGhostDrawerId = id;
+    detailKind = "ghost-inspect";
+
+    const keep = g.final_verdict === "keep" && !g.unlocked;
+
+    $("detailDialog").innerHTML = `
+      <div class="drawer-head">
+        <div class="ghost-drawer-title">
+          <span class="app-icon ghost-emblem" aria-hidden="true">
+            <span>${icon("ghost")}</span>
+            <img src="/api/ghosts/icon?id=${g.id}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">
+          </span>
+          <div>
+            <h2>${esc(g.name_guess)}</h2>
+            <small>${esc(g.kind)} · ${fmt(g.size_bytes)} · ${g.age_days} days untouched</small>
+          </div>
+        </div>
+        ${button("", "close-detail", {symbol:"x",style:"ghost icon-only",aria:"Close inspector"})}
+      </div>
+      <div class="drawer-body ghost-inspect-drawer">
+        <div id="ghostDrawerContent">
+          <div class="ghost-loading-box">
+            <span class="ghost-spinner"></span>
+            <p>Analyzing ${esc(g.name_guess)} with web context and local files…</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    Overlays.open($("detailDialog"));
+
+    try {
+      const data = await api(`/api/ghosts/explain?id=${id}${forceRefresh ? "&refresh=1" : ""}`);
+      if (activeGhostDrawerId !== id) return;
+
+      const contentEl = $("ghostDrawerContent");
+      if (!contentEl) return;
+
+      const fileRows = (data.files || []).map(f => `
+        <div class="ghost-file-row">
+          <span class="ghost-file-icon">${icon(f.is_dir ? "folder" : "file")}</span>
+          <span class="ghost-file-name" title="${esc(f.name)}">${esc(f.name)}</span>
+          <span class="ghost-file-size">${esc(f.size_fmt)}</span>
+        </div>
+      `).join("");
+
+      contentEl.innerHTML = `
+        <!-- Card 1: Safety Assessment -->
+        <div class="ghost-drawer-card verdict-card ${g.final_verdict}">
+          <div class="verdict-icon-wrap">
+            ${icon(keep ? "lock" : g.unlocked && g.final_verdict === "keep" ? "unlock" : "shield")}
+          </div>
+          <div class="verdict-body">
+            <div class="verdict-status">${g.unlocked && g.final_verdict === "keep" ? "Unlocked for review" : labels[g.final_verdict]}</div>
+            <p class="verdict-desc">${esc(data.recommendation || g.reason)}</p>
+          </div>
+        </div>
+
+        <!-- Card 2: About & Usage -->
+        <div class="ghost-drawer-card">
+          <div class="card-section">
+            <span class="card-tag">About this application</span>
+            <p class="card-text">${esc(data.summary)}</p>
+          </div>
+          <div class="card-divider"></div>
+          <div class="card-section">
+            <span class="card-tag">What it is used for & workflows</span>
+            <p class="card-text">${esc(data.usage)}</p>
+          </div>
+        </div>
+
+        <!-- Card 3: Leftover Contents & Files -->
+        <div class="ghost-drawer-card">
+          <div class="card-section">
+            <span class="card-tag">Leftover Directory Contents</span>
+            <p class="card-text">${esc(data.data_stored)}</p>
+            <div class="ghost-path-bar">
+              <code>${esc(data.path)}</code>
+              ${button("Reveal", "ghost-reveal", {symbol:"folder", data:{id:g.id}, style:"ghost small"})}
+            </div>
+            ${data.files && data.files.length ? `
+              <div class="ghost-files-list">
+                <div class="ghost-files-head">Files inside folder (${data.files.length})</div>
+                ${fileRows}
+              </div>
+            ` : ""}
+          </div>
+        </div>
+
+        <!-- Card 4: Web Search Context -->
+        <div class="ghost-drawer-card">
+          <div class="card-section">
+            <span class="card-tag">Web & GitHub search context</span>
+            <div class="ghost-search-pills">
+              <a href="${esc(data.search_links.google)}" target="_blank" rel="noopener" class="button ghost small search-pill">Google ↗</a>
+              <a href="${esc(data.search_links.github)}" target="_blank" rel="noopener" class="button ghost small search-pill">GitHub ↗</a>
+              <a href="${esc(data.search_links.duckduckgo)}" target="_blank" rel="noopener" class="button ghost small search-pill">DuckDuckGo ↗</a>
+              ${button("Re-analyze ↻", "ghost-reanalyze", {data:{id:g.id}, style:"ghost small"})}
+            </div>
+            <p class="ghost-ai-source-badge">
+              ${icon("sparkles")} Analysis source: ${esc(data.model || "local analysis")}
+            </p>
+          </div>
+        </div>
+
+        <div class="ghost-inspect-actions">
+          ${keep ? button("Review locked ghost", "ghost-unlock", {symbol:"lock", data:{id:g.id}, disabled:locked()}) : button("Banish to Trash", "ghost-banish", {symbol:"trash", style:"primary", data:{id:g.id}, disabled:locked()})}
+          ${button("Reveal in Finder", "ghost-reveal", {style:"ghost", data:{id:g.id}})}
+          ${button("Let it rest", "ghost-hide", {style:"ghost", data:{id:g.id}, disabled:locked()})}
+        </div>
+      `;
+    } catch(err) {
+      const contentEl = $("ghostDrawerContent");
+      if (contentEl) {
+        contentEl.innerHTML = `<p class="review-warning">Could not inspect: ${esc(err.message)}</p>`;
+      }
+    }
   }
 
   async function setup() {
@@ -442,11 +555,13 @@ window.GhostUI = (() => {
       const blob = new Blob([data.markdown], {type:"text/markdown;charset=utf-8"});
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "ofrenda.md";
+      a.download = "cleanup-history.md";
       a.click();
       URL.revokeObjectURL(a.href);
       return;
     }
+    if (action === "ghost-inspect") return openGhostDrawer(id);
+    if (action === "ghost-reanalyze") return openGhostDrawer(id, true);
 
     // Pagination and filter actions
     if (action === "ghost-page") {
@@ -551,7 +666,7 @@ window.GhostUI = (() => {
           ghost_reviewed_ids:[id]
         });
         if (result.fails.length) toast(result.fails.map(f => f.join(": ")).join("; "), true);
-        else toast("Moved to Trash. A farewell has been added to your Ofrenda.");
+        else toast("Moved to Trash. Recorded in cleanup history.");
         if (result.warning) toast(result.warning, true);
       } finally {
         busy = false;
@@ -559,6 +674,15 @@ window.GhostUI = (() => {
       }
     }
   }
+
+  // Click on card opens the research & inspection drawer
+  document.addEventListener("click", (e) => {
+    const cardEl = e.target.closest(".ghost-card");
+    if (cardEl && !e.target.closest("button, a, input, select, details")) {
+      const id = Number(cardEl.dataset.ghostId);
+      if (id) openGhostDrawer(id);
+    }
+  });
 
   // Bind input listeners for search & sort
   document.addEventListener("input", (e) => {

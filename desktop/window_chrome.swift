@@ -157,7 +157,13 @@ final class WorkspaceContentView: NSView {
         chrome.isHidden = fullScreen
         layer?.cornerRadius = fullScreen ? 0 : 16
         layer?.borderWidth = fullScreen ? 0 : 1
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.13).cgColor
+        layer?.borderColor = chrome.isLight
+            ? NSColor.black.withAlphaComponent(0.12).cgColor
+            : NSColor.white.withAlphaComponent(0.13).cgColor
+        let bg = chrome.isLight
+            ? CGColor(srgbRed: 0xda/255.0, green: 0xda/255.0, blue: 0xda/255.0, alpha: 1)
+            : CGColor(srgbRed: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0, alpha: 1)
+        layer?.backgroundColor = bg
         needsLayout = true
         resizeSubviews(withOldSize: bounds.size)
     }

@@ -1908,6 +1908,9 @@ h1 {
   max-width:100%;
   flex:0 1 auto
 }
+select[hidden], [hidden] {
+  display:none!important
+}
 .dropdown select[hidden] {
   display:none!important
 }
@@ -2490,5 +2493,5 @@ dialog.is-closing::backdrop { animation: backdrop-out .18s ease-in both; }
 .theme-switch.is-light .theme-track i { transform: translateX(18px); }
 /* Light theme: the interface is designed dark-first, so the whole surface is inverted
    once and media is inverted back, which keeps every component and the Ghost workspace consistent. */
-html[data-theme="light"] { color-scheme: light; filter: invert(1) hue-rotate(180deg); background: #dadada; }
+html[data-theme="light"] { color-scheme: light; filter: invert(1) hue-rotate(180deg); background: var(--bg); }
 html[data-theme="light"] img, html[data-theme="light"] video, html[data-theme="light"] canvas { filter: invert(1) hue-rotate(180deg); }

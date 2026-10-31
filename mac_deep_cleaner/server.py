@@ -152,6 +152,13 @@ class Handler(BaseHTTPRequestHandler):
                 if data:
                     return self._send(200, data, 'image/png', headers={'Cache-Control': 'public, max-age=86400, immutable'})
                 raise APIError(404, 'Icon not found.')
+            if url.path == '/api/ghosts/explain':
+                try:
+                    ghost_id = int(query.get('id', ['-1'])[0])
+                except ValueError:
+                    raise APIError(400, 'Invalid ghost ID.')
+                force = query.get('refresh', ['0'])[0] in ('1', 'true')
+                return self._send(200, service.ghosts().explain(ghost_id, force_refresh=force))
             if url.path.startswith('/api/ghosts/'):
                 return self._send(200, service.ghosts().get(url.path))
             if url.path == '/api/brew':

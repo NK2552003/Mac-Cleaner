@@ -288,7 +288,22 @@ class GhostController:
         self._icons[ghost_id] = data
         return data
 
+    def explain(self, ghost_id, force_refresh=False):
+        entry = self.entries.get(ghost_id)
+        if not entry:
+            raise APIError(404, 'Ghost leftover not found.')
+        ghost, output = entry
+        config = read_config()
+        model = config.get('model') if config.get('level') == 2 else None
+        from .research import explain_ghost
+        return explain_ghost(ghost, model=model, force_refresh=force_refresh)
+
     def post(self, route, body):
+        if route == '/api/ghosts/explain':
+            ghost_id = body.get('id')
+            if not isinstance(ghost_id, int):
+                raise APIError(400, 'Invalid ghost ID.')
+            return self.explain(ghost_id, force_refresh=bool(body.get('refresh', False)))
         if route == '/api/ghosts/scan':
             return self.scan()
         if route == '/api/ghosts/haunt':

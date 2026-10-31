@@ -157,6 +157,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func updateTheme(_ isLight: Bool) {
         window.appearance = NSAppearance(named: isLight ? .aqua : .darkAqua)
+        window.backgroundColor = isLight
+            ? NSColor(srgbRed: 0xda/255.0, green: 0xda/255.0, blue: 0xda/255.0, alpha: 1)
+            : NSColor(srgbRed: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0, alpha: 1)
         (window.contentView as? WorkspaceContentView)?.updateTheme(isLight: isLight)
     }
 
@@ -169,6 +172,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             decisionHandler(.download)
         } else if url.absoluteString == "about:blank" || local {
             decisionHandler(.allow)
+        } else if url.scheme == "https" || url.scheme == "http" {
+            NSWorkspace.shared.open(url)
+            decisionHandler(.cancel)
         } else { decisionHandler(.cancel) }
     }
 

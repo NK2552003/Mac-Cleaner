@@ -10,20 +10,20 @@ CACHE = Path.home() / '.cache/mac-deep-cleaner/ghosts.json'
 
 
 LINES = {
-    'Application Support': '{n} left its saved data and settings behind in Application Support.',
-    'Caches': '{n} left temporary cache files that an app can rebuild.',
-    'Preferences': '{n} left a preferences file after the app was removed.',
-    'Containers': '{n} left a sandboxed container, possibly with its own documents.',
-    'Group Containers': '{n} left shared app-group data that related apps may still use.',
-    'Saved State': '{n} left saved window state that is rebuilt when needed.',
-    'Logs': '{n} left log files that are only useful for troubleshooting.',
-    'HTTPStorages': '{n} left saved network session data.'}
+    'Application Support': '{n} left configuration and saved settings behind in Application Support.',
+    'Caches': '{n} left temporary cache files that can be safely rebuilt.',
+    'Preferences': '{n} left preference files after the application was removed.',
+    'Containers': '{n} left a sandboxed application container.',
+    'Group Containers': '{n} left shared app-group data that related applications may still use.',
+    'Saved State': '{n} left saved window state that is safely recreated when needed.',
+    'Logs': '{n} left diagnostic log files.',
+    'HTTPStorages': '{n} left cached network cookies and session data.'}
 
 
 def fallback(ghost):
     # Size and age already appear on the card; the line says what the leftover is.
     verdict = rule_verdict(ghost)
-    line = LINES.get(ghost.kind, '{n} left something behind.').format(n=ghost.name_guess)
+    line = LINES.get(ghost.kind, '{n} left residual files behind.').format(n=ghost.name_guess)
     return {'haunting': line, 'verdict': None, 'final_verdict': verdict,
             'reason': REASONS[verdict], 'source': 'rules'}
 
@@ -50,7 +50,7 @@ def ground(ghost, output):
 
 
 def cache_key(ghost, model):
-    data = (ghost.path, ghost.identity, ghost.size_bytes, ghost.age_days, ghost.confidence, model, 3)
+    data = (ghost.path, ghost.identity, ghost.size_bytes, ghost.age_days, ghost.confidence, model, 5)
     return hashlib.sha256(json.dumps(data).encode()).hexdigest()
 
 

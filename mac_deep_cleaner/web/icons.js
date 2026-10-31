@@ -39,6 +39,9 @@ const P = {
     '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
   refresh: '<path d="M20 12a8 8 0 11-2.3-5.7"/><path d="M20 4v6h-6"/>',
   pin: '<path d="M9 4h6l-1 6 3 3H7l3-3z"/><path d="M12 13v7"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/>',
+  unlock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0"/>',
+  arrow: '<path d="M5 12h14M12 5l7 7-7 7"/>',
 };
 const CATI = {
   "System Junk": "cache",
@@ -58,3 +61,4 @@ const CATI = {
 };
 
 P.gear = P.nav_settings;
+P.sparkles = P.clean;

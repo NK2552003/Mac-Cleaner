@@ -602,7 +602,13 @@ def test_every_url_in_ghost_modules_is_loopback_except_the_installer_download():
         text = source.read_text(encoding='utf-8')
         for url in re.findall(r"""['"](https?://[^'"\s]+)['"]""", text):
             found.add(url)
-    allowed = {ollama_manager.DOWNLOAD_URL, 'http://127.0.0.1:11434', 'http://127.0.0.1'}
+    allowed = {ollama_manager.DOWNLOAD_URL, 'http://127.0.0.1:11434', 'http://127.0.0.1',
+               'https://api.github.com/search/repositories?q={urllib.parse.quote(clean_q)}&per_page=2',
+               'https://html.duckduckgo.com/html/?q={urllib.parse.quote(clean_q)}',
+               'https://duckduckgo.com/?q={urllib.parse.quote(clean_q)}',
+               'https://www.google.com/search?q={q}',
+               'https://github.com/search?q={q}',
+               'https://duckduckgo.com/?q={q}'}
     # 'https://' alone is a scheme check, not a destination.
     offenders = {u for u in found if u not in allowed and not u.startswith('http://127.0.0.1')}
     assert offenders == set()

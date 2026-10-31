@@ -32,6 +32,7 @@ ALIASES = {
     'com.microsoft.vscodeinsiders': {'code - insiders'},
     'com.openai.chat': {'chatgpt', 'sky'},
     'com.google.chrome': {'chrome', 'google chrome', 'googleupdater'},
+    'com.axosoft.gitkraken': {'gitkraken', 'gitkrakencli', 'gk'},
 }
 
 SYSTEM_PREFIXES = (

@@ -227,6 +227,13 @@ class CleanerService:
                 path = body.get('path')
                 known = isinstance(path, str) and path in self._known_paths()
             return {'ok': bool(known and reveal(path))}
+        if route == '/api/open-url':
+            target_url = body.get('url', '')
+            if isinstance(target_url, str) and (target_url.startswith('https://') or target_url.startswith('http://')):
+                import subprocess
+                subprocess.run(['/usr/bin/open', target_url], check=False)
+                return {'ok': True}
+            raise APIError(400, 'Invalid URL.')
         if route not in ('/api/rescan', '/api/pin', '/api/clean', '/api/app/clean', '/api/settings'):
             raise APIError(404, 'Unknown operation.')
         if not self.operation.acquire(blocking=False):

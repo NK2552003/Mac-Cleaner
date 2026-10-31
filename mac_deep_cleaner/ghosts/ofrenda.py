@@ -21,16 +21,16 @@ def remember(ghosts):
     for ghost in ghosts:
         entries.append({'name': ghost.name_guess, 'size_bytes': ghost.size_bytes,
             'date': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
-            'farewell': 'A little more room for what comes next. Rest gently.'})
+            'farewell': 'Moved to Trash'})
     atomic_json(LEDGER, entries)
 
 
 def markdown():
     def escape(value):
         return str(value).replace('\n', ' ').replace('\r', ' ').replace('\\', '\\\\').replace('|', '\\|').replace('<', '&lt;').replace('>', '&gt;')
-    lines = ['# Ofrenda', '', 'A remembrance of app leftovers moved to the Trash.', '',
-             'Files still occupy disk space until you empty the Trash yourself.', '',
-             '| Name | Bytes | Date (UTC) |', '| --- | ---: | --- |']
+    lines = ['# Cleanup History', '', 'Leftover files moved to the Trash by Mac Deep Cleaner.', '',
+             'Files still occupy disk space until you empty the Trash yourself in Finder.', '',
+             '| Application / Item | Bytes | Date (UTC) |', '| --- | ---: | --- |']
     for entry in records():
         lines.append(f"| {escape(entry['name'])} | {int(entry['size_bytes'])} | {escape(entry['date'])} |")
     return '\n'.join(lines) + '\n'
