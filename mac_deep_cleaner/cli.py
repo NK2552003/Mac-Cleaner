@@ -142,6 +142,9 @@ def run_toolkit_cli(args):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == 'ghosts':
+        from .ghost_cli import main as ghost_main
+        return ghost_main(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == 'brew':
         from .brew_cli import main as brew_main
         def dashboard(options):

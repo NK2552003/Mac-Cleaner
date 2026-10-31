@@ -9,7 +9,7 @@ from .common import HOME, IS_MAC, expand, run
 SETTINGS_DIR = os.path.join(HOME, "Library", "Application Support", "Mac Deep Cleaner")
 SETTINGS_FILE = os.path.join(SETTINGS_DIR, "settings.json")
 LEGACY_SETTINGS_FILE = os.path.join(HOME, "Library", "Application Support", "Mac Cleaner", "settings.json")
-DEFAULT_SETTINGS = {"mode": "normal", "delete": "trash", "min_mb": 10, "pinned": []}
+DEFAULT_SETTINGS = {"mode": "normal", "delete": "trash", "min_mb": 10, "pinned": [], "theme": "dark"}
 
 
 def validated(value):
@@ -20,6 +20,8 @@ def validated(value):
         result["mode"] = value["mode"]
     if value.get("delete") in ("trash", "rm"):
         result["delete"] = value["delete"]
+    if value.get("theme") in ("dark", "light"):
+        result["theme"] = value["theme"]
     size = value.get("min_mb")
     if type(size) in (int, float) and math.isfinite(size) and 0 <= size <= 1_000_000:
         result["min_mb"] = size

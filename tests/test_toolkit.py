@@ -355,7 +355,10 @@ class ToolkitHTTPTest(unittest.TestCase):
     def request(self, path, body=None, authorized=True, origin=None):
         connection = http.client.HTTPConnection('127.0.0.1',self.server.server_port)
         headers = {'Content-Type':'application/json'}
-        if authorized: headers['Cookie'] = f'{self.server.cookie_name}={self.server.token}'
+        if authorized:
+            headers['Cookie'] = f'{self.server.cookie_name}={self.server.token}'
+            headers['X-MDC-Token'] = self.server.token
+            headers['Origin'] = self.server.origin
         if origin: headers['Origin'] = origin
         connection.request('GET' if body is None else 'POST',path,body=None if body is None else json.dumps(body),headers=headers)
         response = connection.getresponse(); result = (response.status,response.read()); connection.close()

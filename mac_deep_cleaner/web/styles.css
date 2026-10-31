@@ -2064,16 +2064,13 @@ body:has(dialog[open]) { overflow: hidden; }
 .nav-button.active { background: #3a3a3a; color: #fff; }
 .nav-button.active::before { display: none; }
 .nav-short { display: none; }
-.nav-full, .rail-label, .brand-name, .local-note span { opacity: 0; visibility: hidden; transition: opacity .16s; }
+.nav-full, .rail-label, .brand-name { opacity: 0; visibility: hidden; transition: opacity .16s; }
 .sidebar-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
 .sidebar-bottom::before { content: ''; height: 1px; background: #ffffff12; margin: 2px 6px 4px; }
 .mode-control { position: relative; }
 .mode-control.enabled { color: var(--safe); background: #303b35; }
 .mode-indicator { width: 5px; height: 5px; background: currentColor; border-radius: 50%; position: absolute; right: 6px; top: 8px; opacity: .4; }
 .mode-control.enabled .mode-indicator { opacity: 1; }
-.local-note { display: flex; align-items: center; gap: 12px; height: 34px; padding: 0 10px; color: #999; overflow: hidden; }
-.local-note .i { width: 18px; height: 18px; }
-.local-note span { font-size: 10px; white-space: nowrap; }
 .shell {
   margin: 0 10px 10px var(--content-left);
   height: calc(100vh - 10px);
@@ -2119,7 +2116,7 @@ main {
 }
 body.sidebar-expanded { --rail-width: 220px; --content-left: 240px; }
 .sidebar-expanded .nav-button, .sidebar-expanded .rail-control { width: 100%; }
-.sidebar-expanded .nav-full, .sidebar-expanded .rail-label, .sidebar-expanded .brand-name, .sidebar-expanded .local-note span { opacity: 1; visibility: visible; }
+.sidebar-expanded .nav-full, .sidebar-expanded .rail-label, .sidebar-expanded .brand-name { opacity: 1; visibility: visible; }
 .sidebar-backdrop { visibility: hidden; opacity: 0; position: fixed; inset: 0; background: #0006; border: 0; z-index: 25; transition: opacity .2s, visibility .2s; }
 .selection-bar { left: calc(var(--content-left) + 24px); right: 34px; bottom: 24px; background: #303030f5; border-color: #505050; }
 .toast { background: #303030; border-color: #444; box-shadow: 0 6px 24px #0004; }
@@ -2190,7 +2187,6 @@ dialog.is-closing::backdrop { animation: backdrop-out .18s ease-in both; }
   .nav-button, .rail-control { width: 44px; height: 44px; padding: 11px; }
   .brand-mark { flex-basis: 44px; width: 44px; }
   .brand-mark img { width: 40px; height: 40px; }
-  .local-note { padding-left: 12px; }
   .shell { margin-right: 6px; border-radius: 16px; }
   .topbar { height: 50px; padding: 0 16px; border-radius: 16px 16px 0 0; }
   .breadcrumb { font-size: 11px; gap: 6px; }
@@ -2223,7 +2219,7 @@ dialog.is-closing::backdrop { animation: backdrop-out .18s ease-in both; }
   .sidebar { gap: 12px; }
   .navigation { gap: 4px; }
   .sidebar-bottom { gap: 4px; }
-  .sidebar-bottom::before, .local-note { display: none; }
+  .sidebar-bottom::before { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
@@ -2477,3 +2473,22 @@ dialog.is-closing::backdrop { animation: backdrop-out .18s ease-in both; }
   .disk-native { align-items:flex-start; flex-direction:column }
   .disk-detail { padding-top:24px }
 }
+
+.feature-setting {display:flex;align-items:center;gap:24px;justify-content:space-between;padding:18px 0}
+.feature-setting p {max-width:68ch;color:var(--muted);margin-top:6px}
+.feature-levels {display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 22px}
+@media(max-width:480px){.feature-setting{align-items:flex-start;gap:12px}.feature-levels>.button{width:100%}}
+
+/* Appearance: theme switch */
+.theme-switch { display: inline-flex; align-items: center; gap: 14px; padding: 8px 10px 8px 14px; background: var(--raised); border: 1px solid var(--line); border-radius: 999px; color: var(--text); }
+.theme-switch:hover { background: var(--hover); }
+.theme-label { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; min-width: 108px; }
+.theme-label .i { width: 18px; height: 18px; }
+.theme-track { position: relative; width: 42px; height: 24px; border-radius: 999px; background: #4a4a4a; transition: background .2s; flex: none; }
+.theme-track i { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .2s var(--ease); }
+.theme-switch.is-light .theme-track { background: var(--safe); }
+.theme-switch.is-light .theme-track i { transform: translateX(18px); }
+/* Light theme: the interface is designed dark-first, so the whole surface is inverted
+   once and media is inverted back, which keeps every component and the Ghost workspace consistent. */
+html[data-theme="light"] { color-scheme: light; filter: invert(1) hue-rotate(180deg); background: #dadada; }
+html[data-theme="light"] img, html[data-theme="light"] video, html[data-theme="light"] canvas { filter: invert(1) hue-rotate(180deg); }

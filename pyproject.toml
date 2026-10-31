@@ -51,7 +51,7 @@ Homepage = "https://github.com/NK2552003/Mac-Cleaner"
 "Bug Tracker" = "https://github.com/NK2552003/Mac-Cleaner/issues"
 
 [tool.setuptools]
-packages = ["mac_deep_cleaner", "mac_deep_cleaner.web", "mac_deep_cleaner.assets"]
+packages = ["mac_deep_cleaner", "mac_deep_cleaner.ghosts", "mac_deep_cleaner.web", "mac_deep_cleaner.assets"]
 
 # Keep one source asset directory while shipping it inside the installed package.
 [tool.setuptools.package-dir]

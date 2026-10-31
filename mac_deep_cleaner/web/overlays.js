@@ -7,6 +7,8 @@ const Overlays = (() => {
   function open(dialog) {
     closing.get(dialog)?.cancel();
     dialog.classList.remove("is-closing");
+    // Dialog content is rendered outside <main>, so it needs the shared custom dropdown too.
+    window.Dropdowns?.enhance(dialog);
     if (!dialog.open) {
       dialog.showModal();
       dialog.scrollTop = 0;

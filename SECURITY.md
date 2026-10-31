@@ -45,3 +45,9 @@ When reporting, please include:
 ### If you can’t use GitHub issues
 If GitHub issues are not appropriate, add a note in your report explaining why and include as much of the above information as possible.
 
+
+## Ghost Files
+
+Ghost Files is disabled by default. The deterministic scanner and safety gate have authority over candidate status; model text cannot authorize removal. Ghost deletion uses the same scan revision, path, identity, exclusion, and Trash validators as other cleanup. AI inference is fixed to loopback with proxies and redirects disabled; no cloud fallback exists. Setup requires separate consent for installation, starting Ollama, and downloading a supported model. Downloaded apps must pass signature, pinned TeamIdentifier, and Gatekeeper checks. Removal verifies recorded component identity and never recursively deletes the shared Ollama data directory.
+
+All dashboard mutations require the per-session `X-MDC-Token`, session cookie, exact local Origin and Host. See [Ghost Files](docs/ghost-files.md) for lifecycle, data locations, limitations, and manual release acceptance checks.

@@ -2,6 +2,24 @@
 
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
+## Unreleased
+
+### Added
+- Opt-in Ghost Files with offline app-leftover discovery, conservative ownership rules, and optional local Ollama narration. Off by default, with lazy backend imports and browser assets.
+- Settings, explicit installation/start/model consent, hardware and disk checks, cancelable background jobs, fictional-ghost self-test, and graceful offline fallback.
+- Candlelit Ghosts workspace with inspected paths, locked-item unlock, reviewed Trash moves, hidden/resting entries, Ofrenda history, and Markdown export.
+- `mdc ghosts enable|setup|scan|disable|remove-ai|status|ofrenda`, including per-step terminal prompts and explicit `--yes` support.
+- Ownership-scoped model/installation removal, signing-team verification, proxy/redirect-resistant loopback inference, and model-output safety gates.
+- Isolated backend safety/transport tests and a browser fixture covering setup through removal at six viewport sizes.
+
+### Changed
+- All dashboard mutations now require a per-session request header and exact Origin in addition to existing cookie and Host checks.
+- Ghost items share scanner IDs, revisions, filesystem fingerprints, exclusions, and the existing Trash executor. Parent cleanup, app cleanup, and permanent deletion cannot bypass Ghost review.
+- Native shell supports reviewed local download Save dialogs, including Ofrenda, JSON reports, and Brewfiles.
+
+### Release acceptance
+- The actual fresh-account Ollama download/install/model self-test and native Save-dialog/Finder interaction require supported macOS acceptance testing; mocked/browser fixture checks do not establish those results.
+
 ## v3.2.0 (2026-10-31)
 
 ### Added

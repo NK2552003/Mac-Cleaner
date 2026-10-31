@@ -42,6 +42,21 @@ mdc                 # Fast CLI shorthand
 
 ---
 
+## Ghost Files (experimental)
+
+Open **Settings → Experimental → Ghost Files** to find possible leftovers from removed apps. It is **off by default**. Level 1 works offline with deterministic descriptions; level 2 adds local Ollama narration with separate consent for installation, starting the server, and downloading a model (about 1.3–3.4 GB plus Ollama).
+
+Every ghost needs review before moving to Trash through the existing safety pipeline. The model can only make a verdict more cautious. Successful moves appear in an **Ofrenda**, exportable as Markdown. **Remove AI components** only offers installations/models created by Mac Deep Cleaner; the shared `~/.ollama` directory is retained.
+
+```sh
+mdc ghosts enable --level 1
+mdc ghosts scan --no-llm
+mdc ghosts setup --model llama3.2:3b
+mdc ghosts disable
+```
+
+See [Ghost Files setup, safety, removal, and verification](docs/ghost-files.md) for downloads, local data locations, CLI commands, and discovery limits. The full fresh-account Ollama installation remains a manual release acceptance check.
+
 ## Installation
 
 ### Via `pip` (Recommended)

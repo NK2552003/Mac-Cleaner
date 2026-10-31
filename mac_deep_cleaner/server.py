@@ -27,6 +27,8 @@ ASSETS = {'/': ('index.html', 'text/html; charset=utf-8'),
           '/assets/icons.js': ('icons.js', 'text/javascript; charset=utf-8'),
           '/assets/toolkit.js': ('toolkit.js', 'text/javascript; charset=utf-8'),
           '/assets/homebrew.js': ('homebrew.js', 'text/javascript; charset=utf-8'),
+          '/assets/ghosts.js': ('ghosts.js', 'text/javascript; charset=utf-8'),
+          '/assets/ghosts.css': ('ghosts.css', 'text/css; charset=utf-8'),
           '/assets/styles.css': ('styles.css', 'text/css; charset=utf-8')}
 MAX_BODY = 2_000_000
 LOG = logging.getLogger(__name__)
@@ -134,8 +136,24 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, (BRANDING / 'app_icon.png').read_bytes(), 'image/png')
             if url.path in ASSETS:
                 filename, kind = ASSETS[url.path]
-                return self._send(200, (WEB / filename).read_bytes(), kind)
+                data = (WEB / filename).read_bytes()
+                if filename == 'index.html':
+                    data = data.replace(b'__MDC_SESSION__', self.server.token.encode())
+                return self._send(200, data, kind)
             service = self.server.service
+            if url.path == '/api/ghosts/config':
+                return self._send(200, service.ghost_config())
+            if url.path == '/api/ghosts/icon':
+                try:
+                    ghost_id = int(query.get('id', ['-1'])[0])
+                except ValueError:
+                    raise APIError(400, 'Invalid ghost ID.')
+                data = service.ghosts().icon(ghost_id)
+                if data:
+                    return self._send(200, data, 'image/png', headers={'Cache-Control': 'public, max-age=86400, immutable'})
+                raise APIError(404, 'Icon not found.')
+            if url.path.startswith('/api/ghosts/'):
+                return self._send(200, service.ghosts().get(url.path))
             if url.path == '/api/brew':
                 return self._send(200, service.toolkit.brew.report())
             if url.path == '/api/brew/explain':
@@ -172,6 +190,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             self._authorized()
+            if (self.headers.get('Origin') != self.server.origin or
+                    not hmac.compare_digest(self.headers.get('X-MDC-Token', ''), self.server.token)):
+                raise APIError(403, 'A local Origin and session request token are required.')
             if self.headers.get('Transfer-Encoding'):
                 raise APIError(400, 'Chunked request bodies are not supported.')
             lengths = self.headers.get_all('Content-Length', [])
