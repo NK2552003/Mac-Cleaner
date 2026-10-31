@@ -1,10 +1,8 @@
-"""Authenticated loopback-only HTTP transport; no external services or uploads."""
+"""Authenticated loopback-only dashboard transport. Homebrew jobs may fetch package metadata."""
 import hmac
 import http.cookies
 import json
 import logging
-import os
-from pathlib import Path
 import secrets
 import signal
 import socket
@@ -13,6 +11,8 @@ import time
 import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
 from .service import APIError, CleanerService
 
 WEB = Path(__file__).with_name('web')
@@ -25,6 +25,8 @@ ASSETS = {'/': ('index.html', 'text/html; charset=utf-8'),
           '/assets/app.js': ('app.js', 'text/javascript; charset=utf-8'),
           '/assets/controls.js': ('controls.js', 'text/javascript; charset=utf-8'),
           '/assets/icons.js': ('icons.js', 'text/javascript; charset=utf-8'),
+          '/assets/toolkit.js': ('toolkit.js', 'text/javascript; charset=utf-8'),
+          '/assets/homebrew.js': ('homebrew.js', 'text/javascript; charset=utf-8'),
           '/assets/styles.css': ('styles.css', 'text/css; charset=utf-8')}
 MAX_BODY = 2_000_000
 LOG = logging.getLogger(__name__)
@@ -134,6 +136,18 @@ class Handler(BaseHTTPRequestHandler):
                 filename, kind = ASSETS[url.path]
                 return self._send(200, (WEB / filename).read_bytes(), kind)
             service = self.server.service
+            if url.path == '/api/brew':
+                return self._send(200, service.toolkit.brew.report())
+            if url.path == '/api/brew/explain':
+                return self._send(200, service.toolkit.brew.explain(query.get('package', [''])[0]))
+            if url.path == '/api/brew/export':
+                return self._send(200, {'brewfile': service.toolkit.brew.brewfile()})
+            if url.path == '/api/health':
+                return self._send(200, service.toolkit.health())
+            if url.path == '/api/disks':
+                return self._send(200, service.toolkit.disks())
+            if url.path == '/api/jobs':
+                return self._send(200, service.toolkit.history())
             if url.path == '/api/state':
                 return self._send(200, service.state())
             if url.path == '/api/apps':

@@ -164,17 +164,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func windowDidResignKey(_ notification: Notification) { chrome?.needsDisplay = true }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        sender.close()
         NSApp.terminate(nil)
-        return true
+        // Keep the window visible while the operation guard decides whether to quit.
+        return false
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard opened, !terminating else { return .terminateNow }
-        webView.evaluateJavaScript("typeof busy !== 'undefined' && (busy || Boolean(S.busy))") { value, _ in
+        webView.evaluateJavaScript("typeof busy !== 'undefined' && (busy || Boolean(S.busy) || (typeof ToolkitUI !== 'undefined' && ToolkitUI.isRunning()))") { value, _ in
             if (value as? Bool) == true {
                 let alert = NSAlert()
-                alert.messageText = "Cleanup is still running"
+                alert.messageText = "An operation is still running"
                 alert.informativeText = "Wait for the current operation to finish before quitting."
                 alert.addButton(withTitle: "Keep running")
                 alert.runModal()

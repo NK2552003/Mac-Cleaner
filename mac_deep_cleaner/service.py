@@ -1,23 +1,21 @@
 """Application state and serialized, versioned operations."""
-from dataclasses import asdict, replace
 import os
 import secrets
 import shutil
 import subprocess
 import threading
+from dataclasses import asdict, replace
+
+from . import __version__
 from .applications import AppAnalyzer, app_items
+from .catalog import CAT_DESC, CAT_NAMES, TOOLCHAIN_NAMES, toolchain
+from .cleanup import eligible, execute, guard_ok
+from .common import HOME, IS_MAC
+from .errors import APIError
 from .icons import application_icon
-from .catalog import CAT_NAMES, CAT_DESC, TOOLCHAIN_NAMES, toolchain
-from .cleanup import execute, guard_ok, eligible
-from .common import HOME, IS_MAC, fingerprint
 from .scanner import Scanner
 from .settings import reveal, save_settings
-
-
-class APIError(Exception):
-    def __init__(self, status, message):
-        super().__init__(message)
-        self.status = status
+from .toolkit import Toolkit
 
 
 def public_record(value):
@@ -43,6 +41,12 @@ class CleanerService:
         self.scan_thread = None
         self.app_thread = None
         self.closed = False
+        self.toolkit = Toolkit(self.operation, self._ready_to_change)
+
+    def _ready_to_change(self):
+        with self.lock:
+            return (not self.closed and (not self.scanner or self.scanner.done)
+                    and (not self.analyzer or self.analyzer.done))
 
     def start_scan(self):
         with self.lock:
@@ -66,6 +70,7 @@ class CleanerService:
 
     def close(self):
         self.closed = True
+        self.toolkit.closed = True
         if self.scanner:
             self.scanner.close()
 
@@ -86,7 +91,8 @@ class CleanerService:
                 data['group'] = toolchain(item) if item.category == 'Developer & Pro Tools' else item.category
                 items.append(data)
             disk = shutil.disk_usage(HOME)
-            return {'scanning': not sc.done, 'progress': sc.progress, 'error': sc.error,
+            return {'version': __version__, 'initial_view': getattr(self.args, 'view', 'clean'),
+                    'scanning': not sc.done, 'progress': sc.progress, 'error': sc.error,
                     'items': items, 'cats': CAT_NAMES, 'tools': TOOLCHAIN_NAMES, 'desc': CAT_DESC,
                     'scan_id': self.scan_id, 'revision': self.revision, 'busy': self.operation.locked(),
                     'settings': {'mode': self.settings['mode'], 'min_mb': self.settings['min_mb']},
@@ -95,6 +101,8 @@ class CleanerService:
     def apps(self):
         with self.lock:
             if self.analyzer is None:
+                if self.operation.locked():
+                    raise APIError(409, 'Wait for the current operation before starting application analysis.')
                 sc = self.scanner
                 self.analyzer = self.analyzer_factory(sc)
                 self.apps_id = secrets.token_hex(16)
@@ -162,6 +170,18 @@ class CleanerService:
             raise APIError(400, 'Permanent deletion requires explicit confirmation.')
 
     def post(self, route, body):
+        if route == '/api/brew/refresh':
+            return self.toolkit.brew.report(refresh=True)
+        if route == '/api/brew/plan':
+            return self.toolkit.prepare('brew', body)
+        if route == '/api/tools/plan':
+            return self.toolkit.prepare('tool', body)
+        if route == '/api/disks/plan':
+            return self.toolkit.prepare('disk', body)
+        if route == '/api/tools/run':
+            return self.toolkit.start(body)
+        if route == '/api/tools/open':
+            return self.toolkit.open(body.get('action'))
         if route == '/api/reveal':
             with self.lock:
                 path = body.get('path')

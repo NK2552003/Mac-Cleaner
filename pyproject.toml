@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mac-deep-cleaner"
-version = "3.0.5"
-description = "Professional Mac cleanup tool — Modern Local Storage Analysis & Reviewed Cleanup"
+version = "3.2.0"
+description = "Local Mac cleanup, system maintenance, and guarded external-disk management"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{name = "NK2552003"}]

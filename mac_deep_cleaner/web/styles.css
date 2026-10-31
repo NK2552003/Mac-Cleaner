@@ -2228,3 +2228,252 @@ dialog.is-closing::backdrop { animation: backdrop-out .18s ease-in both; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Optimize and disk management share the dashboard's native system typography. */
+.health-overview { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; margin:26px 0 32px }
+.health-heading { display:flex; align-items:center; gap:16px; padding:24px 28px }
+.health-heading > div { flex:1; min-width:0 }
+.health-heading p,.health-heading small { color:var(--muted); margin-top:4px }
+.health-emblem,.drive-emblem { display:grid; place-items:center; background:var(--raised); border:1px solid #484848; border-radius:12px; flex-shrink:0; width:54px; height:60px; color:#b7d8e8 }
+.health-emblem .i,.drive-emblem .i { width:28px; height:28px }
+.health-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); padding:0 28px 24px; gap:24px }
+.health-metrics .metric { border:0; background:none; padding:0; min-width:0 }
+.health-metrics .metric b { font-size:28px }
+.health-footnote { display:flex; gap:10px; max-width:none; padding:16px 28px; border-top:1px solid var(--line); color:var(--muted); font-size:12px }
+.health-footnote .i { flex-shrink:0; margin-top:2px }
+.tool-section { margin:28px 0 }
+.tool-section .section-title { margin:0 0 16px; gap:16px; flex-wrap:wrap }
+.muted { color:var(--muted); font-size:12px }
+.recommendation { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:20px 0; border-top:1px solid var(--line) }
+.recommendation > div { display:flex; gap:18px; align-items:center; min-width:0 }
+.recommendation > div > .i { width:23px; height:23px; color:#a4c5d7; flex-shrink:0 }
+.recommendation p,.maintenance-row p,.disk-native p { color:var(--muted); font-size:13px; margin-top:5px; max-width:65ch }
+.recommendation > .button,.maintenance-row > .button { flex-shrink:0 }
+.maintenance-list { border-top:1px solid var(--line) }
+.maintenance-row { display:grid; grid-template-columns:36px minmax(0,1fr) auto; align-items:center; gap:16px; padding:22px 0; border-bottom:1px solid var(--line) }
+.tool-symbol { color:var(--muted); align-self:start; padding-top:3px }
+.tool-symbol .i { width:22px; height:22px }
+.maintenance-row small { color:var(--caution); display:block; margin-top:6px }
+.diagnostic-columns { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:36px }
+.process-table { margin-top:18px }
+.process-row { display:grid; grid-template-columns:minmax(0,1fr) 70px 90px; align-items:center; gap:10px; border-bottom:1px solid var(--line); padding:12px 0; font-size:12px }
+.process-row > span:first-child { overflow-wrap:anywhere }
+.process-row > span:not(:first-child) { text-align:right; font-variant-numeric:tabular-nums }
+.process-row small { display:block; color:var(--muted); font-size:10px; margin-top:2px }
+.process-head { color:var(--muted) }
+.system-details { margin:0 }
+.system-details dt { color:var(--muted); font-size:12px; margin:22px 0 6px }
+.system-details dd { margin:0; white-space:pre-line; font-size:13px; overflow-wrap:anywhere }
+.agent-details { margin-top:24px; border-top:1px solid var(--line); padding-top:16px }
+.agent-details summary,.tool-warning summary,.command-preview summary { cursor:pointer; font-size:13px }
+.agent-details p { color:var(--muted); margin:12px 0; font-size:12px }
+.agent-details ul { padding-left:20px; max-height:280px; overflow:auto; overflow-wrap:anywhere }
+.agent-details li { font-size:12px; margin:14px 0 }
+.agent-details small { display:block; color:var(--muted); margin-top:3px }
+.system-shortcuts { display:flex; flex-wrap:wrap; gap:10px }
+.tool-warning { color:var(--caution); padding:16px; border:1px solid var(--line); border-radius:10px; overflow-wrap:anywhere }
+.tool-history { margin:32px 0 }
+.job-result { border:1px solid var(--line); border-radius:10px; margin-top:10px; padding:16px }
+.job-result summary { display:flex; gap:16px; align-items:center; justify-content:space-between; cursor:pointer; font-size:13px }
+.job-result summary > span:first-child { display:flex; align-items:center; gap:10px; min-width:0 }
+.job-result summary .i { flex-shrink:0 }
+.job-result p { margin-top:16px; font-size:13px; color:var(--muted) }
+.job-status { font-size:11px; white-space:nowrap; color:var(--muted) }
+.job-status.succeeded { color:var(--safe) }
+.job-status.failed { color:var(--risky) }
+.job-status.running { color:var(--caution) }
+.job-result pre,.command-preview pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:360px; overflow:auto; background:var(--panel); border-radius:6px; padding:14px; margin-top:14px; font-size:11px; line-height:1.65 }
+.disk-workspace { display:grid; grid-template-columns:240px minmax(0,1fr); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; margin-top:26px; background:var(--panel) }
+.disk-browser { border-right:1px solid var(--line); background:#232323; padding:20px 10px; max-height:850px; overflow:auto }
+.disk-browser h2 { font-size:12px; color:var(--muted); padding:0 10px 16px; font-weight:500 }
+.disk-choice { width:100%; display:flex; align-items:center; gap:10px; border:1px solid transparent; text-align:left; background:transparent; padding:12px 10px; border-radius:8px; margin:2px 0 }
+.disk-choice.child { padding-left:24px }
+.disk-choice:hover { background:var(--hover) }
+.disk-choice.active { background:#30383c; border-color:#506470 }
+.disk-choice .i { flex-shrink:0; width:18px; height:18px; color:#aaa }
+.disk-choice.active .i { color:#96c8e3 }
+.disk-choice span { min-width:0 }
+.disk-choice strong { display:block; font-size:12px; font-weight:500; overflow-wrap:anywhere }
+.disk-choice small { display:block; color:var(--muted); font-size:10px; margin-top:3px }
+.disk-detail { padding:32px; min-width:0 }
+.disk-heading { display:flex; align-items:center; gap:18px; flex-wrap:wrap }
+.disk-heading > div { flex:1; min-width:120px }
+.disk-heading h2 { font-size:25px; line-height:1.2; overflow-wrap:anywhere }
+.disk-heading p { margin-top:8px; color:var(--muted); font-size:12px }
+.disk-heading small { color:var(--muted); font-size:11px; display:block; margin-top:4px }
+.disk-heading > strong { font-weight:500; font-size:20px; border:1px solid #555; border-radius:8px; padding:12px }
+.volume-map { display:flex; height:40px; border:1px solid #777; border-radius:8px; overflow:hidden; background:#292929; margin:36px 0 18px }
+.volume-used { background:#27779e }
+.volume-other { background:#757575 }
+.volume-unknown { background:repeating-linear-gradient(45deg,#333,#333 10px,#3a3a3a 10px,#3a3a3a 20px); width:100% }
+.volume-legend { display:flex; gap:24px; justify-content:space-between; flex-wrap:wrap; font-size:12px }
+.volume-legend span { position:relative; padding-left:22px; color:var(--muted) }
+.volume-legend i { position:absolute; left:0; top:2px; display:inline-block; width:12px; height:12px; border:1px solid #888; border-radius:4px }
+.volume-legend strong { display:block; margin-top:7px; color:var(--text); font-size:14px; font-weight:500 }
+.disk-explanation { color:var(--muted); font-size:12px; margin-top:24px }
+.disk-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 24px; margin:28px 0 }
+.disk-facts > div { display:flex; justify-content:space-between; gap:16px; border-top:1px solid var(--line); padding:14px 0; font-size:12px }
+.disk-facts dt { color:var(--muted); flex-shrink:0 }
+.disk-facts dd { margin:0; text-align:right; overflow-wrap:anywhere; min-width:0 }
+.disk-actions { display:flex; flex-wrap:wrap; gap:10px; margin:26px 0 20px }
+.disk-protected { display:flex; gap:10px; color:var(--caution); padding:14px; background:#302c25; border-radius:8px; font-size:12px }
+.disk-protected .i { flex-shrink:0 }
+.disk-native { border-top:1px solid var(--line); margin-top:28px; padding-top:24px }
+.disk-native .button { margin-top:16px }
+.disk-form-fields { display:grid; gap:20px; margin:24px 0 }
+.disk-form-fields label,.partition-fields label { display:flex; flex-direction:column; gap:8px; font-size:12px; min-width:0 }
+.disk-form-fields input,.partition-fields input { width:100%; background:var(--panel); border:1px solid #555; padding:10px 12px; border-radius:8px; color:var(--text); min-width:0 }
+.partition-fields { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; margin:24px 0; border:1px solid var(--line); padding:18px; border-radius:10px; min-width:0 }
+.partition-fields legend { padding:0 6px; font-size:13px }
+.partition-remainder { grid-column:1/-1; color:var(--muted); font-size:12px }
+.partition-controls { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:18px }
+.command-preview { margin-top:20px; color:var(--muted) }
+.review-total small,.review-item small { display:block; font-size:11px; color:var(--muted); margin-top:3px }
+@media(max-width:1250px) {
+  .disk-workspace { grid-template-columns:205px minmax(0,1fr) }
+  .disk-detail { padding:24px }
+  .disk-facts { grid-template-columns:1fr }
+  .disk-heading > strong { font-size:16px }
+}
+@media(max-width:900px) {
+  .disk-workspace { grid-template-columns:1fr }
+  .disk-browser { border-right:0; border-bottom:1px solid var(--line); max-height:230px }
+  .disk-browser h2 { padding-bottom:8px }
+  .disk-choice { padding-top:8px; padding-bottom:8px }
+  .health-metrics { gap:20px }
+  .health-metrics .metric b { font-size:23px }
+}
+@media(max-width:650px) {
+  .health-heading { padding:20px; flex-wrap:wrap }
+  .health-heading > .button { margin-left:70px }
+  .health-metrics { grid-template-columns:1fr; padding:0 20px 20px; gap:18px }
+  .health-metrics .metric { border-top:1px solid var(--line); padding-top:14px }
+  .health-footnote { padding:16px 20px }
+  .recommendation { align-items:flex-start; flex-direction:column; gap:14px }
+  .recommendation > .button { margin-left:41px }
+  .maintenance-row { grid-template-columns:24px minmax(0,1fr); gap:12px }
+  .maintenance-row > .button { grid-column:2; justify-self:start }
+  .diagnostic-columns { grid-template-columns:1fr; gap:0 }
+  .disk-detail { padding:20px }
+  .disk-heading { gap:14px }
+  .disk-heading h2 { font-size:22px }
+  .disk-heading > strong { margin-left:68px }
+  .disk-heading .drive-emblem { width:54px }
+  .volume-legend { gap:18px }
+  .disk-facts > div { gap:12px; flex-wrap:wrap }
+  .disk-facts dd { text-align:left }
+  .disk-actions .button { flex:1 1 auto }
+  .partition-fields { grid-template-columns:1fr; padding:14px }
+  .job-result summary { align-items:flex-start; flex-direction:column; gap:8px }
+  .tool-section .section-title > .button { margin-left:0 }
+}
+@media(max-height:720px) {
+  .navigation { overflow-y:auto; min-height:0; flex-shrink:1 }
+  .sidebar { overflow-y:auto }
+}
+
+/* Homebrew is a package workbench: one page, grouped rows, and an on-demand inspector. */
+.brew-environment { display:flex; flex-wrap:wrap; gap:10px 24px; align-items:center; color:var(--muted); font-size:12px; padding:18px 0 24px; border-bottom:1px solid var(--line) }
+.brew-environment > span:first-child { display:flex; gap:10px; align-items:center; color:#dfc89f; min-width:0 }
+.brew-environment strong { font-weight:500; overflow-wrap:anywhere }
+.brew-nav { display:flex; gap:6px; flex-wrap:wrap; margin:24px 0 }
+.brew-nav > button { border:1px solid transparent; border-radius:8px; background:none; padding:10px 14px; font-size:13px; color:var(--muted) }
+.brew-nav > button.active { color:var(--text); border-color:#5b5143; background:#302b24 }
+.brew-nav > button:hover { background:var(--hover) }
+.brew-nav span { margin-left:6px; color:#d8c09a; font-size:11px }
+.brew-toolbar { display:flex; gap:14px; margin:22px 0 }
+.brew-toolbar .search { flex:1; min-width:0 }
+.brew-toolbar > select,.brew-toolbar > .custom-select { max-width:240px }
+.brew-package-list { border-top:1px solid var(--line) }
+.brew-package-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(100px,160px) 120px auto; align-items:center; gap:24px; padding:23px 0; border-bottom:1px solid var(--line) }
+.brew-package-row > div:first-child { min-width:0 }
+.brew-package-row p { color:var(--muted); font-size:12px; margin-top:5px; overflow-wrap:anywhere }
+.brew-package-link { background:transparent; border:0; padding:0; text-align:left; font-size:14px; font-weight:600; color:var(--text); overflow-wrap:anywhere; min-width:0 }
+.brew-package-link:hover { color:#e1c698; text-decoration:underline; text-underline-offset:4px }
+.brew-badges { display:flex; flex-wrap:wrap; gap:10px; color:var(--muted); font-size:10px; margin-top:10px }
+.brew-badges .brew-pin,.brew-badges .brew-warning { color:var(--caution) }
+.brew-version,.brew-size { font-size:12px; overflow-wrap:anywhere; min-width:0 }
+.brew-version small,.brew-size small { display:block; font-size:10px; color:var(--muted); margin-top:5px }
+.brew-version small { color:#c8d8b7 }
+.brew-size { text-align:right; font-variant-numeric:tabular-nums }
+.brew-section-note { font-size:12px; color:var(--muted); margin:18px 0 24px }
+.brew-dependency-group { border-bottom:1px solid var(--line) }
+.brew-dependency-group summary { cursor:pointer; display:flex; justify-content:space-between; gap:20px; padding:20px 0; font-size:12px; color:var(--muted) }
+.brew-dependency-group summary > span:first-child { display:flex; align-items:center; gap:12px; min-width:0 }
+.brew-dependency-group summary strong { color:var(--text); font-size:14px; font-weight:500; overflow-wrap:anywhere }
+.brew-dependency-group summary .i { flex-shrink:0; color:#d8c09a }
+.brew-dependency-group summary > span:last-child { flex-shrink:0 }
+.brew-group-body { padding:0 0 20px 32px }
+.brew-group-root { margin:8px 0 20px }
+.brew-group-member { display:flex; justify-content:space-between; gap:16px; margin:12px 0; max-width:800px }
+.brew-group-member .brew-package-link { font-weight:400; font-size:12px }
+.brew-group-member > span { color:var(--muted); font-size:11px; flex-shrink:0 }
+.brew-update-note,.brew-tidy-step { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:20px 0; border-bottom:1px solid var(--line); margin-bottom:16px }
+.brew-update-note p,.brew-tidy-step p,.brew-tidy-intro p { font-size:13px; color:var(--muted); margin-top:8px }
+.brew-update-note > .button,.brew-tidy-step > .button { flex-shrink:0 }
+.brew-tidy-intro { padding:16px 0 }
+.brew-tidy-intro h2 { font-size:22px; max-width:35ch }
+.brew-tidy-step > div { position:relative; padding-left:42px }
+.brew-step { position:absolute; top:0; left:0; width:26px; height:26px; display:grid; place-items:center; border:1px solid #6b5c45; border-radius:50%; color:#dfc89f; font-size:12px }
+.brew-empty-note { padding:20px 0; color:var(--muted); font-size:13px }
+.brew-service-row { display:flex; justify-content:space-between; align-items:center; gap:20px; border-bottom:1px solid var(--line); padding:20px 0 }
+.brew-service-row small { display:block; color:var(--muted); margin-top:6px }
+.brew-service-row > div:last-child { display:flex; flex-wrap:wrap; gap:8px }
+.brew-footer { margin-top:32px; border-top:1px solid var(--line); padding-top:24px }
+.brew-footer > div { display:flex; gap:10px; flex-wrap:wrap }
+.brew-footer p { font-size:11px; color:var(--muted); margin-top:16px }
+.brew-explanation { background:#2b2925; border-left:2px solid #ad9262; padding:18px; margin:24px 0 }
+.brew-explanation p { font-size:13px; color:var(--muted); margin-top:8px }
+.brew-explanation h4 { font-size:12px; margin:20px 0 8px }
+.brew-dependency-links { display:flex; flex-wrap:wrap; gap:12px; margin-top:12px }
+.brew-dependency-links .brew-package-link { font-size:12px; font-weight:400; color:#dfc89f }
+.brew-package-actions { display:flex; flex-wrap:wrap; gap:8px; margin:24px 0 }
+.brew-reverse-tree { margin-top:16px }
+.brew-reverse-tree > div { display:flex; align-items:baseline; gap:8px; padding:9px 0 9px calc(var(--tree-depth)*14px); border-bottom:1px solid var(--line); min-width:0 }
+.brew-reverse-tree .brew-package-link { font-size:12px }
+.brew-reverse-tree small { color:var(--muted); font-size:10px }
+/* Disk selection and details flow in the same main scroll area. */
+.disk-workspace { display:block; border:0; border-radius:0; overflow:visible; background:transparent; margin-top:26px }
+.disk-browser { background:transparent; border:0; padding:0; max-height:none; overflow:visible }
+.disk-browser-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:0 0 16px }
+.disk-browser-heading h2 { padding:0; font-size:15px; color:var(--text) }
+.disk-device-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:12px }
+.disk-choice { border:1px solid var(--line); padding:14px; gap:12px; margin:0; min-height:74px; border-radius:10px }
+.disk-choice.active { border-color:#58727f; background:#252e33 }
+.disk-choice > span { flex:1 }
+.disk-choice strong { font-size:13px }
+.disk-choice small { font-size:11px }
+.disk-filter-note { font-size:11px; color:var(--muted); margin-top:14px }
+.disk-detail { padding:32px 0 0; margin-top:28px; border-top:1px solid var(--line) }
+.disk-heading h2 { font-size:30px }
+.disk-heading > strong { border:0; padding:0; font-size:25px }
+.disk-facts { grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 40px }
+.disk-native { display:flex; justify-content:space-between; align-items:center; gap:24px }
+.disk-native .button { margin-top:0; flex-shrink:0 }
+@media(max-width:1000px) {
+  .brew-package-row { grid-template-columns:minmax(0,1fr) 105px 95px; gap:16px }
+  .brew-package-row > .button { display:none }
+}
+@media(max-width:650px) {
+  .brew-toolbar { flex-direction:column }
+  .brew-toolbar > .custom-select,.brew-toolbar > select { max-width:none }
+  .brew-package-row { grid-template-columns:minmax(0,1fr) 85px; gap:12px }
+  .brew-package-row > div:first-child { grid-column:1/-1 }
+  .brew-version { grid-column:1 }
+  .brew-size { grid-column:2 }
+  .brew-nav { gap:4px }
+  .brew-nav > button { padding:8px 10px; font-size:12px }
+  .brew-group-member { flex-direction:column; gap:4px }
+  .brew-dependency-group summary { gap:8px }
+  .brew-dependency-group summary small { display:none }
+  .brew-dependency-group summary > span:first-child { gap:8px }
+  .brew-group-body { padding-left:12px }
+  .brew-update-note,.brew-tidy-step,.brew-service-row { align-items:flex-start; flex-direction:column; gap:16px }
+  .brew-tidy-intro h2 { font-size:20px }
+  .disk-browser-heading { align-items:flex-start; flex-direction:column; gap:8px }
+  .disk-device-list { grid-template-columns:1fr }
+  .disk-heading h2 { font-size:24px }
+  .disk-facts { grid-template-columns:1fr }
+  .disk-native { align-items:flex-start; flex-direction:column }
+  .disk-detail { padding-top:24px }
+}

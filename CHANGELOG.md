@@ -2,6 +2,42 @@
 
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
+## v3.2.0 (2026-10-31)
+
+### Added
+
+- **Optimize your Mac:** memory pressure, swap, storage, battery, uptime, Spotlight, process samples, background definitions, and JSON health reports.
+- Reviewed Quick Look, DNS, Spotlight, Homebrew, npm, and unavailable Xcode simulator maintenance, plus local snapshot inspection and native macOS control shortcuts.
+- **Disks & volumes:** physical/APFS inventory, startup snapshot details, shared-space visualization, filesystem/partition-map verification, and guarded external-disk mount, unmount, eject, rename, APFS volume creation, erase, and two-to-four-partition workflows.
+- Session-bound five-minute review tokens, typed erase confirmation, backup acknowledgement, immediate disk identity/topology revalidation, and serialized background jobs with output and errors.
+- CLI `--optimize`, `--disks`, `--health-report`, `--disk-report`, and reviewed `--tool` / `--dry-run` maintenance.
+- Mocked disk-safety, job, HTTP authorization, CLI, and responsive browser verification.
+- Source distributions include native build inputs and browser verification fixtures.
+
+- Dedicated **Homebrew** workspace with requested/dependency/cask groups, shared-library ownership, install explanations, reverse dependency trees, Cellar size rankings, and JSON/Brewfile exports.
+- Update checks, metadata refresh, Homebrew health checks, user-service controls, and reviewed upgrade/uninstall/pin/install-intent actions.
+- Two-stage Tidy workflow: exact reviewed unused-dependency removal, then separately reviewed cache/old-version cleanup. Package graph, service state, and command previews are revalidated before execution.
+- App-native `mac-cleaner brew dashboard|overview|explain|heaviest|reverse-tree|audit|stats|tidy` commands, management subcommands, and the `--homebrew` dashboard shortcut.
+- Fixture tests for graph cycles, shared/cask dependencies, aliases/taps, service protection, stale plans, command compatibility, and responsive Homebrew workflows.
+
+### Fixed
+- Disk management hides recovery, boot, VM, internal APFS containers, system-data volumes, and low-level partition records by default. An explicit system-volumes toggle supports advanced inspection without bypassing protection.
+- Replaced the nested disk browser/panel layout with a flat device selector and details on one scrolling page; verified narrow and short windows.
+- Moved Homebrew controls out of the Optimize tool list while preserving the existing `--tool brew-*` aliases.
+- Disabled automatic Homebrew dependency cleanup, install cleanup, and dependent upgrades for reviewed commands to limit unintended follow-on changes.
+- Clearly distinguish available updates from vulnerability scans and Caskroom measurements from full application footprints.
+
+### Changed
+- Version 3.2.0 across runtime, CLI, package metadata, native bundle, build script, Homebrew formula reference, and current documentation.
+- Cleanup documentation now distinguishes Trash-based file removal from permanent disk/maintenance operations.
+- Native quit protection now includes maintenance jobs and retains the window when quitting is blocked.
+- Legacy `scan` / `dashboard` normalization applies only to the first argument, preserving option values with those names.
+
+### Safety boundaries
+- Disk changes are restricted to identified writable external devices; startup/home, internal, detected backup, system-role, virtual, RAID, and multi-store devices are protected.
+- Repairs, encryption, in-place partition resizing, initialization of unidentified blank media, and advanced disk operations open Apple Disk Utility.
+- Hardware erase/partition tests require a disposable drive and are not part of automated verification.
+
 ## v3.0.5 (2026-10-30)
 
 ### Fixed
