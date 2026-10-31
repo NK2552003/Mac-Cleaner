@@ -550,6 +550,27 @@ window.GhostUI = (() => {
     if (action === "ghost-no-ai") { closeDetail(); return setGhostLevel(1); }
     if (action === "ghost-show-hidden") { await api("/api/ghosts/show-hidden", {}); return enter(true); }
 
+    if (action === "ghost-remove") {
+      config = await api("/api/ghosts/config");
+      const owned = config.setup;
+      const models = owned.models_pulled_by_mdc || [];
+      const canUninstall = ["brew", "app"].includes(owned.installed_by_mdc);
+      const answer = await ask({
+        title:"Remove AI components?",
+        confirm:"Remove selected components",
+        danger:true,
+        body:`<p>Select the components installed by Mac Deep Cleaner to remove. Other models and the shared Ollama data folder are kept.</p>
+          ${models.map((model, index) => `<label class="check-label"><input id="ghostRemove${index}" type="checkbox">Remove ${esc(model)}</label>`).join("")}
+          ${canUninstall ? '<label class="check-label"><input id="ghostUninstall" type="checkbox">Uninstall Ollama installed by Mac Deep Cleaner</label>' : ""}`
+      });
+      if (!answer.confirmed) return;
+      const selectedModels = models.filter((_, index) => $(`ghostRemove${index}`)?.checked);
+      const uninstall = canUninstall && !!$("ghostUninstall")?.checked;
+      if (!selectedModels.length && !uninstall) return toast("Select a component to remove.", true);
+      await api("/api/ghosts/remove-ai", {models:selectedModels, uninstall, confirmed:true});
+      return enter(true);
+    }
+
     if (action === "ghost-export") {
       const data = await api("/api/ghosts/ofrenda");
       const blob = new Blob([data.markdown], {type:"text/markdown;charset=utf-8"});

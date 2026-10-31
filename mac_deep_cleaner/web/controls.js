@@ -116,7 +116,8 @@ window.Dropdowns = (() => {
     );
     if (typeof menu.showPopover === "function")
       menu.setAttribute("popover", "manual");
-    document.body.append(menu);
+    // A modal makes outside nodes inert, including popovers attached to body.
+    (select.closest("dialog") || document.body).append(menu);
     trigger()?.setAttribute("aria-expanded", "true");
     if (menu.hasAttribute("popover")) menu.showPopover();
     populate();

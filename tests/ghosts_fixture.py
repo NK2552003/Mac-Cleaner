@@ -1,8 +1,8 @@
 """Browser fixture: fake Library and simulated Ollama; never touches user files or AI."""
 import contextlib
-import io
 import sys
 import tempfile
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -10,7 +10,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mac_deep_cleaner import feature_config
 from mac_deep_cleaner.common import fingerprint
-from mac_deep_cleaner.ghosts import finder, haunt, llm, ofrenda, ollama_manager
+from mac_deep_cleaner.ghosts import finder, llm, ollama_manager
 from mac_deep_cleaner.scanner import Scanner
 from mac_deep_cleaner.server import LocalServer
 from mac_deep_cleaner.service import CleanerService
@@ -20,8 +20,7 @@ with tempfile.TemporaryDirectory(prefix='mdc-ghost-ui-') as directory, contextli
     for target, value in [('mac_deep_cleaner.feature_config.CONFIG',root/'config.json'),
         ('mac_deep_cleaner.ghosts.ofrenda.LEDGER',root/'ofrenda.json'),
         ('mac_deep_cleaner.ghosts.haunt.CACHE',root/'cache.json'),
-        ('mac_deep_cleaner.cleanup.HOME',str(root)),('mac_deep_cleaner.cleanup.IS_MAC',False),
-        ('mac_deep_cleaner.ghosts.finder.APP_DIRS',[])]:
+        ('mac_deep_cleaner.cleanup.HOME',str(root)),('mac_deep_cleaner.cleanup.IS_MAC',False)]:
         stack.enter_context(patch(target,value))
     roots = {k:root/'Library'/k for k in ('Caches','Preferences','Application Support')}
     for base in roots.values(): base.mkdir(parents=True)
@@ -29,7 +28,10 @@ with tempfile.TemporaryDirectory(prefix='mdc-ghost-ui-') as directory, contextli
         ('Preferences','org.paper.atlas.plist',240_000),
         ('Application Support','Forgotten Notes',320_000)]:
         (roots[kind]/name).write_bytes(b'x'*size)
-    stack.enter_context(patch.object(finder,'LEFTOVER_DIRS',roots))
+    # Exercise the real finder without consulting host apps, Spotlight, PATH,
+    # running processes, Homebrew, or IDE extensions.
+    stack.enter_context(patch('mac_deep_cleaner.ghosts.controller.find_ghosts',
+        partial(finder.find_ghosts, leftover_dirs=roots, app_ids_names=(set(), set()))))
     state = {'installed':False, 'running':False, 'models':{}}
     def status(model):
         return {'state':('READY' if model in state['models'] else 'RUNNING_NO_MODEL') if state['running'] else ('INSTALLED_NOT_RUNNING' if state['installed'] else 'NOT_INSTALLED'),
