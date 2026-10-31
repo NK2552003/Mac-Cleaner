@@ -98,7 +98,7 @@ jobs:
           name: ghost-files-browser-evidence
           path: |
             /tmp/mdc-ghost-check/*.png
-            /tmp/mdc-ghost-check/ofrenda.md
+            /tmp/mdc-ghost-check/cleanup-history.md
             /tmp/ghost-fixture.log
 
   build-check:
