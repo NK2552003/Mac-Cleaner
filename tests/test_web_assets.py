@@ -48,12 +48,12 @@ class WebAssetsTest(unittest.TestCase):
         self.assertIn(b'src="/assets/app_icon.png"', script)
 
     def test_assets_require_the_local_session(self):
-        for path in ('/', '/assets/app_icon.png', '/favicon.ico', '/assets/styles.css'):
+        for path in ('/', '/assets/app_icon.png', '/favicon.ico', '/assets/styles.css', '/assets/history.js', '/assets/i18n.js', '/assets/settings.css', '/assets/loaders.js', '/assets/loaders.css'):
             with self.subTest(path=path):
                 self.assertEqual(self.get(path, authenticated=False)[0], 403)
 
     def test_asset_directory_is_not_exposed(self):
-        for path in ('/assets/', '/assets/../pyproject.toml', '/assets/__init__.py'):
+        for path in ('/assets/', '/assets/../pyproject.toml', '/assets/__init__.py', '/assets/care.js', '/assets/care.css', '/api/care', '/api/care/report'):
             with self.subTest(path=path):
                 self.assertEqual(self.get(path)[0], 404)
 

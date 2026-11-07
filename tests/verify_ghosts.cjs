@@ -19,6 +19,26 @@ const assert = require('node:assert/strict');
   await page.locator('.ghost-heading [data-action="ghost-scan"]').click();
   await page.locator('.ghost-card').nth(2).waitFor();
   await page.waitForFunction(()=>!S.busy);
+  const scan = await page.evaluate(()=>api('/api/ghosts/state'));
+  assert.equal(scan.ghosts.length,3,'System folders, shared databases and Shortcuts groups must be excluded');
+  assert.deepEqual(scan.ghosts.map(g=>g.name_guess).sort(),['Forgotten Notes','Moonlit Lantern','Paper Atlas']);
+  const sort=page.getByRole('combobox',{name:'Sort ghosts',exact:true});
+  await sort.click();
+  await page.getByRole('option',{name:'Name (A–Z)',exact:true}).click();
+  assert.equal(await page.locator('#ghostSort').inputValue(),'name');
+  assert.deepEqual(await page.locator('.ghost-card h2').allTextContents(),['Forgotten Notes','Moonlit Lantern','Paper Atlas']);
+  await sort.click();
+  await page.getByRole('option',{name:'Largest size',exact:true}).click();
+  assert.equal(await page.locator('#ghostSort').inputValue(),'size');
+  const fixtureRoot=scan.ghosts[0].path.split('/Library/')[0];
+  assert.match(fixtureRoot,/\/mdc-ghost-ui-[^/]+$/,'Only disposable fixture files may be inspected');
+  const protectedFiles=['Application Support/CloudDocs','Application Support/Animoji',
+    'Application Support/SESStorage','Application Support/default.store','Application Support/default.store-wal',
+    'Group Containers/group.is.workflow.my.app','Group Containers/group.ABCDE12345.com.apple.shortcuts',
+    'Caches/com.plausiblelabs.crashreporter.data','Caches/main.kts.compiled.cache'];
+  const assertProtected=()=>protectedFiles.forEach(name=>assert.equal(
+    fs.readFileSync(`${fixtureRoot}/Library/${name}`,'utf8'),'system or shared service data: retain'));
+  assertProtected();
   assert(!requests.some(u=>u.includes('/setup/status')),'Level 1 must not probe AI');
   const cache=page.locator('.ghost-card').filter({hasText:'lantern'});
   const locked=page.locator('.ghost-card').filter({hasText:'Forgotten Notes'});
@@ -43,8 +63,9 @@ const assert = require('node:assert/strict');
   await historyEntry.waitFor();
   assert.equal(await historyEntry.count(),1,'Successful Trash move must appear once in cleanup history');
   assert.equal(await page.locator('.ghost-card').count(),2);
+  assertProtected();
   const prefs=page.locator('.ghost-card').filter({hasText:'atlas'});
-  await prefs.getByRole('button',{name:'Let it rest',exact:true}).click();
+  await prefs.getByRole('button',{name:'Dismiss permanently',exact:true}).click();
   await page.getByRole('button',{name:'Show 1 resting ghost',exact:true}).waitFor();
   await page.getByRole('button',{name:'Show 1 resting ghost',exact:true}).click();
   await prefs.waitFor();
@@ -74,16 +95,26 @@ const assert = require('node:assert/strict');
   await page.waitForFunction(()=>!S.busy);
   assert.equal(await prefs.locator('.ghost-status-pill').innerText(),'Review first','AI cannot promote preferences');
   await page.screenshot({path:'/tmp/mdc-ghost-check/ghosts-ai.png'});
-  for(const [width,height] of [[1440,900],[1024,768],[768,1024],[390,844],[320,740],[740,320]]){
+  for(const theme of ['dark','light']) for(const [width,height] of [[1440,900],[1024,768],[768,1024],[390,844],[320,740],[740,320]]){
+    await page.evaluate(theme=>applyTheme(theme),theme);
     await page.setViewportSize({width,height});
     const overflow=await page.locator('#main').evaluate(main=>{
       const box=main.getBoundingClientRect();
       return [...main.querySelectorAll('*')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&(r.right>box.right+1||r.left<box.left-1)}).map(e=>`${e.tagName}.${e.className}`).slice(0,8);
     });
-    assert.deepEqual(overflow,[],`Ghosts overflow ${width}x${height}`);
+    assert.deepEqual(overflow,[],`Ghosts overflow ${theme} ${width}x${height}`);
+    const sortBorder=await page.locator('.ghost-sort-select.dropdown').evaluate(el=>{
+      const css=getComputedStyle(el), outer=el.getBoundingClientRect(), inner=el.querySelector('.dropdown-trigger').getBoundingClientRect();
+      return {border:css.borderWidth,padding:css.padding,extraWidth:outer.width-inner.width,extraHeight:outer.height-inner.height};
+    });
+    assert.deepEqual(sortBorder,{border:'0px',padding:'0px',extraWidth:0,extraHeight:0},'Ghost sort must have only the button border');
+    if(width===1440) await page.locator('.ghost-sort-wrap').screenshot({path:`/tmp/mdc-ghost-check/sort-${theme}.png`});
+    if(width<=760) assert(await page.locator('.ghost-search-wrap').evaluate(el=>el.getBoundingClientRect().height<60),'Search row must not retain a horizontal flex basis as its height');
+    if(theme==='light') assert.equal(await page.locator('#ghostSearch').evaluate(el=>getComputedStyle(el).color),'rgb(29, 39, 52)');
+    assert(await page.locator('#ghostSearch').evaluate(el=>parseFloat(getComputedStyle(el).paddingLeft)>=30),'Search text must clear its icon');
     await page.locator('#main').evaluate(e=>e.scrollTop=0);
     await page.locator('.toast button').evaluateAll(buttons=>buttons.forEach(b=>b.click()));
-    if(width===390)await page.screenshot({path:'/tmp/mdc-ghost-check/ghosts-mobile.png',fullPage:true});
+    if(width===390)await page.screenshot({path:`/tmp/mdc-ghost-check/ghosts-${theme}-mobile.png`,fullPage:true});
   }
   await page.setViewportSize({width:1440,height:1000});
   await page.locator('.ghost-heading [data-view="settings"]').click();

@@ -2,6 +2,7 @@
 import json
 import math
 import os
+import re
 import subprocess
 import tempfile
 from .common import HOME, IS_MAC, expand, run
@@ -9,7 +10,7 @@ from .common import HOME, IS_MAC, expand, run
 SETTINGS_DIR = os.path.join(HOME, "Library", "Application Support", "Mac Deep Cleaner")
 SETTINGS_FILE = os.path.join(SETTINGS_DIR, "settings.json")
 LEGACY_SETTINGS_FILE = os.path.join(HOME, "Library", "Application Support", "Mac Cleaner", "settings.json")
-DEFAULT_SETTINGS = {"mode": "normal", "delete": "trash", "min_mb": 10, "pinned": [], "theme": "dark"}
+DEFAULT_SETTINGS = {"mode": "normal", "delete": "trash", "min_mb": 10, "pinned": [], "theme": "dark", "ghost_allowlist": [], "language": "en"}
 
 
 def validated(value):
@@ -22,12 +23,18 @@ def validated(value):
         result["delete"] = value["delete"]
     if value.get("theme") in ("dark", "light"):
         result["theme"] = value["theme"]
+    language = value.get("language")
+    if isinstance(language, str) and re.fullmatch(r'[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]{2,8}){0,3}', language):
+        result['language'] = language
     size = value.get("min_mb")
     if type(size) in (int, float) and math.isfinite(size) and 0 <= size <= 1_000_000:
         result["min_mb"] = size
     pins = value.get("pinned")
     if isinstance(pins, list):
         result["pinned"] = sorted({os.path.abspath(p) for p in pins if isinstance(p, str) and os.path.isabs(p) and "\x00" not in p})[:10000]
+    allowlist = value.get("ghost_allowlist", [])
+    if isinstance(allowlist, list):
+        result["ghost_allowlist"] = sorted({p for p in allowlist if isinstance(p, str) and os.path.isabs(p) and "\x00" not in p})[:10000]
     return result
 
 

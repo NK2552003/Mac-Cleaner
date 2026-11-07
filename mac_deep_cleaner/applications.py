@@ -4,14 +4,14 @@ import os
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from .common import WORKERS, fingerprint
-from .common import CAUTION, HOME, RISKY, SAFE, dir_size, expand
+
+from .common import CAUTION, HOME, RISKY, SAFE, WORKERS, dir_size, expand, fingerprint
 from .models import AppInfo, AppPart, Item
 
 APP_PART_RULES = [
     ("Caches", "cache", "Caches", "id"),
-    ("HTTP storage", "cache", "HTTPStorages", "id"),
-    ("WebKit data", "cache", "WebKit", "id"),
+    ("HTTP storage", "data", "HTTPStorages", "id"),
+    ("WebKit data", "data", "WebKit", "id"),
     ("Logs", "cache", "Logs", "name"),
     ("Saved window state", "cache", "Saved Application State", "state"),
     ("Application Support", "data", "Application Support", "name"),
@@ -102,7 +102,7 @@ class AppAnalyzer:
         parts = [p for p in parts if p.size > 0]
         parts.sort(key=lambda p: -p.size)
         apple = b.startswith("com.apple.")
-        in_apps = path.startswith("/Applications/") or path.startswith(HOME + "/Applications/")
+        in_apps = path.startswith(("/Applications/", HOME + "/Applications/"))
         info = AppInfo(name=meta.get("display", name), path=path, bundle_id=bid, version=meta.get("version", ""),
                        category=human_category(meta.get("category", "")), source="App Store" if meta.get("mas") else "Direct",
                        size=dir_size(path), parts=parts, last_used=self.sc.last_used(path),
@@ -115,7 +115,7 @@ class AppAnalyzer:
     def run(self):
         try:
             return self._run()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - publish worker failure and always complete analysis
             self.error = f"Application analysis interrupted: {exc}"
             return []
         finally:
@@ -153,10 +153,9 @@ def app_items(app, mode="caches", picked=None):
                         fingerprint=app.fingerprint if path == app.path else next((p.fingerprint for p in app.parts if p.path == path), ())))
 
     want = set(picked or [])
-    if mode == "uninstall" or (mode == "pick" and app.path in want):
-        if app.removable:
-            mk(f"{app.name}.app", app.path, app.size, CAUTION, "The application itself.",
-               "Reinstall from the App Store or the vendor website.")
+    if (mode == "uninstall" or (mode == "pick" and app.path in want)) and app.removable:
+        mk(f"{app.name}.app", app.path, app.size, CAUTION, "The application itself.",
+           "Reinstall from the App Store or the vendor website.")
     for p in app.parts:
         if mode == "caches" and p.kind != "cache":
             continue

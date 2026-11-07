@@ -78,11 +78,12 @@ window.GhostUI = (() => {
 
   function progress(job, kind) {
     if (!job || (job.done && !job.error && !job.cancelled)) return "";
-    return `<div class="ghost-progress" role="status"><div><strong>${esc(job.error || job.msg)}</strong>${!job.done ? button("Cancel", "ghost-cancel", {data:{kind}}) : ""}</div>${!job.done ? `<progress max="100" ${job.pct == null ? "" : `value="${job.pct}"`} aria-label="${esc(kind)} progress"></progress>` : ""}</div>`;
+    if (job.done) return `<div class="error-banner" role="status">${icon('alert')}<span>${esc(job.error || job.msg)}</span></div>`;
+    return scanIndicator(job.msg, {feature:'ghosts',key:`ghosts:${kind}:${report?.scan_id || 'initial'}`,percent:job.pct, centered:kind === 'scan' && !report?.ghosts.some(g => !g.hidden), actions:button(I18n.t('Cancel'), 'ghost-cancel', {data:{kind}})});
   }
 
   function renderProgressHtml() {
-    if (!report) return "";
+    if (!report) return error ? "" : scanIndicator("Reading Ghost Files settings…");
     return progress(report.scan, "scan") + progress(report.haunt, "haunt") + progress(report.setup, "setup");
   }
 
@@ -90,8 +91,8 @@ window.GhostUI = (() => {
     if (!report) return "";
     const rawGhosts = report.ghosts.filter(g => !g.hidden);
     const totalBytes = rawGhosts.reduce((n, g) => n + g.size_bytes, 0);
-    const stats = Object.keys(labels).map(v => `${labels[v]}: ${fmt(rawGhosts.filter(g => g.final_verdict === v).reduce((n, g) => n + g.size_bytes, 0))}`);
-    return `<strong>${rawGhosts.length} ${rawGhosts.length === 1 ? "ghost" : "ghosts"}, ${fmt(totalBytes)}</strong>
+    const stats = Object.keys(labels).map(v => `${I18n.t(labels[v])}: ${fmt(rawGhosts.filter(g => g.final_verdict === v).reduce((n, g) => n + g.size_bytes, 0))}`);
+    return `<strong>${esc(I18n.t("Ghost Files"))}: ${rawGhosts.length.toLocaleString(I18n.locale())} · ${fmt(totalBytes)}</strong>
       <p>${stats.map(esc).join(" · ")}</p>
       <small>Moving files to Trash keeps them recoverable; space is freed when you empty it yourself.</small>`;
   }
@@ -100,22 +101,23 @@ window.GhostUI = (() => {
     if (!report || !report.ofrenda || !report.ofrenda.length) {
       return '<div class="history-empty">Your cleanup history will appear here after a successful move to Trash.</div>';
     }
-    return `<ol class="history-list">${report.ofrenda.slice().reverse().map(e => `<li><strong>${esc(e.name)}</strong><span>${fmt(e.size_bytes)} · ${esc(e.date.slice(0,10))}</span><p>${esc(e.farewell || "Moved to Trash")}</p></li>`).join("")}</ol>`;
+    return `<ol class="history-list">${report.ofrenda.slice().reverse().map(e => `<li><strong data-no-translate>${esc(e.name)}</strong><span>${fmt(e.size_bytes)} · ${esc(e.date.slice(0,10))}</span><p>${esc(e.farewell || "Moved to Trash")}</p></li>`).join("")}</ol>`;
   }
 
   function renderCardsHtml() {
     if (!report) return "";
     const rawGhosts = report.ghosts.filter(g => !g.hidden);
     const hidden = report.ghosts.length - rawGhosts.length;
+    if (!report.scan.done && !rawGhosts.length) return "";
 
     let list = rawGhosts.slice();
     if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
+      const q = searchQuery.trim().toLocaleLowerCase(I18n.locale());
       list = list.filter(g =>
         (g.name_guess && g.name_guess.toLowerCase().includes(q)) ||
         (g.path && g.path.toLowerCase().includes(q)) ||
         (g.bundle_id && g.bundle_id.toLowerCase().includes(q)) ||
-        (g.kind && g.kind.toLowerCase().includes(q))
+        (g.kind && (g.kind + " " + I18n.t(g.kind)).toLocaleLowerCase(I18n.locale()).includes(q))
       );
     }
     if (verdictFilter !== "all") {
@@ -125,7 +127,7 @@ window.GhostUI = (() => {
     if (sortBy === "size") {
       list.sort((a, b) => b.size_bytes - a.size_bytes);
     } else if (sortBy === "name") {
-      list.sort((a, b) => (a.name_guess || "").localeCompare(b.name_guess || ""));
+      list.sort((a, b) => (a.name_guess || "").localeCompare(b.name_guess || "", I18n.locale()));
     } else if (sortBy === "age") {
       list.sort((a, b) => b.age_days - a.age_days);
     }
@@ -179,6 +181,8 @@ window.GhostUI = (() => {
     const progWrap = document.getElementById("ghostProgressWrap");
     if (progWrap) {
       progWrap.innerHTML = renderProgressHtml();
+      LoaderUI.sync(progWrap);
+      updateActivityStatus();
     }
 
     // 2. Update scan button text and state
@@ -234,7 +238,7 @@ window.GhostUI = (() => {
   }
 
   function settings() {
-    if (!config) return '<p class="note">Reading Ghost Files settings…</p>';
+    if (!config) return scanIndicator('Reading Ghost Files settings…');
     const setup = config.setup;
     return `<div class="ghost-options"><div class="feature-setting"><div><h3>Local AI narration</h3><p>${config.level === 2 && status?.state === "READY" ? `AI: ${esc(config.model)} on 127.0.0.1` : "AI: not connected. Plain descriptions are available offline."}</p></div>${button("Set up AI narration", "ghost-setup", {disabled:!!S.busy})}</div>
       <label class="check-label"><input id="ghostAuto" type="checkbox" ${config.auto_start_ollama ? "checked" : ""}>Start Ollama automatically when needed, after setup consent</label>
@@ -244,7 +248,7 @@ window.GhostUI = (() => {
   }
 
   function render() {
-    if (!report) return empty("Looking for the local workspace…", error || "No files are changed by opening this page.", "ghost");
+    if (!report) return empty("Looking for the local workspace…", error || "No files are changed by opening this page.", "ghost", "", {scanning:!error});
     const rawGhosts = report.ghosts.filter(g => !g.hidden);
     const safeCount = rawGhosts.filter(g => g.final_verdict === "likely_safe").length;
     const reviewCount = rawGhosts.filter(g => g.final_verdict === "review").length;
@@ -337,33 +341,41 @@ window.GhostUI = (() => {
           <img src="/api/ghosts/icon?id=${g.id}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">
         </span>
         <div>
-          <h2>${esc(g.name_guess)}</h2>
-          <p>${esc(g.kind)} · ${g.age_days} days untouched</p>
+          <h2 data-no-translate>${esc(g.name_guess)}</h2>
+          <p>${esc(I18n.t(g.kind))} · ${g.age_days} days untouched</p>
         </div>
         <strong>${fmt(g.size_bytes)}</strong>
       </div>
       <p class="ghost-haunting">${esc(g.haunting)}</p>
       <div class="ghost-verdict ${g.final_verdict}">
         ${icon(keep ? "lock" : g.unlocked && g.final_verdict === "keep" ? "unlock" : "shield")}
-        ${g.reason ? `<span>${esc(g.reason)}</span>` : ""}
+        ${g.reason ? `<span>${esc((g.confidence_score ? I18n.t("Evidence score {score}/100.", {score: g.confidence_score}) + " " + I18n.t(g.evidence) + " " : "") + I18n.t(g.reason))}</span>` : ""}
       </div>
       <div class="ghost-card-actions">
         <div class="ghost-card-buttons">
           ${button("Inspect", "ghost-inspect", {symbol:"search", style:"ghost", data:{id:g.id}})}
           ${keep ? button("Review locked ghost", "ghost-unlock", {symbol:"lock", data:{id:g.id}, disabled:locked()}) : button("Banish to Trash", "ghost-banish", {symbol:"trash", style:"primary", data:{id:g.id}, disabled:locked()})}
-          ${button("Let it rest", "ghost-hide", {style:"ghost", data:{id:g.id}, disabled:locked()})}
+          ${button("Dismiss permanently", "ghost-hide", {style:"ghost", data:{id:g.id}, disabled:locked()})}
         </div>
         <span class="ghost-status-pill ${g.final_verdict}">${g.unlocked && g.final_verdict === "keep" ? "Unlocked for review" : labels[g.final_verdict]}</span>
       </div>
     </article>`;
   }
 
-  let activeGhostDrawerId = null;
+  let activeGhostDrawerId = null, drawerRequest = 0;
+  document.addEventListener('languagechange', async () => {
+    if (!enabled()) return;
+    await enter(true);
+    if ($('detailDialog')?.open && detailKind === 'ghost-inspect' && activeGhostDrawerId !== null) {
+      openGhostDrawer(activeGhostDrawerId);
+    }
+  });
 
   async function openGhostDrawer(id, forceRefresh = false) {
     const g = report?.ghosts.find(x => x.id === id);
     if (!g) return;
     activeGhostDrawerId = id;
+    const request = ++drawerRequest;
     detailKind = "ghost-inspect";
 
     const keep = g.final_verdict === "keep" && !g.unlocked;
@@ -376,27 +388,25 @@ window.GhostUI = (() => {
             <img src="/api/ghosts/icon?id=${g.id}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">
           </span>
           <div>
-            <h2>${esc(g.name_guess)}</h2>
-            <small>${esc(g.kind)} · ${fmt(g.size_bytes)} · ${g.age_days} days untouched</small>
+            <h2 data-no-translate>${esc(g.name_guess)}</h2>
+            <small>${esc(I18n.t(g.kind))} · ${fmt(g.size_bytes)} · ${g.age_days} days untouched</small>
           </div>
         </div>
         ${button("", "close-detail", {symbol:"x",style:"ghost icon-only",aria:"Close inspector"})}
       </div>
       <div class="drawer-body ghost-inspect-drawer">
         <div id="ghostDrawerContent">
-          <div class="ghost-loading-box">
-            <span class="ghost-spinner"></span>
-            <p>Analyzing ${esc(g.name_guess)} with web context and local files…</p>
-          </div>
+          ${scanIndicator(I18n.t('Analyzing {7} using local files…', {7:g.name_guess}))}
         </div>
       </div>
     `;
 
     Overlays.open($("detailDialog"));
+    LoaderUI.sync($("detailDialog"));
 
     try {
       const data = await api(`/api/ghosts/explain?id=${id}${forceRefresh ? "&refresh=1" : ""}`);
-      if (activeGhostDrawerId !== id) return;
+      if (activeGhostDrawerId !== id || request !== drawerRequest) return;
 
       const contentEl = $("ghostDrawerContent");
       if (!contentEl) return;
@@ -404,14 +414,14 @@ window.GhostUI = (() => {
       const fileRows = (data.files || []).map(f => `
         <div class="ghost-file-row">
           <span class="ghost-file-icon">${icon(f.is_dir ? "folder" : "file")}</span>
-          <span class="ghost-file-name" title="${esc(f.name)}">${esc(f.name)}</span>
+          <span data-no-translate class="ghost-file-name" title="${esc(f.name)}">${esc(f.name)}</span>
           <span class="ghost-file-size">${esc(f.size_fmt)}</span>
         </div>
       `).join("");
 
       contentEl.innerHTML = `
         <!-- Card 1: Safety Assessment -->
-        <div class="ghost-drawer-card verdict-card ${g.final_verdict}">
+        <div class="ghost-detail-section verdict-card ${g.final_verdict}">
           <div class="verdict-icon-wrap">
             ${icon(keep ? "lock" : g.unlocked && g.final_verdict === "keep" ? "unlock" : "shield")}
           </div>
@@ -422,7 +432,7 @@ window.GhostUI = (() => {
         </div>
 
         <!-- Card 2: About & Usage -->
-        <div class="ghost-drawer-card">
+        <div class="ghost-detail-section">
           <div class="card-section">
             <span class="card-tag">About this application</span>
             <p class="card-text">${esc(data.summary)}</p>
@@ -435,12 +445,12 @@ window.GhostUI = (() => {
         </div>
 
         <!-- Card 3: Leftover Contents & Files -->
-        <div class="ghost-drawer-card">
+        <div class="ghost-detail-section">
           <div class="card-section">
             <span class="card-tag">Leftover Directory Contents</span>
             <p class="card-text">${esc(data.data_stored)}</p>
             <div class="ghost-path-bar">
-              <code>${esc(data.path)}</code>
+              <code title="${esc(data.path)}">${esc(data.path)}</code>
               ${button("Reveal", "ghost-reveal", {symbol:"folder", data:{id:g.id}, style:"ghost small"})}
             </div>
             ${data.files && data.files.length ? `
@@ -453,9 +463,9 @@ window.GhostUI = (() => {
         </div>
 
         <!-- Card 4: Web Search Context -->
-        <div class="ghost-drawer-card">
+        <div class="ghost-detail-section">
           <div class="card-section">
-            <span class="card-tag">Web & GitHub search context</span>
+            <span class="card-tag">Search the web</span>
             <div class="ghost-search-pills">
               <a href="${esc(data.search_links.google)}" target="_blank" rel="noopener" class="button ghost small search-pill">Google ↗</a>
               <a href="${esc(data.search_links.github)}" target="_blank" rel="noopener" class="button ghost small search-pill">GitHub ↗</a>
@@ -463,7 +473,7 @@ window.GhostUI = (() => {
               ${button("Re-analyze ↻", "ghost-reanalyze", {data:{id:g.id}, style:"ghost small"})}
             </div>
             <p class="ghost-ai-source-badge">
-              ${icon("sparkles")} Analysis source: ${esc(data.model || "local analysis")}
+              ${icon("sparkles")} ${esc(I18n.t("Analysis source: {source}", {source: data.model || I18n.t("Local analysis")}))}
             </p>
           </div>
         </div>
@@ -471,10 +481,11 @@ window.GhostUI = (() => {
         <div class="ghost-inspect-actions">
           ${keep ? button("Review locked ghost", "ghost-unlock", {symbol:"lock", data:{id:g.id}, disabled:locked()}) : button("Banish to Trash", "ghost-banish", {symbol:"trash", style:"primary", data:{id:g.id}, disabled:locked()})}
           ${button("Reveal in Finder", "ghost-reveal", {style:"ghost", data:{id:g.id}})}
-          ${button("Let it rest", "ghost-hide", {style:"ghost", data:{id:g.id}, disabled:locked()})}
+          ${button("Dismiss permanently", "ghost-hide", {style:"ghost", data:{id:g.id}, disabled:locked()})}
         </div>
       `;
     } catch(err) {
+      if (request !== drawerRequest) return;
       const contentEl = $("ghostDrawerContent");
       if (contentEl) {
         contentEl.innerHTML = `<p class="review-warning">Could not inspect: ${esc(err.message)}</p>`;
@@ -519,6 +530,7 @@ window.GhostUI = (() => {
       setupPolling = !result.done;
       if ($("ghostSetupProgress")) {
         $("ghostSetupProgress").innerHTML = progress(result,"setup") + (result.sample ? `<blockquote>${esc(result.sample)}</blockquote><p>Self-test passed. Your local storyteller is ready.</p>` : "") + (result.done && !result.error && !result.cancelled ? '<p>Completed.</p>' : "");
+        LoaderUI.sync($("ghostSetupProgress"));
         $("detailDialog").querySelectorAll('[data-action="ghost-run-setup"], [data-action="ghost-no-ai"], #ghostModel, #ghostModelControl').forEach(e => e.disabled = setupPolling);
       }
       if (setupPolling) setupTimer = setTimeout(pollSetup, 700);
@@ -605,12 +617,12 @@ window.GhostUI = (() => {
       const rawGhosts = report.ghosts.filter(g => !g.hidden);
       let list = rawGhosts.slice();
       if (searchQuery.trim()) {
-        const q = searchQuery.trim().toLowerCase();
+        const q = searchQuery.trim().toLocaleLowerCase(I18n.locale());
         list = list.filter(g =>
           (g.name_guess && g.name_guess.toLowerCase().includes(q)) ||
           (g.path && g.path.toLowerCase().includes(q)) ||
           (g.bundle_id && g.bundle_id.toLowerCase().includes(q)) ||
-          (g.kind && g.kind.toLowerCase().includes(q))
+          (g.kind && (g.kind + " " + I18n.t(g.kind)).toLocaleLowerCase(I18n.locale()).includes(q))
         );
       }
       if (verdictFilter !== "all") {
@@ -659,7 +671,7 @@ window.GhostUI = (() => {
         confirm:"Unlock for review",
         danger:true,
         phrase:"UNLOCK",
-        body:`<p><strong>${esc(g.name_guess)}</strong></p><p class="ghost-path">${esc(g.path)}</p><p>${esc(g.reason)}</p><p>This may contain documents or data used by another app. Unlocking only allows a separate Trash review.</p>`
+        body:`<p><strong>${esc(g.name_guess)}</strong></p><p class="ghost-path">${esc(g.path)}</p><p>${esc((g.confidence_score ? I18n.t("Evidence score {score}/100.", {score: g.confidence_score}) + " " + I18n.t(g.evidence) + " " : "") + I18n.t(g.reason))}</p><p>This may contain documents or data used by another app. Unlocking only allows a separate Trash review.</p>`
       });
       if (answer.confirmed) {
         await api("/api/ghosts/unlock", {...v, id, confirmed:true});
@@ -673,7 +685,7 @@ window.GhostUI = (() => {
         title:"A final farewell?",
         confirm:"Banish to Trash",
         danger:g.final_verdict !== "likely_safe",
-        body:`<div class="review-total"><strong>${esc(g.name_guess)}</strong><b>${fmt(g.size_bytes)}</b></div><p class="ghost-path">${esc(g.path)}</p><p>${esc(g.reason)}</p><p>Move this reviewed leftover to the Trash. You can restore it in Finder until you empty the Trash.</p>`
+        body:`<div class="review-total"><strong>${esc(g.name_guess)}</strong><b>${fmt(g.size_bytes)}</b></div><p class="ghost-path">${esc(g.path)}</p><p>${esc((g.confidence_score ? I18n.t("Evidence score {score}/100.", {score: g.confidence_score}) + " " + I18n.t(g.evidence) + " " : "") + I18n.t(g.reason))}</p><p>${esc(I18n.t('Moved files can be restored from Cleanup history. Trash still uses disk space.'))}</p>`
       });
       if (!answer.confirmed) return;
       busy = true; updateCards();

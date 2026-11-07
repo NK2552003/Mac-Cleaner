@@ -26,6 +26,10 @@ class Item:
     selected: bool = False
     fingerprint: tuple = ()
     keeper_fingerprint: tuple = ()
+    # Only application-owned labels are translated; user filenames stay verbatim.
+    name_key: str = ""
+    name_detail: str = ""
+    name_values: dict = field(default_factory=dict)
 
 
 @dataclass

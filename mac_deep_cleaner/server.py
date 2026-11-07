@@ -20,7 +20,12 @@ BRANDING = Path(__file__).with_name('assets')
 if not BRANDING.is_dir():
     # Source checkout; wheels and frozen builds ship assets beside this module.
     BRANDING = Path(__file__).resolve().parent.parent / 'assets'
-ASSETS = {'/': ('index.html', 'text/html; charset=utf-8'),
+ASSETS = {'/assets/loaders.js': ('loaders.js', 'text/javascript; charset=utf-8'),
+          '/assets/history.js': ('history.js', 'text/javascript; charset=utf-8'),
+          '/assets/loaders.css': ('loaders.css', 'text/css; charset=utf-8'),
+          '/assets/settings.css': ('settings.css', 'text/css; charset=utf-8'),
+          '/assets/i18n.js': ('i18n.js', 'text/javascript; charset=utf-8'),
+          '/': ('index.html', 'text/html; charset=utf-8'),
           '/assets/overlays.js': ('overlays.js', 'text/javascript; charset=utf-8'),
           '/assets/app.js': ('app.js', 'text/javascript; charset=utf-8'),
           '/assets/controls.js': ('controls.js', 'text/javascript; charset=utf-8'),
@@ -133,7 +138,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(303, '', 'text/plain', {'Location': '/', 'Set-Cookie': f'{self.server.cookie_name}={self.server.token}; HttpOnly; SameSite=Strict; Path=/'})
             self._authorized()
             if url.path in ('/assets/app_icon.png', '/favicon.ico'):
-                return self._send(200, (BRANDING / 'app_icon.png').read_bytes(), 'image/png')
+                for candidate in (
+                    BRANDING / 'app_icon.png',
+                    WEB / 'app_icon.png',
+                    Path(__file__).resolve().parent / 'assets' / 'app_icon.png',
+                    Path(__file__).resolve().parent.parent / 'assets' / 'app_icon.png',
+                ):
+                    if candidate.is_file():
+                        return self._send(200, candidate.read_bytes(), 'image/png')
+                raise APIError(404, 'Icon not found.')
             if url.path in ASSETS:
                 filename, kind = ASSETS[url.path]
                 data = (WEB / filename).read_bytes()
@@ -141,6 +154,20 @@ class Handler(BaseHTTPRequestHandler):
                     data = data.replace(b'__MDC_SESSION__', self.server.token.encode())
                 return self._send(200, data, kind)
             service = self.server.service
+            if url.path == '/api/i18n':
+                from .localization import metadata
+                return self._send(200, metadata())
+            if url.path == '/api/i18n/pack':
+                from .localization import load_pack
+                return self._send(200, load_pack(query.get('locale', ['en'])[0]))
+            if url.path == '/api/i18n/catalog':
+                from .localization import catalog
+                return self._send(200, {'locale': 'en', 'messages': {s: s for s in catalog()}})
+            if url.path == '/api/history':
+                from .history import History
+                return self._send(200, {'history': History().records()})
+            if url.path == '/api/i18n/job':
+                return self._send(200, service.language_jobs().report())
             if url.path == '/api/ghosts/config':
                 return self._send(200, service.ghost_config())
             if url.path == '/api/ghosts/icon':

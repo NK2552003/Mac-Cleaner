@@ -24,7 +24,8 @@ class Scanner:
         self.items = []
         self._nid = 0
         self.log = []                 # every progress message, for the UI
-        self.pinned = set(pinned) | {str(Path(__file__).resolve().parent.parent)}
+        self.pinned = set(pinned) | {str(Path(__file__).resolve().parent.parent),
+                                     os.path.join(HOME, "Library/Application Support/Mac Deep Cleaner")}
         if getattr(sys, "frozen", False):
             bundle = next((p for p in Path(sys.executable).parents if p.suffix == ".app"), None)
             if bundle:
@@ -40,6 +41,7 @@ class Scanner:
         self.progress = "starting"
         self.done = False
         self.error = ""
+        self.warnings = []
         self.cancelled = threading.Event()
         self.apps_ready = threading.Event()
         self.started_at = time.time()
@@ -59,10 +61,10 @@ class Scanner:
     def add(self, **kw):
         path = kw.get("path", "")
         with self.lock:
-            key = (kw.get("action", "trash"), path or kw.get("cmd", ""))
             if path and path in self.seen:
                 return None
-            if path and self.pinned and any(path == p or path.startswith(p + os.sep) for p in self.pinned):
+            if path and self.pinned and any(path == p or path.startswith(p + os.sep)
+                                            or p.startswith(path + os.sep) for p in self.pinned):
                 return None
             if path:
                 self.seen.add(path)
@@ -167,12 +169,19 @@ class Scanner:
                 self.running.add(m.group(1).lower())
 
     # ---- ONE walk over $HOME ----------------------------------------------------
+    def inaccessible(self, path, error):
+        if isinstance(error, PermissionError):
+            with self.lock:
+                if path not in self.warnings and len(self.warnings) < 50:
+                    self.warnings.append(path)
+
     def walk_home(self):
         res = {"files": [], "artifacts": [], "bundles": [], "gradle": []}
         tasks = []
         try:
             top = list(os.scandir(HOME))
-        except OSError:
+        except OSError as exc:
+            self.inaccessible(HOME, exc)
             top = []
         for e in top:
             try:
@@ -183,7 +192,8 @@ class Scanner:
                         continue
                     try:
                         subs = list(os.scandir(e.path))
-                    except OSError:
+                    except OSError as exc:
+                        self.inaccessible(e.path, exc)
                         continue
                     tasks.append(("dir", e.path, False))      # artifacts / files directly in this dir
                     names = {x.name for x in subs}
@@ -197,8 +207,8 @@ class Scanner:
                         tasks.append(("dir", s.path, True))
                 elif e.is_file(follow_symlinks=False):
                     self._file(e, res)
-            except OSError:
-                pass
+            except OSError as exc:
+                self.inaccessible(e.path, exc)
         futs = [self.pool.submit(self._walk_dir, p, recurse, res) for _, p, recurse in tasks]
         for f in futs:
             f.result()
@@ -235,7 +245,8 @@ class Scanner:
             d = stack.pop()
             try:
                 entries = list(os.scandir(d))
-            except OSError:
+            except OSError as exc:
+                self.inaccessible(d, exc)
                 continue
             names = {e.name for e in entries}
             for e in entries:
@@ -301,8 +312,10 @@ class Scanner:
                 continue
             base = os.path.basename(p)
             name = sp.label or base
+            name_detail = ""
             if sp.label and "*" in sp.path and not sp.label.endswith(base):
                 name = f"{sp.label}: {base}"
+                name_detail = base
             safety, reason = sp.safety, sp.reason
             manual = False
             if sp.check in ("ndk", "gradle"):
@@ -313,7 +326,7 @@ class Scanner:
                     reason = f"PINNED: {sp.check.upper()} {ver.group(1)} is required by {pin}. " + reason
             action = "root" if sp.root else "trash"
             cmd = sp.cmd if sp.root else ""
-            self.add(category=sp.cat, name=name, path=p, size=sz, safety=safety, reason=reason, regen=sp.regen,
+            self.add(category=sp.cat, name=name, name_key=sp.label, name_detail=name_detail, path=p, size=sz, safety=safety, reason=reason, regen=sp.regen,
                      action=action, cmd=cmd or (f"(alt) {sp.cmd}" if sp.cmd else ""), protected=sp.protected,
                      managed=sp.managed, manual=manual)
 
@@ -325,9 +338,10 @@ class Scanner:
         except OSError:
             n = 0
         sz = dir_size(t)
-        self.add(category="Trash", name=f"Trash ({n} item{'s' if n != 1 else ''})", path=t, size=sz, safety=SAFE,
+        self.add(category="Trash", name=f"Trash ({n} item{'s' if n != 1 else ''})", path=t, size=sz, safety=CAUTION,
                  reason="Already deleted by you; still using disk space.",
-                 regen="Gone for good once emptied - check it first.", action="empty")
+                 regen="Gone for good once emptied - check it first.", action="empty", manual=True,
+                 name_key="Trash ({count})", name_values={"count": n})
 
     # ---- project artifacts -------------------------------------------------------
     def scan_artifacts(self, arts):
@@ -338,7 +352,6 @@ class Scanner:
             if sz < 5_000_000:
                 continue
             _, safety, regen = ART[name]
-            gates = ART[name][0]
             if name in ("venv", "env", ".venv"):
                 has_req = any(os.path.exists(os.path.join(parent, r)) for r in ("requirements.txt", "pyproject.toml", "Pipfile", "poetry.lock", "setup.py"))
                 safety = SAFE if has_req else CAUTION
@@ -516,7 +529,7 @@ class Scanner:
                     continue
                 if sz < 100_000_000:
                     continue
-                self.add(category="Developer & Pro Tools", name="Docker disk image (Docker.raw)", path="", size=sz, safety=CAUTION,
+                self.add(category="Developer & Pro Tools", name="Docker disk image (Docker.raw)", name_key="Docker disk image (Docker.raw)", path="", size=sz, safety=CAUTION,
                          reason="Docker Desktop's VM disk. Pruning removes stopped containers, unused networks and dangling images; the file may need a Docker restart to shrink.",
                          regen="Images are pulled again when needed (volumes are NOT touched).",
                          action="cmd", cmd="docker system prune -f")
@@ -691,7 +704,7 @@ class Scanner:
             for ver, p, base in lst[1:]:
                 sz = dir_size(p)
                 if sz >= 1_000_000:
-                    self.add(category="Developer & Pro Tools", name=f"{base} (old IDE version)", path=p, size=sz, safety=CAUTION,
+                    self.add(category="Developer & Pro Tools", name=f"{base} (old IDE version)", name_key="{name} (old IDE version)", name_values={"name": base}, path=p, size=sz, safety=CAUTION,
                              reason=f"Older version folder; newest installed settings are '{lst[0][2]}'.",
                              regen="The IDE can import settings from the newest version. Per-version plugins/settings here are lost.")
 
@@ -713,7 +726,7 @@ class Scanner:
                     total += dir_size(p)
                     n += 1
         if total > 1_000_000:
-            self.add(category="System Data", name=f"Orphaned iOS simulators ({n})", path="", size=total, safety=SAFE,
+            self.add(category="System Data", name=f"Orphaned iOS simulators ({n})", name_key="Orphaned iOS simulators ({count})", name_values={"count": n}, path="", size=total, safety=SAFE,
                      reason="Simulators whose runtime is no longer installed - they can never boot.",
                      regen="Create new ones in Xcode if needed.", action="cmd", cmd="xcrun simctl delete unavailable")
 
@@ -723,7 +736,7 @@ class Scanner:
         out = run(["tmutil", "listlocalsnapshotdates", "/"], 15)
         dates = [l.strip() for l in out.splitlines() if re.match(r"\d{4}-\d\d-\d\d-\d{6}", l.strip())]
         for dt in dates:
-            self.add(category="System Data", name=f"Time Machine local snapshot {dt}", path="", size=0, safety=CAUTION,
+            self.add(category="System Data", name=f"Time Machine local snapshot {dt}", name_key="Time Machine local snapshot {date}", name_values={"date": dt}, path="", size=0, safety=CAUTION,
                      reason="Local APFS snapshot kept by Time Machine (size is reclaimed lazily; macOS also thins these itself).",
                      regen="Time Machine makes a new one hourly while enabled.", action="root",
                      cmd=f"sudo tmutil deletelocalsnapshots {dt}")
@@ -763,13 +776,13 @@ class Scanner:
                 sz = dir_size(d)
                 if sz:
                     self.add(category="System Data", name=f"System-managed user {'cache' if 'CACHE' in key else 'temp'} ({d})",
+                             name_key="System-managed user cache ({path})" if "CACHE" in key else "System-managed user temp ({path})", name_values={"path": d},
                              path=d, size=sz, safety=CAUTION, reason="macOS and apps manage this themselves; this tool never deletes it.",
                              regen="Managed by macOS.", managed=True, protected=True)
 
     # ---- post-processing ---------------------------------------------------------
     def finalize(self):
         # drop nested duplicates: if a parent is also an item, keep the parent (never double count)
-        paths = sorted((i.path for i in self.items if i.path and i.action in ("trash", "empty", "root", "evict")), key=len)
         parents = []
         drop = set()
         for it in sorted(self.items, key=lambda i: len(i.path)):

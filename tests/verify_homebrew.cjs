@@ -50,6 +50,8 @@ const assert = require('node:assert/strict');
   assert.equal(await page.locator('.disk-choice[data-target="disk1s1"]').count(),0,'system data hidden by default');
   assert.equal(await page.locator('.disk-choice[data-target="disk0s2"]').count(),0,'partition record hidden by default');
   assert.equal(await page.locator('.disk-choice[data-target="disk1s2s1"]').count(),1,'startup volume remains visible');
+  assert.equal(await page.getByRole('button',{name:/Show system volumes/}).count(),0,'advanced records require developer mode');
+  await page.getByRole('switch',{name:'Developer mode',exact:true}).click();
   await page.getByRole('button',{name:/Show system volumes/}).click();
   assert.equal(await page.locator('.disk-choice[data-target="disk1s1"]').count(),1,'advanced toggle reveals system records');
   await page.getByRole('button',{name:'Hide system volumes',exact:true}).click();

@@ -25,12 +25,15 @@ def remember(ghosts):
     atomic_json(LEDGER, entries)
 
 
-def markdown():
+def markdown(locale="en"):
+    from ..localization import translate
+    def text(source):
+        return translate(source, locale)
     def escape(value):
         return str(value).replace('\n', ' ').replace('\r', ' ').replace('\\', '\\\\').replace('|', '\\|').replace('<', '&lt;').replace('>', '&gt;')
-    lines = ['# Cleanup History', '', 'Leftover files moved to the Trash by Mac Deep Cleaner.', '',
-             'Files still occupy disk space until you empty the Trash yourself in Finder.', '',
-             '| Application / Item | Bytes | Date (UTC) |', '| --- | ---: | --- |']
+    lines = ['# ' + text('Cleanup history'), '', text('Leftover files moved to the Trash by Mac Deep Cleaner.'), '',
+             text('Files still occupy disk space until you empty the Trash yourself in Finder.'), '',
+             '| ' + ' | '.join(text(label) for label in ('Application / Item', 'Bytes', 'Date (UTC)')) + ' |', '| --- | ---: | --- |']
     for entry in records():
         lines.append(f"| {escape(entry['name'])} | {int(entry['size_bytes'])} | {escape(entry['date'])} |")
     return '\n'.join(lines) + '\n'

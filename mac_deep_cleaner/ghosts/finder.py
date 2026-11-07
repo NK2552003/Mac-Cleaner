@@ -36,8 +36,15 @@ ALIASES = {
 }
 
 SYSTEM_PREFIXES = (
-    'com.apple.', 'org.swift.', 'org.llvm.', 'org.webkit.', 'com.apple.dt.'
+    'com.apple.', 'org.swift.', 'org.llvm.', 'org.webkit.',
+    # Shortcuts still owns the pre-acquisition Workflow app groups.
+    'is.workflow.'
 )
+
+# These are libraries/runtime services, not separately installed GUI apps.
+SHARED_IDENTIFIERS = {'main.kts.compiled.cache'}
+SHARED_PREFIXES = ('com.plausiblelabs.crashreporter.',)
+SHARED_VENDOR_NAMES = {'com.microsoft': {'onedrive', 'microsoft autoupdate'}}
 
 SYSTEM_DIRS = {
     'addressbook', 'callhistorydb', 'callhistorytransactions', 'crashreporter',
@@ -53,7 +60,11 @@ SYSTEM_DIRS = {
     'applepushservice', 'spotlight', 'metadata', 'mobileosinstall', 'containermanager',
     'notificationcenter', 'siri', 'assistant', 'cloudstorage', 'fileprovider',
     'bird', 'cloudd', 'identityservices', 'imagent', 'lsd', 'passd', 'pkd',
-    'sharingd', 'softwareupdate', 'trustd', 'useractivityd', 'touchid'
+    'sharingd', 'softwareupdate', 'trustd', 'useractivityd', 'touchid',
+    # User Library data belonging to macOS services without an app bundle.
+    'animoji', 'memoji', 'clouddocs', 'differentialprivacy', 'intelligenceflow',
+    'intelligenceplatform', 'sesstorage', 'categories', 'locationaccessstored',
+    'protectedcloudstorage'
 }
 
 KNOWN_TOOLS_AND_PACKAGES = {
@@ -116,19 +127,53 @@ class Ghost:
     def to_dict(self):
         result = asdict(self)
         result.pop('identity', None)
+        result['confidence_score'] = 85 if self.confidence == 'high' else 35
+        result['evidence'] = ('No installed owner or shared vendor matched this bundle identifier.' if self.confidence == 'high' else 'Ownership is uncertain: name-only match or incomplete application inventory.') + ' This score is a heuristic, not a probability; absence does not prove a file is unused.'
         return result
 
 
-def extract_bundle_id(name):
+def ownership_name(name):
+    """Compare file names, app IDs and app-group IDs in the same namespace."""
+    name = name.lower()
     for suffix in SUFFIXES:
-        name = name.removesuffix(suffix)
-    name = re.sub(r'^[A-Z0-9]{10}\.', '', name)
-    name = re.sub(r'^group\.', '', name)
-    return name.lower() if BUNDLE_RE.fullmatch(name) else None
+        name = name.removesuffix(suffix.lower())
+    # Both TEAM.group.com.vendor.app and group.TEAM.com.vendor.app occur.
+    previous = None
+    while previous != name:
+        previous = name
+        name = re.sub(r'^(?:[a-z0-9]{10}|group)\.', '', name)
+    return name
+
+
+def extract_bundle_id(name):
+    name = ownership_name(name)
+    return name if BUNDLE_RE.fullmatch(name) else None
 
 
 def squash(value):
     return re.sub(r'[^a-z0-9]', '', str(value).lower())
+
+
+SYSTEM_NAMES = {squash(name) for name in SYSTEM_DIRS}
+
+
+def protected_entry(path, kind, bundle_id=''):
+    """Hard exclusions: these must never become unlockable Ghost candidates."""
+    path = Path(path)
+    name = ownership_name(path.name)
+    identifiers = (name, ownership_name(bundle_id))
+    if squash(name) in SYSTEM_NAMES:
+        return True
+    for identifier in identifiers:
+        if identifier in SHARED_IDENTIFIERS or any(
+                identifier == prefix.rstrip('.') or identifier.startswith(prefix)
+                for prefix in SYSTEM_PREFIXES + SHARED_PREFIXES):
+            return True
+    # A loose database/file with no app identity is not evidence of an uninstall.
+    # In particular, default.store and its SQLite sidecars belong together.
+    if kind == 'Application Support' and not extract_bundle_id(path.name):
+        return not path.is_dir()
+    return False
 
 
 def vendor_prefixes(bundle_id):
@@ -248,7 +293,7 @@ def brew_packages():
     return packages
 
 
-def extra_app_sources(ids_or_names, maybe_names=None):
+def extra_app_sources(ids_or_names, maybe_names=None, app_paths=None):
     """Homebrew casks, formulas, and Spotlight find apps outside the standard folders. Best effort, read-only."""
     if maybe_names is not None:
         ids, names = ids_or_names, maybe_names
@@ -270,6 +315,8 @@ def extra_app_sources(ids_or_names, maybe_names=None):
                 if plist_path.is_file():
                     with open(plist_path, 'rb') as handle:
                         info = plistlib.load(handle)
+                    if app_paths is not None:
+                        app_paths.add(Path(line))
                     bid = str(info.get('CFBundleIdentifier') or '').lower()
                     if bid:
                         ids.add(bid)
@@ -283,8 +330,24 @@ def extra_app_sources(ids_or_names, maybe_names=None):
         pass
 
 
-def installed_apps(app_dirs=None, warnings=None):
+def application_groups(app):
+    """Read code-signing claims only; this neither launches nor modifies an app."""
+    try:
+        result = subprocess.run(['/usr/bin/codesign', '-d', '--entitlements', ':-', str(app)],
+                                capture_output=True, timeout=2)
+        if result.returncode != 0:
+            return set()
+        data = plistlib.loads(result.stdout)
+        groups = data.get('com.apple.security.application-groups', [])
+        return {value for value in groups if isinstance(value, str)} if isinstance(groups, list) else set()
+    except (OSError, ValueError, TypeError, AttributeError, plistlib.InvalidFileException,
+            subprocess.SubprocessError):
+        return set()  # Unsigned apps and apps without entitlements are valid.
+
+
+def installed_apps(app_dirs=None, warnings=None, include_groups=False, cancelled=None):
     ids, names = set(), set()
+    app_paths = set()
     warnings = warnings if warnings is not None else []
     def failed(error):
         warnings.append('Some installed applications could not be read; candidates are locked.')
@@ -292,6 +355,8 @@ def installed_apps(app_dirs=None, warnings=None):
         if not root.exists():
             continue
         for directory, dirs, _files in os.walk(root, followlinks=False, onerror=failed):
+            if cancelled and cancelled.is_set():
+                return ids, names
             if len(Path(directory).relative_to(root).parts) > 5:
                 dirs[:] = []
                 continue
@@ -299,6 +364,7 @@ def installed_apps(app_dirs=None, warnings=None):
                 if not name.endswith('.app'):
                     continue
                 dirs.remove(name)
+                app_paths.add(Path(directory) / name)
                 names.add(name[:-4].lower())
                 try:
                     with open(Path(directory) / name / 'Contents/Info.plist', 'rb') as handle:
@@ -313,7 +379,12 @@ def installed_apps(app_dirs=None, warnings=None):
                 except (OSError, ValueError, TypeError, AttributeError, plistlib.InvalidFileException):
                     failed(None)
     if app_dirs is None:
-        extra_app_sources(ids, names)
+        extra_app_sources(ids, names, app_paths)
+    if include_groups:
+        for app in sorted(app_paths):
+            if cancelled and cancelled.is_set():
+                break
+            ids.update(application_groups(app))
     return ids, names
 
 
@@ -321,7 +392,9 @@ def measure(path, cancelled=None):
     total, newest = 0, path.lstat().st_mtime
     if path.is_file():
         return path.lstat().st_size, newest
-    for directory, dirs, files in os.walk(path, followlinks=False):
+    def unreadable(error):
+        raise error
+    for directory, dirs, files in os.walk(path, followlinks=False, onerror=unreadable):
         if cancelled and cancelled.is_set():
             break
         dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(directory, d))]
@@ -333,23 +406,26 @@ def measure(path, cancelled=None):
                 newest = max(newest, st.st_mtime)
                 if stat.S_ISREG(st.st_mode):
                     total += st.st_size
-            except OSError:
+            except FileNotFoundError:
                 continue
     return total, newest
 
 
 def find_ghosts(leftover_dirs=None, app_ids_names=None, warnings=None, cancelled=None):
     warnings = warnings if warnings is not None else []
-    ids, names = installed_apps(warnings=warnings) if app_ids_names is None else app_ids_names
-    ids, names = {i.lower() for i in ids}, {n.lower() for n in names}
+    ids, names = installed_apps(warnings=warnings, include_groups=True, cancelled=cancelled) if app_ids_names is None else app_ids_names
+    ids, names = {ownership_name(i) for i in ids}, {n.lower() for n in names}
     incomplete = bool(warnings)
-    squashed = {squash(n) for n in names if len(squash(n)) >= 3}
 
     # Extract all vendor root domains from installed applications
     installed_vendors = set()
     for i in ids:
         for vp in vendor_prefixes(i):
             installed_vendors.add(vp)
+    for vendor, shared_names in SHARED_VENDOR_NAMES.items():
+        if vendor in installed_vendors:
+            names.update(shared_names)
+    squashed = {squash(n) for n in names if len(squash(n)) >= 3}
 
     # Dynamic detection of tools, extensions, commands, and processes
     known_tools = set(KNOWN_TOOLS_AND_PACKAGES)
@@ -386,16 +462,8 @@ def find_ghosts(leftover_dirs=None, app_ids_names=None, warnings=None, cancelled
             entry_lower = entry.name.lower()
             entry_squashed = squash(entry.name)
 
-            # System namespaces & known system directories
-            if entry_lower in SYSTEM_DIRS or entry_squashed in SYSTEM_DIRS:
-                continue
-
             bid = extract_bundle_id(entry.name)
-
-            # Apple, Swift, LLVM, WebKit, CoreServices namespaces are never ghosts
-            if bid and any(bid.startswith(p) or bid == p.rstrip('.') for p in SYSTEM_PREFIXES):
-                continue
-            if not bid and any(entry_lower.startswith(p) for p in SYSTEM_PREFIXES):
+            if protected_entry(entry, kind, bid or ''):
                 continue
 
             # Shared vendor components (e.g. GoogleUpdater, Sky/CUAService, Microsoft AutoUpdate)
@@ -441,6 +509,11 @@ def find_ghosts(leftover_dirs=None, app_ids_names=None, warnings=None, cancelled
                 size, newest = measure(entry, cancelled)
                 if identity != fingerprint(str(entry)):
                     continue
+            except PermissionError:
+                warning = f'Cannot read {kind}. Check Full Disk Access if needed.'
+                if warning not in warnings:
+                    warnings.append(warning)
+                continue
             except OSError:
                 continue
             ghosts.append(Ghost(str(entry), kind, bid or '', friendly_name(bid, entry.name) if bid else entry.name,

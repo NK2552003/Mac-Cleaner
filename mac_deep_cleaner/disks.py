@@ -14,6 +14,10 @@ FORMATS = {'APFS': 'APFS', 'APFSX': 'APFS (case-sensitive)',
            'ExFAT': 'ExFAT (Mac and Windows)', 'JHFS+': 'Mac OS Extended (Journaled)'}
 DISK_ACTIONS = {'verify-volume', 'verify-disk', 'mount', 'unmount', 'eject',
                 'rename', 'add-volume', 'erase', 'partition'}
+HELPER_ROLES = {'Preboot', 'Recovery', 'VM', 'Update', 'xART', 'Hardware',
+                'Installer', 'Diagnostics', 'Baseband', 'ISC'}
+HELPER_CONTENT = {'EFI', 'Apple_Boot', 'Apple_APFS_ISC', 'Apple_APFS_Recovery',
+                  'Microsoft Reserved', 'Windows_Recovery'}
 
 
 def whole(identifier):
@@ -71,11 +75,18 @@ def inventory(runner):
 
     for node in listing.get('AllDisksAndPartitions', []):
         collect(node)
+    # Some diskutil versions omit the mounted system snapshot from list output.
+    startup_id = startup.get('DeviceIdentifier', '')
+    if whole(startup_id) and startup_id not in nodes:
+        nodes[startup_id] = {'DeviceIdentifier': startup_id, '_parent': whole(startup_id)}
     containers = {c['ContainerReference']: c for c in apfs.get('Containers', [])}
+    volume_info = {v['DeviceIdentifier']: v for c in containers.values() for v in c.get('Volumes', [])}
     roles = {v['DeviceIdentifier']: v.get('Roles', []) for c in containers.values()
              for v in c.get('Volumes', [])}
 
     def read(identifier):
+        if identifier == startup_id:
+            return identifier, startup
         try:
             return identifier, runner.plist([DISKUTIL, 'info', '-plist', identifier])
         except APIError:
@@ -111,7 +122,7 @@ def inventory(runner):
     for identifier, node in nodes.items():
         data = info[identifier]
         kind = ('disk' if identifier in physical_ids else 'container' if identifier in containers
-                else 'volume' if data.get('FilesystemType') else 'partition')
+                else 'volume' if data.get('FilesystemType') or identifier in volume_info else 'partition')
         mount = data.get('MountPoint', '')
         uuid = data.get('VolumeUUID') or data.get('DiskUUID') or node.get('DiskUUID', '')
         backup = ('Backup' in roles.get(identifier, []) or bool(uuid and uuid in backup_text)
@@ -124,7 +135,7 @@ def inventory(runner):
         container = containers.get(identifier) or containers.get(whole(identifier), {})
         total = container.get('CapacityCeiling') or data.get('TotalSize') or node.get('Size', 0)
         free = container.get('CapacityFree', data.get('VolumeFreeSpace'))
-        used = data.get('CapacityInUse', node.get('CapacityInUse'))
+        used = data.get('CapacityInUse', volume_info.get(identifier, {}).get('CapacityInUse', node.get('CapacityInUse')))
         if used is None and kind == 'volume' and free is not None:
             used = max(0, total - free)
         devices.append({'id': identifier, 'name': data.get('VolumeName') or data.get('MediaName')
@@ -139,6 +150,7 @@ def inventory(runner):
                         'protocol': data.get('BusProtocol', 'Unknown'),
                         'smart': data.get('SMARTStatus', 'Not supported'),
                         'uuid': uuid, 'roles': roles.get(identifier, []),
+                        'content': data.get('Content') or node.get('Content', ''),
                         'backup': backup, 'snapshot': data.get('APFSSnapshot', False),
                         'identity': {k: data.get(k) for k in ('DeviceTreePath', 'MediaUUID',
                             'DiskUUID', 'VolumeUUID', 'MediaName', 'TotalSize', 'Internal',
@@ -147,7 +159,7 @@ def inventory(runner):
     by_id = {d['id']: d for d in devices}
     for device in devices:
         roots_for_device = device['roots']
-        external = bool(roots_for_device) and all(info.get(r, {}).get('Internal') is False
+        external = bool(roots_for_device) and all(r in physical_ids and info.get(r, {}).get('Internal') is False
                        and info.get(r, {}).get('WholeDisk') is True for r in roots_for_device)
         related = [d for d in devices if set(d['roots']) & set(roots_for_device)]
         identified = any(d['uuid'] for d in related)
@@ -165,16 +177,6 @@ def inventory(runner):
         elif not device['writable']:
             reason = 'This device is read-only or locked. Use Disk Utility to unlock it.'
         device['protected_reason'] = reason
-        # Presentation is independent from eligibility: hidden OS records still
-        # participate in every safety check and remain inspectable on demand.
-        os_roles = set(device['roles']) - {'Backup'}
-        device['system_managed'] = bool(os_roles or device['mount'].startswith('/System/')
-            or device['kind'] == 'partition'
-            or (device['kind'] == 'container' and device['internal'] is not False)
-            or info[device['id']].get('OSInternal') or info[device['id']].get('OSInternalMedia'))
-        device['visible'] = (device['id'] == startup.get('DeviceIdentifier')
-                             or device['kind'] == 'disk'
-                             or (not device['system_managed'] and not device['snapshot']))
         device['actions'] = []
         if info[device['id']]:
             if device['kind'] == 'disk':
@@ -193,6 +195,34 @@ def inventory(runner):
                    'container_uuid', 'name')} for d in related] or [device['identity']]
         device['fingerprint'] = hashlib.sha256(json.dumps(stable, sort_keys=True).encode()).hexdigest()
     startup_device = by_id.get(startup.get('DeviceIdentifier'))
+    # Display usable filesystems, not every layer of the same APFS storage. Size
+    # is deliberately irrelevant: a small user partition is still a real volume.
+    helper_containers = {identifier for identifier, container in containers.items()
+        if any(by_id.get(store.get('DeviceIdentifier'), {}).get('content') in HELPER_CONTENT
+               for store in container.get('PhysicalStores', []))}
+    for device in devices:
+        identifier = device['id']
+        container_id = identifier if identifier in containers else whole(identifier) if whole(identifier) in containers else ''
+        is_startup = identifier == startup_id
+        system_role = bool(set(device['roles']) & (HELPER_ROLES | {'System'}))
+        startup_data = ('Data' in device['roles'] and container_id == whole(startup_id))
+        helper = (system_role or startup_data or device['content'] in HELPER_CONTENT
+                  or container_id in helper_containers or device['mount'].startswith('/System/'))
+        device['system_managed'] = bool(helper or device['kind'] in ('partition', 'container'))
+        physical_backing = bool(device['roots']) and all(r in physical_ids for r in device['roots'])
+        device['visible'] = bool(is_startup or (device['kind'] == 'volume'
+            and physical_backing and not helper and not device['snapshot']))
+        device['startup'] = is_startup
+        device['container_id'] = container_id
+        device['drive_id'] = device['roots'][0] if physical_backing and len(device['roots']) == 1 else ''
+        device['display_used'] = (max(0, device['total'] - device['free'])
+                                  if is_startup and device['free'] is not None else device['used'])
+        device['display_other'] = 0 if is_startup else device['other']
+    # Keep a genuinely empty/unformatted physical drive reachable for setup.
+    for device in devices:
+        if device['kind'] == 'disk':
+            device['visible'] = not any(d['visible'] and device['id'] in d['roots']
+                                        for d in devices if d is not device)
     return {'supported': True, 'checked_at': time.time(), 'devices': devices,
             'startup_id': startup_device['id'] if startup_device else '',
             'warnings': warnings, 'formats': FORMATS}

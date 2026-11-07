@@ -56,7 +56,7 @@ for binary in (resources / 'engine').rglob('*'):
         minimum = max(minimum, tuple(int(n) for n in version.split('.')))
 minimum_version = '.'.join(str(n) for n in minimum)
 subprocess.run(['xcrun', 'swiftc', '-O', '-target', f'{arch}-apple-macosx{minimum_version}',
-                str(root / 'desktop/main.swift'), str(root / 'desktop/window_chrome.swift'), '-o', str(contents / 'MacOS/mac-deep-cleaner')], check=True)
+                str(root / 'desktop/main.swift'), str(root / 'desktop/window_chrome.swift'), str(root / 'desktop/window_presentation.swift'), '-o', str(contents / 'MacOS/mac-deep-cleaner')], check=True)
 subprocess.run(['xcrun', 'swiftc', '-O', '-target', f'{arch}-apple-macosx{minimum_version}',
                 str(root / 'desktop/app_icon.swift'), '-o', str(resources / 'engine/app-icon-helper')], check=True)
 subprocess.run(['codesign', '--force', '--sign', args.identity, str(resources / 'engine/app-icon-helper')], check=True)
@@ -67,7 +67,6 @@ info = {'CFBundleName' : 'Mac Deep Cleaner', 'CFBundleDisplayName': 'Mac Deep Cl
         'CFBundleIdentifier': 'com.macdeepcleaner.desktop', 'CFBundleExecutable': 'mac-deep-cleaner',
         'CFBundleIconFile': 'AppIcon', 'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': app_version, 'CFBundleVersion': app_version,
         'LSMinimumSystemVersion': minimum_version, 'NSHighResolutionCapable': True,
-        'NSAppleEventsUsageDescription': 'Mac Deep Cleaner asks Finder to move only the files you review and approve to Trash.',
         'NSDocumentsFolderUsageDescription': 'Analyze storage and review cleanup in your Documents folder.',
         'NSDownloadsFolderUsageDescription': 'Analyze downloaded files and review cleanup.',
         'NSDesktopFolderUsageDescription': 'Analyze files on your Desktop and review cleanup.',

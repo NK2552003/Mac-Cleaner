@@ -1,4 +1,6 @@
 """The model may veto, never grant permission to remove files."""
+from .finder import protected_entry
+
 RANK = {'keep': 0, 'review': 1, 'likely_safe': 2}
 SAFE_KINDS = {'Caches', 'Logs', 'Saved State', 'HTTPStorages'}
 REASONS = {'keep': 'The owning app could not be verified. Keep this unless you recognize it.',
@@ -7,7 +9,7 @@ REASONS = {'keep': 'The owning app could not be verified. Keep this unless you r
 
 
 def rule_verdict(ghost):
-    if ghost.confidence != 'high' or ghost.bundle_id.startswith('com.apple.'):
+    if ghost.confidence != 'high' or protected_entry(ghost.path, ghost.kind, ghost.bundle_id):
         return 'keep'
     return 'likely_safe' if ghost.kind in SAFE_KINDS else 'review'
 

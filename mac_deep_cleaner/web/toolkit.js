@@ -15,7 +15,7 @@ const ToolkitUI = (() => {
   const head = (title, description, kind, loading) => `<div class="pagehead"><div><h1>${title}</h1><p>${description}</p></div><div class="head-actions">${button(loading ? "Checking…" : "Refresh", "toolkit-refresh", {symbol: "refresh", disabled: loading || locked(), data: {kind}})}</div></div>`;
   const error = (message) => message ? `<div class="error-banner" role="alert">${icon("alert")}<span>${esc(message)}</span></div>` : "";
   const shortcut = (title, action, symbol = "arrow") => button(title, "toolkit-open", {symbol, data: {tool: action}, disabled: health?.supported === false});
-  const stamp = value => value ? `Checked ${new Date(value * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}` : "";
+  const stamp = value => value ? `Checked ${new Date(value * 1000).toLocaleTimeString(I18n.locale(), {hour: "2-digit", minute: "2-digit"})}` : "";
 
   async function refresh(kind) {
     if (kind === "optimize") {
@@ -47,7 +47,8 @@ const ToolkitUI = (() => {
       for (const j of finished) {
         document.dispatchEvent(new CustomEvent("mdc-job-finished", {detail:j}));
         toast(`${j.title}: ${j.status === "succeeded" ? "completed" : "failed — view operation results"}.`, j.status === "failed");
-        if (j.kind === "disk" && view === "disks") refresh("disks");
+        if (j.kind === "disk") { disks = null; if (view === "disks") refresh("disks"); }
+        if (j.kind === "tool" || j.kind === "disk") { health = null; if (view === "optimize") refresh("optimize"); }
       }
       if (changed && isTools()) draw();
     } catch (e) {
@@ -64,13 +65,14 @@ const ToolkitUI = (() => {
   }
   function history() {
     if (!jobs.length) return "";
-    return `<section class="tool-history" aria-label="Operation results"><div class="section-title"><h2>Operation results</h2><span class="muted">This session</span></div>${jobs.slice(-5).reverse().map(j => `<details class="job-result" ${j.status === "failed" ? "open" : ""}><summary><span>${icon(j.status === "running" ? "refresh" : j.status === "failed" ? "alert" : "check")}${esc(j.title)}</span><span class="job-status ${j.status}">${j.status === "running" ? "Running…" : j.status === "succeeded" ? "Completed" : "Failed"}</span></summary>${j.status === "running" ? '<p role="status">Keep Mac Deep Cleaner open. Some operations take several minutes. Check for a macOS permission dialog.</p>' : ""}<pre>${esc(j.error || j.output || "Waiting for command output…")}</pre></details>`).join("")}</section>`;
+    return `<section class="tool-history" aria-label="Operation results"><div class="section-title"><h2>Operation results</h2><span class="muted">This session</span></div>${jobs.filter(j => j.status === "running").map(j => scanIndicator(j.title)).join("")}${jobs.slice(-5).reverse().map(j => `<details class="job-result" ${j.status === "failed" ? "open" : ""}><summary><span>${icon(j.status === "running" ? "refresh" : j.status === "failed" ? "alert" : "check")}${esc(j.title)}</span><span class="job-status ${j.status}">${j.status === "running" ? "Running…" : j.status === "succeeded" ? "Completed" : "Failed"}</span></summary>${j.status === "running" ? '<p role="status">Keep Mac Deep Cleaner open. Some operations take several minutes. Check for a macOS permission dialog.</p>' : ""}<pre>${esc(j.error || j.output || "Waiting for command output…")}</pre></details>`).join("")}</section>`;
   }
   function optimizeView() {
     let html = head("Optimize your Mac", "Understand what needs attention. Choose a task and review every change.", "optimize", healthLoading) + error(healthError);
     if (!health) return html + empty(healthLoading ? "Checking your Mac…" : "Health check unavailable", "Refresh to read memory, storage, battery, and process activity.", "monitor", "", {scanning: healthLoading});
+    if (healthLoading) html += scanIndicator('Checking your Mac…');
     const h = health, low = h.disk.free / h.disk.total < 0.15;
-    html += `<section class="health-overview"><div class="health-heading"><span class="health-emblem">${icon("monitor")}</span><div><h2>Your Mac, at a glance</h2><p>macOS ${esc(h.os || "unavailable")} · ${stamp(h.checked_at)}</p></div>${button("Export report", "toolkit-export", {symbol: "download"})}</div><div class="health-metrics">${metric("Memory pressure", h.pressure, `${h.memory_total ? fmt(h.memory_total) + " installed" : "Memory size unavailable"} · ${h.swap} swap used`)}${metric("Storage available", fmt(h.disk.free), `${fmt(h.disk.total)} total capacity`)}${metric("Background definitions", h.launch_agents.length, "Launch agents and daemons; not a running count")}</div><p class="health-footnote">${icon("shield")}macOS manages memory automatically. These tools diagnose issues and perform specific maintenance; they do not promise a speed boost.</p></section>`;
+    html += `<section class="health-overview"><div class="health-heading"><span class="health-emblem">${icon("monitor")}</span><div><h2>Your Mac, at a glance</h2><p>macOS ${esc(h.os || "unavailable")} · ${stamp(h.checked_at)}</p></div>${button("Export report", "toolkit-export", {symbol: "download"})}</div><div class="health-metrics">${metric("Memory pressure", h.pressure, `${h.memory_total ? I18n.t("{size} installed", {size: fmt(h.memory_total)}) : "Memory size unavailable"} · ${h.swap} swap used`)}${metric("Storage available", fmt(h.disk.free), `${fmt(h.disk.total)} total capacity`)}${metric("Background definitions", h.launch_agents.length, "Launch agents and daemons; not a running count")}</div><p class="health-footnote">${icon("shield")}macOS manages memory automatically. These tools diagnose issues and perform specific maintenance; they do not promise a speed boost.</p></section>`;
     html += `<section class="tool-section"><div class="section-title"><h2>Start here</h2></div><div class="recommendation"><div>${icon(low ? "alert" : "disk")}<div><h3>${low ? "Your startup storage is getting full" : "Keep room for your next project"}</h3><p>Review caches, downloads, and large files before removing them.</p></div></div>${button("Review storage", "navigate", {data:{view:"clean"}})}</div><div class="recommendation"><div>${icon(h.pressure === "High" || h.pressure === "Elevated" ? "alert" : "apps")}<div><h3>${h.pressure === "Normal" ? "Memory pressure is normal" : "Check apps using memory"}</h3><p>Inspect CPU and memory use, then quit apps you no longer need.</p></div></div>${shortcut("Activity Monitor", "activity-monitor")}</div><div class="recommendation"><div>${icon("gear")}<div><h3>Choose what starts with your Mac</h3><p>Review login items and background activity in System Settings.</p></div></div>${shortcut("Manage login items", "login-items")}</div></section>`;
     for (const group of ["Everyday maintenance", "Developer tools"]) {
       html += `<section class="tool-section"><div class="section-title"><h2>${group}</h2>${group === "Developer tools" ? button("Review developer files", "toolkit-dev-files", {style:"link"}) : ""}</div><div class="maintenance-list">${h.tools.filter(t => t.group === group).map(t => `<article class="maintenance-row"><span class="tool-symbol">${icon(group === "Developer tools" ? "code" : "cache")}</span><div><h3>${esc(t.title)}</h3><p>${esc(t.description)}</p>${!t.available ? `<small>Requires ${esc(t.requirement)}</small>` : ""}</div>${button(t.changes ? "Review task" : "Run check", "toolkit-plan", {data: {tool: t.id}, disabled: !t.available || locked()})}</article>`).join("")}</div></section>`;
@@ -83,16 +85,40 @@ const ToolkitUI = (() => {
   function diskView() {
     let html = head("Disks & volumes", "Inspect shared storage, manage external drives, and review every disk change.", "disks", disksLoading) + error(disksError);
     if (!disks) return html + empty(disksLoading ? "Reading disk information…" : "Disk information unavailable", "Connect an external drive or refresh to inspect your Mac’s storage.", "disk", "", {scanning: disksLoading});
-    const visibleDevices = disks.devices.filter(d => showSystemDisks || d.visible !== false);
+    if (disksLoading) html += scanIndicator('Reading disk information…');
+    const advanced = mode === "dev" && showSystemDisks;
+    const visibleDevices = disks.devices.filter(d => advanced || d.visible !== false);
     if (!visibleDevices.some(d => d.id === selectedDisk)) selectedDisk = visibleDevices.find(d => d.id === disks.startup_id)?.id || visibleDevices[0]?.id || "";
     const d = visibleDevices.find(d => d.id === selectedDisk);
     const hiddenCount = disks.devices.filter(d => d.visible === false).length;
     html += disks.warnings.map(error).join("");
     if (!d) return html + empty("No disks available", disks.supported ? "Refresh after connecting a drive." : "Disk tools require macOS.", "disk");
-    const used = d.used ?? (d.free !== null ? d.total - d.free : null);
-    const other = d.used !== null ? d.other : 0;
-    const percent = n => d.total ? (n || 0) / d.total * 100 : 0;
-    html += `<div class="disk-workspace"><section class="disk-browser" aria-label="Connected disks"><div class="disk-browser-heading"><h2>Your storage</h2>${hiddenCount ? `<button class="button link" data-action="toolkit-system-disks" aria-pressed="${showSystemDisks}">${showSystemDisks ? "Hide system volumes" : `Show system volumes (${hiddenCount})`}</button>` : ""}</div><div class="disk-device-list">${visibleDevices.map(x => `<button class="disk-choice ${x.id === selectedDisk ? "active" : ""}" data-action="toolkit-disk-select" data-target="${esc(x.id)}" aria-pressed="${x.id === selectedDisk}">${icon(x.kind === "disk" ? "disk" : "folder")}<span><strong>${esc(x.name)}</strong><small>${x.id === disks.startup_id ? "Startup volume" : x.kind === "disk" ? x.internal ? "Internal drive" : "External drive" : x.kind === "container" ? "Shared APFS container" : x.system_managed ? "Managed by macOS" : "Volume"} · ${fmt(x.total)}</small></span>${x.id === selectedDisk ? icon("check") : ""}</button>`).join("")}</div>${!showSystemDisks && hiddenCount ? '<p class="disk-filter-note">Recovery, boot, and system partitions are hidden. They remain protected.</p>' : ""}</section><section class="disk-detail"><div class="disk-heading"><span class="drive-emblem">${icon("disk")}</span><div><h2>${esc(d.name)}</h2><p>${esc(d.format)}${d.encrypted ? " · Encrypted" : ""}${d.snapshot ? " · Startup snapshot" : ""}</p><small>${esc(d.id)} · ${esc(d.protocol)}</small></div><strong>${fmt(d.total)}</strong></div><div class="volume-map" aria-label="Storage usage">${used !== null ? `<span class="volume-used" style="width:${percent(used)}%"></span><span class="volume-other" style="width:${percent(other)}%"></span>` : '<span class="volume-unknown"></span>'}</div><div class="volume-legend"><span><i class="volume-used"></i>Used<strong>${used === null ? "Not reported" : fmt(used)}</strong></span>${other ? `<span><i class="volume-other"></i>Other volumes & metadata<strong>${fmt(other)}</strong></span>` : ""}<span><i></i>Free${d.kind === "container" || d.format.includes("APFS") ? " in container" : ""}<strong>${d.free === null ? "Not reported" : fmt(d.free)}</strong></span></div>${d.format.includes("APFS") || d.kind === "container" ? '<p class="disk-explanation">APFS volumes share the container’s free space. Other volumes, snapshots, and filesystem metadata can occupy space beyond the selected volume. Purgeable space is not counted as free here.</p>' : ""}<dl class="disk-facts">${[["Mount point", d.mount || "Not mounted"], ["Type", d.snapshot ? "APFS snapshot" : d.kind], ["Access", d.writable ? "Read and write" : "Read-only / locked"], ["SMART status", d.smart], ["Roles", d.roles.join(", ") || "None"], ["UUID", d.uuid || "Not reported"]].map(([k,v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl><div class="disk-actions">${d.actions.map(action => button(labels[action], "toolkit-disk-action", {style: ["erase", "partition"].includes(action) ? "danger" : "", disabled: locked(), data: {tool: action, target: d.id}})).join("")}</div>${d.protected_reason ? `<p class="disk-protected">${icon("shield")}${esc(d.protected_reason)}</p>` : '<p class="note">Erasing or repartitioning removes all data on the selected physical disk. Back up the drive first.</p>'}<div class="disk-native"><div><h3>First Aid, encryption & advanced layouts</h3><p>Use Disk Utility for repairs, encrypted volumes, secure erase where supported, or resizing existing partitions.</p></div>${shortcut("Open Disk Utility", "disk-utility")}</div></section></div><p class="note">${stamp(disks.checked_at)}. Reconnects and layout changes require a fresh review.</p>`;
+    const drive = disks.devices.find(x => x.id === d.drive_id && x.id !== d.id);
+    const container = disks.devices.find(x => x.id === d.container_id && x.id !== d.id);
+    const known = n => typeof n === "number" && Number.isFinite(n) && n >= 0;
+    const free = known(d.free) ? Math.min(d.free, d.total) : null;
+    const rawUsed = d.display_used ?? d.used;
+    const used = known(rawUsed) ? Math.min(rawUsed, d.total) : free !== null ? Math.max(0, d.total - free) : null;
+    const other = known(d.display_other ?? d.other) && used !== null ? Math.min(d.display_other ?? d.other, Math.max(0, d.total - used - (free || 0))) : 0;
+    const percent = n => d.total > 0 ? Math.min(100, Math.max(0, (n || 0) / d.total * 100)) : 0;
+    const actions = device => device.actions.map(action => button(labels[action], "toolkit-disk-action", {style:["erase", "partition"].includes(action) ? "danger" : "", disabled:locked() || disksLoading || !!disksError, data:{tool:action, target:device.id}})).join("");
+    html += `<div class="disk-workspace">
+      <section class="disk-browser" aria-label="Connected disks">
+        <div class="disk-browser-heading"><h2>Your storage</h2>${mode === "dev" && hiddenCount ? `<button class="button link" data-action="toolkit-system-disks" aria-pressed="${advanced}">${advanced ? "Hide system volumes" : `Show system volumes (${hiddenCount})`}</button>` : ""}</div>
+        <div class="disk-device-list">${visibleDevices.map(x => `<button class="disk-choice ${x.id === selectedDisk ? "active" : ""}" data-action="toolkit-disk-select" data-target="${esc(x.id)}" aria-pressed="${x.id === selectedDisk}">${icon(x.kind === "disk" ? "disk" : "folder")}<span><strong data-no-translate>${esc(x.name)}</strong><small>${x.startup ? "Startup volume" : x.backup ? "Backup volume" : x.kind === "disk" ? x.internal ? "Internal drive" : "External drive" : x.system_managed ? "Managed by macOS" : "Volume"} · ${fmt(x.total)}</small></span>${x.id === selectedDisk ? icon("check") : ""}</button>`).join("")}</div>
+        ${!advanced && hiddenCount ? '<p class="disk-filter-note">Only usable volumes are shown. macOS helper partitions, snapshots, and duplicate storage layers are hidden.</p>' : ""}
+      </section>
+      <section class="disk-detail">
+        <div class="disk-heading"><span class="drive-emblem">${icon("disk")}</span><div><h2 data-no-translate>${esc(d.name)}</h2><p>${esc(d.format)}${d.encrypted ? " · Encrypted" : ""}</p><small data-no-translate>${esc(d.id)} · ${esc(d.protocol)}</small></div><strong>${fmt(d.total)}</strong></div>
+        <div class="volume-map" role="img" aria-label="${esc(I18n.t('Storage usage'))}: ${used === null ? esc(I18n.t('Not reported')) : fmt(used)} / ${fmt(d.total)}">${used !== null ? `<span class="volume-used" style="width:${percent(used)}%"></span><span class="volume-other" style="width:${percent(other)}%"></span>` : '<span class="volume-unknown"></span>'}</div>
+        <div class="volume-legend"><span><i class="volume-used"></i>Used<strong>${used === null ? "Not reported" : fmt(used)}</strong></span>${other ? `<span><i class="volume-other"></i>Other volumes & metadata<strong>${fmt(other)}</strong></span>` : ""}<span><i></i>Free<strong>${free === null ? "Not reported" : fmt(free)}</strong></span></div>
+        ${d.startup ? '<p class="disk-explanation">Startup storage includes your files, macOS, and system data in the shared container.</p>' : d.container_id ? '<p class="disk-explanation">APFS volumes share the container’s free space. Other volumes, snapshots, and filesystem metadata can occupy space beyond the selected volume. Purgeable space is not counted as free here.</p>' : ""}
+        <dl class="disk-facts">${[["Mount point", d.mount || "Not mounted"], ["Type", d.startup ? "Startup volume" : d.kind], ["Access", d.writable ? "Read and write" : "Read-only / locked"], ["SMART status", d.smart], ["Roles", d.roles.join(", ") || "None"], ["UUID", d.uuid || "Not reported"]].map(([k,v]) => `<div><dt>${k}</dt><dd ${["Mount point","UUID"].includes(k) ? 'class="path" data-no-translate' : ''}>${esc(v)}</dd></div>`).join("")}</dl>
+        <div class="disk-actions">${actions(d)}${container ? actions(container) : ""}</div>
+        ${drive?.actions.length ? `<div class="disk-drive-actions"><h3>Physical drive</h3><p><span data-no-translate>${esc(drive.name)} · ${esc(drive.id)}</span> · ${fmt(drive.total)}</p><div class="disk-actions">${actions(drive)}</div></div>` : ""}
+        ${d.protected_reason ? `<p class="disk-protected">${icon("shield")}${esc(d.protected_reason)}</p>` : '<p class="note">Erasing or repartitioning removes all data on the selected physical disk. Back up the drive first.</p>'}
+        <div class="disk-native"><div><h3>First Aid, encryption & advanced layouts</h3><p>Use Disk Utility for repairs, encrypted volumes, secure erase where supported, or resizing existing partitions.</p></div>${shortcut("Open Disk Utility", "disk-utility")}</div>
+      </section></div><p class="note">${stamp(disks.checked_at)}. Reconnects and layout changes require a fresh review.</p>`;
     return html + history();
   }
   function options(apfsOnly = false) {
@@ -179,7 +205,7 @@ const ToolkitUI = (() => {
       if (body.action === "partition") body.partitions = [...form.querySelectorAll('.partition-fields')].map(row => ({name: row.querySelector('[name="part-name"]').value, format: row.querySelector('[name="part-format"]').value, size_gb: Number(row.querySelector('[name="part-size"]').value)}));
       return prepare("disk", body);
     }
-    if (action === "toolkit-dev-files") { navigate("clean"); mode = "normal"; cat = "Developer & Pro Tools"; minmb = 0; return draw(); }
+    if (action === "toolkit-dev-files") return navigate("clean", {reset:true, category:"Developer & Pro Tools", minmb:0});
     if (action === "toolkit-export") {
       const blob = new Blob([JSON.stringify({version: S.version, ...health}, null, 2)], {type:"application/json"});
       const url = URL.createObjectURL(blob), a = document.createElement("a");
@@ -195,5 +221,6 @@ const ToolkitUI = (() => {
   window.addEventListener("beforeunload", event => {
     if (isRunning()) { event.preventDefault(); event.returnValue = ""; }
   });
-  return {optimizeView, diskView, enter, dispatch, isRunning, locked, prepare, history};
+  return {optimizeView, diskView, enter, dispatch, isRunning, locked, prepare, history,
+    invalidate:() => {health = null; disks = null;}};
 })();

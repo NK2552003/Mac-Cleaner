@@ -3,6 +3,7 @@ import json
 import re
 
 from ..feature_config import MODEL_IDS
+from ..localization import language_instruction
 from .local_http import local_json
 from .rules import RANK
 
@@ -43,16 +44,44 @@ def valid_output(value):
             'reason': clean(value['reason'], 160)}
 
 
-def haunt_one(ghost, model, timeout=45):
+def output_script_matches(value, locale, names=()):
+    """Reject obvious wrong-script prose without sending model output elsewhere.
+
+    This is a conservative guard, not a full language classifier. Latin-script
+    languages rely on the explicit language instruction and language-scoped cache.
+    """
+    scripts = {
+        'ar': r'[\u0600-\u06ff]', 'fa': r'[\u0600-\u06ff]', 'ur': r'[\u0600-\u06ff]',
+        'he': r'[\u0590-\u05ff]', 'bn': r'[\u0980-\u09ff]', 'gu': r'[\u0a80-\u0aff]',
+        'hi': r'[\u0900-\u097f]', 'mr': r'[\u0900-\u097f]', 'ne': r'[\u0900-\u097f]',
+        'kn': r'[\u0c80-\u0cff]', 'ml': r'[\u0d00-\u0d7f]', 'pa': r'[\u0a00-\u0a7f]',
+        'ta': r'[\u0b80-\u0bff]', 'te': r'[\u0c00-\u0c7f]', 'th': r'[\u0e00-\u0e7f]',
+        'ko': r'[\uac00-\ud7af\u1100-\u11ff]', 'ja': r'[\u3040-\u30ff\u4e00-\u9fff]',
+        'zh': r'[\u4e00-\u9fff]', 'ru': r'[\u0400-\u04ff]', 'uk': r'[\u0400-\u04ff]',
+        'el': r'[\u0370-\u03ff]',
+    }
+    pattern = scripts.get(locale.split('-')[0])
+    if not pattern:
+        return True
+    for name in names:
+        if name:
+            value = value.replace(name, '')
+    return sum(character.isalpha() for character in re.findall(pattern, value)) >= 2
+
+
+def haunt_one(ghost, model, timeout=45, locale="en"):
     if model not in MODEL_IDS:
         raise ValueError('Choose a supported local model.')
     from .finder import KIND_HINT
     facts = {'app_name': clean(ghost.name_guess), 'what_it_is': KIND_HINT.get(ghost.kind, 'app data'),
              'folder_kind': clean(ghost.kind), 'bundle_id': clean(ghost.bundle_id or 'unknown'),
              'owner_verified': ghost.confidence == 'high'}
-    reply = local_json('/api/chat', {'model': model, 'stream': False, 'format': SCHEMA,
-        'keep_alive': '5m', 'options': {'temperature': 0.3, 'top_p': 0.9, 'num_predict': 160},
-        'messages': [{'role': 'system', 'content': SYSTEM},
+    schema = {**SCHEMA, 'properties': {**SCHEMA['properties'],
+        'haunting': {'type': 'string', 'description': language_instruction(locale)},
+        'reason': {'type': 'string', 'description': language_instruction(locale)}}}
+    reply = local_json('/api/chat', {'model': model, 'stream': False, 'format': schema,
+        'keep_alive': '5m', 'options': {'temperature': 0.3, 'top_p': 0.9, 'num_predict': 512},
+        'messages': [{'role': 'system', 'content': SYSTEM + language_instruction(locale)},
                      {'role': 'user', 'content': json.dumps(facts)}]}, timeout=timeout)
     return valid_output(json.loads(reply['message']['content']))
 

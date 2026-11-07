@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint & Type Check
+    name: Python static analysis
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
@@ -33,7 +33,23 @@ jobs:
           cache: pip
 
       - name: Install dev dependencies
-        run: pip install --upgrade pip && pip install ruff mypy types-PyYAML
+        run: pip install --upgrade pip && pip install ruff packaging
+
+      - name: Reject version downgrades against the base branch
+        if: github.event_name == 'pull_request'
+        env:
+          MDC_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$MDC_BASE_SHA"
+          python scripts/version_guard.py --base-ref "$MDC_BASE_SHA"
+
+      - name: Check Python errors and unused definitions
+        run: ruff check --select E9,F mac_deep_cleaner tests scripts/version_guard.py
+
+      - name: Check native close and reopen lifecycle
+        run: |
+          xcrun swiftc desktop/window_presentation.swift tests/native_window_lifecycle.swift -o /tmp/mdc-window-tests
+          /tmp/mdc-window-tests
 
   test:
     name: Test / Python ${{ matrix.python-version }} / ${{ matrix.os }}
@@ -98,9 +114,42 @@ jobs:
             /tmp/mdc-ghost-check/cleanup-history.md
             /tmp/ghost-fixture.log
 
+  workspace-ui:
+    name: Workspace and localization browser flows
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install browser verification tools
+        run: |
+          npm install --prefix /tmp/mdc-ui-check playwright@1.64.1 @axe-core/playwright@4.14.0
+          /tmp/mdc-ui-check/node_modules/.bin/playwright install --with-deps chromium
+      - name: Run isolated workspace and localization flows
+        run: NODE_PATH=/tmp/mdc-ui-check/node_modules python tests/run_browser_checks.py workspace deletion toolkit homebrew support localization accessibility progress
+      - name: Verify loader animation in WebKit
+        run: |
+          /tmp/mdc-ui-check/node_modules/.bin/playwright install --with-deps webkit
+          MDC_TEST_BROWSER=webkit NODE_PATH=/tmp/mdc-ui-check/node_modules python tests/run_browser_checks.py progress
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: workspace-browser-evidence
+          path: |
+            /tmp/mdc-workspace-check/*.png
+            /tmp/mdc-workspace-check/accessibility-report.json
+            /tmp/mdc-workspace-check/progress-*-report.json
+            /tmp/mdc-*-fixture.log
+            /tmp/mdc-ui-check/*.png
+
   build-check:
     name: Build Distribution Check
-    needs: test
+    needs: [test, ghost-ui, workspace-ui]
     runs-on: macos-latest
     timeout-minutes: 25
     steps:
@@ -171,28 +220,25 @@ jobs:
       - name: Compare versions
         id: compare
         run: |
+          python -m pip install packaging
           python - <<'EOF'
-          import json, sys, urllib.request
+          import json, runpy, urllib.request
+          from scripts.version_guard import is_new_release
 
-          try:
-              import tomllib
-          except ImportError:
-              import tomli as tomllib
-
-          with open("pyproject.toml", "rb") as f:
-              data = tomllib.load(f)
-
-          local = data["project"]["version"]
+          local = runpy.run_path("mac_deep_cleaner/__init__.py")["__version__"]
           print(f"Local version : {local}")
 
           package = "mac-deep-cleaner"
           url = f"https://pypi.org/pypi/{package}/json"
           try:
               with urllib.request.urlopen(url, timeout=15) as r:
-                  pypi = json.load(r)["info"]["version"]
+                  metadata = json.load(r)
+                  pypi = metadata["info"]["version"]
+                  released_versions = metadata.get("releases", {})
           except urllib.error.HTTPError as e:
               if e.code == 404:
                   pypi = "0.0.0"
+                  released_versions = {}
                   print("Package not found on PyPI — treating as new release.")
               else:
                   raise
@@ -201,7 +247,7 @@ jobs:
 
           import os
           out = os.environ["GITHUB_OUTPUT"]
-          publish = "true" if local != pypi else "false"
+          publish = "true" if is_new_release(local, pypi, released_versions) else "false"
           with open(out, "a") as f:
               f.write(f"should_publish={publish}\n")
               f.write(f"local_version={local}\n")
@@ -209,7 +255,7 @@ jobs:
           if publish == "true":
               print(f"✅  New version detected ({pypi} → {local}). Will publish.")
           else:
-              print(f"⏭  Version {local} already on PyPI. Skipping publish.")
+              print(f"⏭  Version {local} already exists or is not newer than PyPI {pypi}. Skipping publish.")
           EOF
 
   publish:
@@ -408,7 +454,7 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Bump patch version in pyproject.toml
+      - name: Bump the runtime version source
         if: steps.develop_check.outputs.exists == 'true'
         id: bump
         run: |
@@ -419,12 +465,12 @@ jobs:
           major, minor, patch = map(int, published.split("."))
           next_version = f"{major}.{minor}.{patch + 1}"
 
-          with open("pyproject.toml", "r") as f:
+          with open("mac_deep_cleaner/__init__.py", "r") as f:
               content = f.read()
 
-          # Replace the version field — matches: version = "x.y.z"
+          # Update the shared runtime version; package metadata derives from it.
           updated = re.sub(
-              r'^(version\s*=\s*")[^"]+(")',
+              r'^(__version__\s*=\s*")[^"]+(")',
               rf'\g<1>{next_version}\g<2>',
               content,
               flags=re.MULTILINE,
@@ -433,9 +479,9 @@ jobs:
           if updated == content:
               print(f"⚠️  version field not found or already bumped — no change written.")
           else:
-              with open("pyproject.toml", "w") as f:
+              with open("mac_deep_cleaner/__init__.py", "w") as f:
                   f.write(updated)
-              print(f"✅  Bumped {published} → {next_version} in pyproject.toml")
+              print(f"✅  Bumped {published} → {next_version} in mac_deep_cleaner/__init__.py")
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
               out.write(f"next_version={next_version}\n")
@@ -449,7 +495,7 @@ jobs:
           NEXT="${{ steps.bump.outputs.next_version }}"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pyproject.toml
+          git add mac_deep_cleaner/__init__.py
           # Only commit if there's an actual change
           if git diff --cached --quiet; then
             echo "Nothing to commit — develop is already at $NEXT or bump failed."

@@ -1,0 +1,93 @@
+/* SVG artwork follows the source icon's mint leaf, slate fur and warm belly. */
+.brand-loader {
+  --loader-accent:#91c9ae;
+  --loader-halo:#80ba9d;
+  --orbit-duration:7.4s;
+  display:flex;
+  align-items:center;
+  gap:16px;
+  min-width:0;
+  padding:14px 20px;
+  margin-bottom:22px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:linear-gradient(110deg,#83bd9e0b,transparent 70%),var(--panel);
+  text-align:start;
+}
+.loader-visual { width:88px; height:88px; flex:none; overflow:visible; }
+.loader-halo { fill:var(--loader-halo); opacity:.09; }
+.loader-orbit-guide { fill:none; stroke:var(--loader-accent); stroke-width:.7; opacity:.17; }
+.loader-orbit-arc { fill:none; stroke:var(--loader-accent); stroke-width:1.2; opacity:.5; stroke-linecap:round; }
+.loader-orbit-dot { fill:var(--loader-accent); }
+.loader-traveler,.loader-spark { color:var(--loader-accent); }
+.loader-orbit { transform-origin:60px 60px; animation:loader-orbit var(--orbit-duration) linear infinite; }
+.loader-shadow { fill:#000; opacity:.12; }
+.loader-mascot { transform-origin:60px 96px; animation:loader-breathe 5.6s ease-in-out infinite; }
+.loader-fur { fill:#85929b; }
+.loader-ear { fill:#6f7e86; }
+.loader-belly { fill:#f2eee4; }
+.loader-eyes,.loader-eye-light { fill:#fff; }
+.loader-blink { transform-box:view-box; transform-origin:60px 59px; animation:loader-blink 5.6s ease-in-out infinite; }
+.loader-eyelids { fill:none; stroke:#273238; stroke-width:2; stroke-linecap:round; opacity:0; animation:loader-eyelids 5.6s ease-in-out infinite; }
+.loader-ink { fill:#273238; }
+.loader-whiskers { fill:none; stroke:#34434b; stroke-width:1.9; stroke-linecap:round; }
+.loader-belly-marks { fill:none; stroke:#6b7982; stroke-width:2.3; stroke-linecap:round; stroke-linejoin:round; }
+.loader-leaf { transform-origin:58px 42px; animation:loader-leaf 6.4s ease-in-out infinite; }
+.loader-leaf-fill { fill:#79c879; }
+.loader-leaf-vein { fill:none; stroke:#397d40; stroke-width:1.7; stroke-linecap:round; }
+.loader-spark { fill:none; stroke:currentColor; stroke-width:1.4; stroke-linecap:round; transform-box:fill-box; transform-origin:center; animation:loader-shimmer 4.6s ease-in-out infinite; }
+.loader-spark-two { animation-delay:-2.3s; }
+.loader-feature-badge { color:var(--loader-accent); }
+.loader-feature-badge > circle { fill:var(--panel); stroke:var(--line); stroke-width:1; }
+.loader-copy { flex:1; min-width:0; }
+.loader-label { display:block; margin-bottom:5px; color:var(--muted); font-size:11px; font-weight:500; }
+.loader-copy .loader-message { margin:0; max-width:none; color:var(--text); font-size:13px; line-height:1.55; overflow-wrap:anywhere; }
+.loader-copy .loader-description { margin:10px 0 0; max-width:none; color:var(--muted); font-size:12px; line-height:1.65; }
+.loader-value { flex:none; color:var(--loader-accent); font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
+.loader-actions { flex:none; }
+.brand-loader.is-embedded { border:0; border-radius:0; margin:0; border-bottom:1px solid var(--line); padding:12px 28px; }
+.empty > .brand-loader { width:100%; max-width:600px; margin:0 0 10px; }
+.brand-loader[data-feature="apps"] { --loader-accent:#9dbbf0; --orbit-duration:9.2s; }
+.brand-loader[data-feature="big"] { --loader-accent:#a6c6de; --orbit-duration:10.2s; }
+.brand-loader[data-feature="dups"] { --loader-accent:#b6b3e6; --orbit-duration:8.8s; }
+.brand-loader[data-feature="optimize"] { --loader-accent:#82c9c4; --orbit-duration:6.8s; }
+.brand-loader[data-feature="disks"] { --loader-accent:#8eb8dd; --orbit-duration:8s; }
+.brand-loader[data-feature="homebrew"] { --loader-accent:#d9bd88; --orbit-duration:9.6s; }
+.brand-loader[data-feature="ghosts"] { --loader-accent:#bdb0dc; --orbit-duration:11.2s; }
+html[data-theme="light"] .brand-loader { --loader-accent:#3c735d; }
+html[data-theme="light"] .brand-loader[data-feature="apps"],html[data-theme="light"] .brand-loader[data-feature="big"],html[data-theme="light"] .brand-loader[data-feature="disks"] { --loader-accent:#466d9b; }
+html[data-theme="light"] .brand-loader[data-feature="dups"],html[data-theme="light"] .brand-loader[data-feature="ghosts"] { --loader-accent:#746394; }
+html[data-theme="light"] .brand-loader[data-feature="homebrew"] { --loader-accent:#8a6737; }
+@keyframes loader-orbit { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+@keyframes loader-breathe { 0%,100% { transform:translateY(0) scale(1); } 50% { transform:translateY(-1.1px) scale(1.018); } }
+/* Blink within the first second, with visible closed lids and an occasional double blink. */
+@keyframes loader-blink {
+  0%,12%,20%,64%,72%,76%,84%,100% { transform:scaleY(1); }
+  14.5%,17.5%,66.5%,69.5%,78.5%,81.5% { transform:scaleY(.01); }
+}
+@keyframes loader-eyelids {
+  0%,12%,20%,64%,72%,76%,84%,100% { opacity:0; }
+  14.5%,17.5%,66.5%,69.5%,78.5%,81.5% { opacity:1; }
+}
+@keyframes loader-leaf { 0%,100% { transform:rotate(-5deg); } 50% { transform:rotate(6deg); } }
+@keyframes loader-shimmer { 0%,100% { opacity:.3; transform:scale(.8); } 50% { opacity:.85; transform:scale(1); } }
+@media(max-width:650px) {
+  .brand-loader { padding:12px; gap:10px; flex-wrap:wrap; }
+  .loader-visual { width:68px; height:68px; }
+  .loader-copy { flex-basis:calc(100% - 80px); }
+  .loader-actions { margin-inline-start:auto; }
+  .loader-value { margin-inline-start:78px; }
+  .brand-loader.is-embedded { padding:12px 16px; }
+}
+.brand-loader.is-centered { flex-direction:column; flex-wrap:nowrap; justify-content:center; gap:16px; min-height:300px; padding:32px 24px; text-align:center; border:0; background:none; }
+.brand-loader.is-centered .loader-visual { width:120px; height:120px; }
+.brand-loader.is-centered .loader-copy { flex:0 1 auto; width:100%; max-width:46ch; }
+.brand-loader.is-centered .loader-message { font-size:16px; font-weight:500; }
+.brand-loader.is-centered .loader-value,.brand-loader.is-centered .loader-actions { margin:0; }
+.brand-loader.is-centered.is-embedded { border-bottom:1px solid var(--line); }
+.empty.is-scanning > .brand-loader.is-centered { min-height:240px; padding:0; margin:0; }
+.loader-visual.is-still { --loader-accent:var(--muted); --loader-halo:var(--muted); width:112px; height:112px; }
+.loader-visual.is-still .loader-motion { animation:none; }
+@media(prefers-reduced-motion:reduce) {
+  .brand-loader .loader-motion { animation:none!important; }
+}

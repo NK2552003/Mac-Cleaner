@@ -37,7 +37,9 @@ If setup or its self-test fails, Ghost Files returns to level 1. Completed insta
 
 ## Review and banish
 
-The scanner compares reverse-DNS bundle identifiers and app names in eight user Library locations with standard application directories, including system applications. Installed bundle prefixes (helpers/extensions), Apple namespaces, and known VS Code folder aliases are excluded. Symlink roots and entries are skipped. Incomplete installed-app inventory makes candidates locked. Sizes are file-content estimates; age uses the newest readable modification time beneath an entry.
+The scanner compares reverse-DNS bundle identifiers and app names in eight user Library locations with standard application directories, including system applications, and best-effort Spotlight results. It also reads installed apps' code-signing entitlements for shared app-group ownership; this never launches or changes those apps. Group and team prefixes use the same normalization for both installed owners and candidate files.
+
+macOS service folders, Apple namespaces, Shortcuts' legacy Workflow groups, known shared runtime data, installed bundle prefixes (helpers/extensions), and known app aliases are excluded. These system exclusions cannot be unlocked through Ghost Files. Loose Application Support files without an app identity are not treated as uninstall evidence. Symlink roots and entries are skipped. Unreadable subtrees are skipped with a permission warning; they are not presented as zero-byte leftovers. Incomplete installed-app inventory makes remaining candidates locked. Sizes are file-content estimates; age uses the newest readable modification time beneath an entry.
 
 | Verdict | Review behavior |
 | --- | --- |
@@ -51,7 +53,7 @@ The model can only make the deterministic verdict more cautious. Its text is san
 
 Ghosts are normal scanner items, assigned the current scan ID, revision, and filesystem fingerprint. **Banish to Trash** calls the existing `/api/clean` endpoint and shared `execute` validators. Stale revisions, changed identities, exclusions, protected items, and unsafe paths are rejected. Parent or app cleanup cannot bypass a ghost review. Generic Cleanup links these entries back to Ghost Files. Permanent deletion is disallowed for ghost items.
 
-The Ofrenda records only successful moves, with name, size, UTC date, and a farewell. Export it as `ofrenda.md` from the Ghosts screen; the native shell opens a Save dialog. Files still consume space while in Trash. Restore them with Finder before emptying Trash if needed.
+The Ofrenda records only successful moves, with name, size, UTC date, and a farewell. Export it as `ofrenda.md` from the Ghosts screen; the native shell opens a Save dialog. Files still consume space while in Trash. Restore them in Storage Cleanup → Cleanup history before emptying Trash if needed.
 
 ## Turn it off or remove AI
 
@@ -101,8 +103,14 @@ node tests/verify_ghosts.cjs
 
 The browser fixture does not use the host Ollama, installed apps, or user Library. It exercises settings, consent, scanner cards, unlock/review/cancel, Trash, Ofrenda export, narration, removal, and six viewport sizes. CI runs this fixture separately and uploads screenshots.
 
-Before publishing a release, run the actual download/install/self-test on a clean supported macOS user account, and repeat with an already running user-owned Ollama. Automated fixture success is not proof of a real model download or fresh-account installation. Verify native Save-dialog interaction and Finder Put Back in that account as well.
+Before publishing a release, run the actual download/install/self-test on a clean supported macOS user account, and repeat with an already running user-owned Ollama. Automated fixture success is not proof of a real model download or fresh-account installation. Verify native Save-dialog interaction and Cleanup history restore in that account as well.
 
 Known discovery limits: applications installed outside standard directories, renamed vendors, shared app-group containers, command-line tools, and login helpers may own apparently orphaned data. Name-only entries remain locked; inspect every proposed removal.
 
+The [system-file audit](ghost-system-audit.md) records a read-only before/after scan on a real Mac and the regression checks for macOS data, shared services, app groups, and stale results.
+
 References checked during implementation (2026-10-31): [pull API](https://docs.ollama.com/api/pull), [delete API](https://docs.ollama.com/api/delete), [structured output](https://docs.ollama.com/capabilities/structured-outputs), [Llama 1B](https://ollama.com/library/llama3.2:1b), [Llama 3B](https://ollama.com/library/llama3.2:3b), [Gemma 4B](https://ollama.com/library/gemma3:4b), [official macOS build layout](https://github.com/ollama/ollama/blob/main/scripts/build_darwin.sh), [signing-team reference](https://github.com/Installomator/Installomator/blob/main/fragments/labels/ollama.sh).
+
+## v3.5.0 evidence and dismissals
+
+Ghost cards show a heuristic evidence score and the ownership evidence behind it; scores are not probabilities. **Dismiss permanently** adds the location to a persistent allowlist and excludes it from cleanup. Manage exclusions in Settings → Ghost allowlist. The older “show resting ghosts” control only reveals dismissed cards in the current session; removal from the allowlist is a separate action.

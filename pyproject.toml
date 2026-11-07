@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mac-deep-cleaner"
-version = "3.2.0"
+dynamic = ["version"]
 description = "Local Mac cleanup, system maintenance, and guarded external-disk management"
 readme = "README.md"
 license = "Apache-2.0"
@@ -37,6 +37,7 @@ dev = [
     "pytest-cov",
     "mypy",
     "ruff",
+    "packaging>=23.0",
     "rich>=13.0.0",
     "questionary>=2.0.0",
 ]
@@ -53,12 +54,15 @@ Homepage = "https://github.com/NK2552003/Mac-Cleaner"
 [tool.setuptools]
 packages = ["mac_deep_cleaner", "mac_deep_cleaner.ghosts", "mac_deep_cleaner.web", "mac_deep_cleaner.assets"]
 
+[tool.setuptools.dynamic]
+version = {attr = "mac_deep_cleaner.__version__"}
+
 # Keep one source asset directory while shipping it inside the installed package.
 [tool.setuptools.package-dir]
 "mac_deep_cleaner.assets" = "assets"
 
 [tool.setuptools.package-data]
-mac_deep_cleaner = ["web/*.html", "web/*.css", "web/*.js"]
+mac_deep_cleaner = ["web/*.html", "web/*.css", "web/*.js", "web/*.json", "web/locales/*.json"]
 "mac_deep_cleaner.assets" = ["*.png"]
 
 [tool.ruff]
