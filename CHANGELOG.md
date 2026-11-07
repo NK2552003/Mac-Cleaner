@@ -23,6 +23,7 @@ All notable changes to **mac-deep-cleaner** will be documented in this file.
 
 ### Fixed
 
+- CI loader checks wait for animation readiness and observable frame progress instead of assuming WebKit advances during a fixed 100 ms delay. Frozen or restarted animations still fail, with clock/state diagnostics; blink checks allow a complete animation cycle.
 - Closing the fullscreen window now exits its Space before hiding. Dock/menu-bar reopening cancels a pending hide, restores minimized or hidden windows, and recovers from failed fullscreen exits. Custom and native close buttons share the same lifecycle; explicit Quit retains running-operation protection.
 - Ghost Files' Sort control has one button border, with no second padded wrapper. Sorting and layout are checked in both themes and narrow/short windows.
 - Mascot eyes blink within the first second, with visible closed eyelids and occasional double blinks. Rendered-frame checks verify closing and reopening while polling preserves the animation clock.
