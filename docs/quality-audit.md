@@ -1,6 +1,6 @@
 # Quality audit — 2026-11-07
 
-The current 3.5.0 pass removes Care Center, preserves shared cleanup recovery and language functionality, adds mascot eye blinks, and fixes the version regression below main/PyPI 3.2.0. This report describes tested behavior, not a guarantee that every macOS configuration is defect-free.
+The current 3.5.0 pass removes Care Center, preserves shared cleanup recovery and language functionality, fixes the Ghost Sort border and visible mascot blinks, centers empty states, and repairs fullscreen close/reopen handling. Version 3.5.0 remains unreleased and above main/PyPI 3.2.0. This report describes tested behavior, not a guarantee that every macOS configuration is defect-free.
 
 ## Current verification
 
@@ -8,7 +8,9 @@ The current 3.5.0 pass removes Care Center, preserves shared cleanup recovery an
 - **Nine browser flows** cover workspace navigation, deletion/restore, Toolkit, Homebrew, shared history/language controls, Ghost Files, localization, accessibility, and loading states.
 - Workspace checks cover **128 theme/language/window combinations**. Old Care deep links fall back to Storage Cleanup, with no Care navigation or assets remaining.
 - **24 WCAG audits passed** across workspaces, Cleanup history, application details, uninstall reviews, and permission notices in both themes.
-- Loader checks cover **66 feature/theme/window combinations per engine** in Chromium and WebKit, including single-loader placement, actual percentages, cancellation, errors, eyes closing/reopening, uninterrupted animation timing, and Reduce Motion.
+- Loader checks cover **66 feature/theme/window combinations per engine** in Chromium and WebKit, including single-loader placement, actual percentages, cancellation, errors, centered artwork/copy, uninterrupted animation timing, and Reduce Motion. Rendered SVG snapshots verify visibly closed and reopened eyes; live polling checks observe blinking without restarting its clock. Completed empty states retain a static mascot with no active animations.
+- Ghost Sort checks exercise selection and verify a single border with no wrapper padding in both themes at six window sizes.
+- Native lifecycle tests cover ordinary close, fullscreen exit before hiding, repeated close, reopen during entry/exit, and fullscreen failure recovery. All native sources pass Swift typechecking. These tests exercise the state machine; they do not automate macOS fullscreen Spaces.
 - All **42 bundled language packs cover 1,990 active messages**, with protected tokens intact. Removed Care strings are pruned. These are automated checks, not native-speaker review.
 - Python static analysis, JavaScript syntax, and whitespace checks pass. Version policy accepts 3.5.0 above main's 3.2.0 and rejects the previous 3.0.0 downgrade.
 
@@ -35,6 +37,7 @@ The native menu opens safe-item selection for review and shared Cleanup history.
 | Ghost Files | System exclusions, installed ownership, permission gaps, review/unlock/cancel, Trash/history, AI consent | Temporary Library and simulated Ollama |
 | Shared Settings | Language import, generation progress/errors, key cleared from UI, allowlist exclusions | Isolated packs and intercepted translation |
 | Release version | Branch regression rejected; duplicate/older PyPI versions not published | Local policy tests; no publishing or tagging |
+| Native window | Exit fullscreen before hiding, reopen cancels delayed hide, failure recovery | Swift lifecycle tests and source compilation; native Space transitions require manual acceptance |
 
 The preceding read-only host Ghost scan found no candidates and reported unreadable installed-app locations and Application Support. Inaccessible folders were not established to be free of leftovers. See [the Ghost system audit](ghost-system-audit.md).
 
@@ -51,6 +54,9 @@ npm install --prefix /tmp/mdc-ui-check playwright@1.64.1 @axe-core/playwright@4.
 NODE_PATH=/tmp/mdc-ui-check/node_modules .venv/bin/python tests/run_browser_checks.py
 MDC_TEST_BROWSER=webkit NODE_PATH=/tmp/mdc-ui-check/node_modules .venv/bin/python tests/run_browser_checks.py progress
 .venv/bin/python scripts/complete_locales.py --check
+xcrun swiftc desktop/window_presentation.swift tests/native_window_lifecycle.swift -o /tmp/mdc-window-tests
+/tmp/mdc-window-tests
+xcrun swiftc -typecheck desktop/main.swift desktop/window_chrome.swift desktop/window_presentation.swift
 bash scripts/build.sh pkg
 bash scripts/build.sh build
 ```

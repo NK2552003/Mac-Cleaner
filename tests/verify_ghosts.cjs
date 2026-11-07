@@ -22,6 +22,14 @@ const assert = require('node:assert/strict');
   const scan = await page.evaluate(()=>api('/api/ghosts/state'));
   assert.equal(scan.ghosts.length,3,'System folders, shared databases and Shortcuts groups must be excluded');
   assert.deepEqual(scan.ghosts.map(g=>g.name_guess).sort(),['Forgotten Notes','Moonlit Lantern','Paper Atlas']);
+  const sort=page.getByRole('combobox',{name:'Sort ghosts',exact:true});
+  await sort.click();
+  await page.getByRole('option',{name:'Name (A–Z)',exact:true}).click();
+  assert.equal(await page.locator('#ghostSort').inputValue(),'name');
+  assert.deepEqual(await page.locator('.ghost-card h2').allTextContents(),['Forgotten Notes','Moonlit Lantern','Paper Atlas']);
+  await sort.click();
+  await page.getByRole('option',{name:'Largest size',exact:true}).click();
+  assert.equal(await page.locator('#ghostSort').inputValue(),'size');
   const fixtureRoot=scan.ghosts[0].path.split('/Library/')[0];
   assert.match(fixtureRoot,/\/mdc-ghost-ui-[^/]+$/,'Only disposable fixture files may be inspected');
   const protectedFiles=['Application Support/CloudDocs','Application Support/Animoji',
@@ -95,6 +103,12 @@ const assert = require('node:assert/strict');
       return [...main.querySelectorAll('*')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&(r.right>box.right+1||r.left<box.left-1)}).map(e=>`${e.tagName}.${e.className}`).slice(0,8);
     });
     assert.deepEqual(overflow,[],`Ghosts overflow ${theme} ${width}x${height}`);
+    const sortBorder=await page.locator('.ghost-sort-select.dropdown').evaluate(el=>{
+      const css=getComputedStyle(el), outer=el.getBoundingClientRect(), inner=el.querySelector('.dropdown-trigger').getBoundingClientRect();
+      return {border:css.borderWidth,padding:css.padding,extraWidth:outer.width-inner.width,extraHeight:outer.height-inner.height};
+    });
+    assert.deepEqual(sortBorder,{border:'0px',padding:'0px',extraWidth:0,extraHeight:0},'Ghost sort must have only the button border');
+    if(width===1440) await page.locator('.ghost-sort-wrap').screenshot({path:`/tmp/mdc-ghost-check/sort-${theme}.png`});
     if(width<=760) assert(await page.locator('.ghost-search-wrap').evaluate(el=>el.getBoundingClientRect().height<60),'Search row must not retain a horizontal flex basis as its height');
     if(theme==='light') assert.equal(await page.locator('#ghostSearch').evaluate(el=>getComputedStyle(el).color),'rgb(29, 39, 52)');
     assert(await page.locator('#ghostSearch').evaluate(el=>parseFloat(getComputedStyle(el).paddingLeft)>=30),'Search text must clear its icon');

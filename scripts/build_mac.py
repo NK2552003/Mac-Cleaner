@@ -56,7 +56,7 @@ for binary in (resources / 'engine').rglob('*'):
         minimum = max(minimum, tuple(int(n) for n in version.split('.')))
 minimum_version = '.'.join(str(n) for n in minimum)
 subprocess.run(['xcrun', 'swiftc', '-O', '-target', f'{arch}-apple-macosx{minimum_version}',
-                str(root / 'desktop/main.swift'), str(root / 'desktop/window_chrome.swift'), '-o', str(contents / 'MacOS/mac-deep-cleaner')], check=True)
+                str(root / 'desktop/main.swift'), str(root / 'desktop/window_chrome.swift'), str(root / 'desktop/window_presentation.swift'), '-o', str(contents / 'MacOS/mac-deep-cleaner')], check=True)
 subprocess.run(['xcrun', 'swiftc', '-O', '-target', f'{arch}-apple-macosx{minimum_version}',
                 str(root / 'desktop/app_icon.swift'), '-o', str(resources / 'engine/app-icon-helper')], check=True)
 subprocess.run(['codesign', '--force', '--sign', args.identity, str(resources / 'engine/app-icon-helper')], check=True)

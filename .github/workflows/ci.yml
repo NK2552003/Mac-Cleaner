@@ -46,6 +46,11 @@ jobs:
       - name: Check Python errors and unused definitions
         run: ruff check --select E9,F mac_deep_cleaner tests scripts/version_guard.py
 
+      - name: Check native close and reopen lifecycle
+        run: |
+          xcrun swiftc desktop/window_presentation.swift tests/native_window_lifecycle.swift -o /tmp/mdc-window-tests
+          /tmp/mdc-window-tests
+
   test:
     name: Test / Python ${{ matrix.python-version }} / ${{ matrix.os }}
     needs: lint

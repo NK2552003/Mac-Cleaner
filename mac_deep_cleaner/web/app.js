@@ -102,8 +102,8 @@ function scanIndicator(message = 'Scanning in progress', options = {}) {
   const feature = options.feature || view;
   return LoaderUI.render(message, {feature, key:`${feature}:${S.scan_id || 'initial'}`, ...options});
 }
-const empty = (title, description, symbol = "search", action = "", { scanning = false, showLoader = true } = {}) =>
-  `<div class="empty ${scanning ? "is-scanning" : ""}">${scanning && showLoader ? scanIndicator(title) : `${scanning ? '' : icon(symbol)}<h3>${esc(title)}</h3>`}<p>${esc(description)}</p>${action}</div>`;
+const empty = (title, description, symbol = "search", action = "", { scanning = false, showLoader = true, percent = null } = {}) =>
+  `<div class="empty ${scanning ? "is-scanning" : ""}">${scanning && showLoader ? scanIndicator(title, {centered:true, description, actions:action, percent}) : `${scanning ? '' : LoaderUI.artwork(view)}<h3>${esc(title)}</h3><p>${esc(description)}</p>${action}`}</div>`;
 const metric = (label, value, note) =>
   `<div class="metric"><span>${esc(label)}</span><b>${esc(value)}</b><small>${esc(note)}</small></div>`;
 const bar = (parts) =>
@@ -482,7 +482,7 @@ function overview() {
       ? Math.min(100, Math.round((disk.used / disk.total) * 100))
       : null,
     C = 2 * Math.PI * 59;
-  return `<section class="overview" aria-label="${esc(I18n.t("Storage overview"))}">${(S.scanning || !ready) && !connectionError ? scanIndicator(S.progress || "Finding storage you can review…", {feature:'clean',embedded:true}) : ""}<div class="overview-main"><div><div class="overview-label">${icon("clean")}${esc(I18n.t(S.scanning ? "Potential space found so far" : "Potential to reclaim"))}</div><div class="storage-number">${ready ? n : "—"}<span>${ready ? u : ""}</span></div><p class="overview-copy">${S.scanning ? esc(I18n.t("Results will be ready to review when the scan finishes.")) : `${S.items.filter(eligible).length.toLocaleString(I18n.locale())} ${esc(I18n.t("items found across your Mac. You choose what goes."))}`}</p><div class="overview-cta">${button(I18n.t("Select safe items"), "select-safe", { style: "primary", symbol: "check", disabled: !canSelect() || !S.items.some((i) => eligible(i) && i.safety === "safe" && !i.manual && i.action === "trash") })}<small>${esc(I18n.t("Review before removing anything"))}</small></div></div><div class="disk-panel"><div class="disk-ring"><svg viewBox="0 0 148 148" aria-hidden="true"><circle class="ticks" cx="74" cy="74" r="70"/><circle class="track" cx="74" cy="74" r="59"/><circle class="usage" cx="74" cy="74" r="59" stroke-dasharray="${(C * (used || 0)) / 100} ${C}"/></svg><div class="ring-label"><b>${used === null ? "—" : used + "%"}</b><span>${esc(I18n.t("disk used"))}</span></div></div><div class="disk-info"><h3>${esc(I18n.t("Your Mac’s storage"))}</h3><p>${esc(I18n.t("Available"))}<strong class="free">${disk ? fmt(disk.free) : "—"}</strong></p><p>${esc(I18n.t("Total capacity"))}<strong>${disk ? fmt(disk.total) : "—"}</strong></p></div></div></div><div class="risk-summary">${[
+  return `<section class="overview" aria-label="${esc(I18n.t("Storage overview"))}">${(S.scanning || !ready) && !connectionError ? scanIndicator(S.progress || "Finding storage you can review…", {feature:'clean',embedded:true,centered:!S.items.length}) : ""}<div class="overview-main"><div><div class="overview-label">${icon("clean")}${esc(I18n.t(S.scanning ? "Potential space found so far" : "Potential to reclaim"))}</div><div class="storage-number">${ready ? n : "—"}<span>${ready ? u : ""}</span></div><p class="overview-copy">${S.scanning ? esc(I18n.t("Results will be ready to review when the scan finishes.")) : `${S.items.filter(eligible).length.toLocaleString(I18n.locale())} ${esc(I18n.t("items found across your Mac. You choose what goes."))}`}</p><div class="overview-cta">${button(I18n.t("Select safe items"), "select-safe", { style: "primary", symbol: "check", disabled: !canSelect() || !S.items.some((i) => eligible(i) && i.safety === "safe" && !i.manual && i.action === "trash") })}<small>${esc(I18n.t("Review before removing anything"))}</small></div></div><div class="disk-panel"><div class="disk-ring"><svg viewBox="0 0 148 148" aria-hidden="true"><circle class="ticks" cx="74" cy="74" r="70"/><circle class="track" cx="74" cy="74" r="59"/><circle class="usage" cx="74" cy="74" r="59" stroke-dasharray="${(C * (used || 0)) / 100} ${C}"/></svg><div class="ring-label"><b>${used === null ? "—" : used + "%"}</b><span>${esc(I18n.t("disk used"))}</span></div></div><div class="disk-info"><h3>${esc(I18n.t("Your Mac’s storage"))}</h3><p>${esc(I18n.t("Available"))}<strong class="free">${disk ? fmt(disk.free) : "—"}</strong></p><p>${esc(I18n.t("Total capacity"))}<strong>${disk ? fmt(disk.total) : "—"}</strong></p></div></div></div><div class="risk-summary">${[
     ["safe", I18n.t("Safe to remove")],
     ["caution", I18n.t("Review first")],
     ["risky", I18n.t("Needs care")],
@@ -604,6 +604,7 @@ function appIcon(a) {
   return `<span class="app-icon"><span aria-hidden="true">${esc((a.name.match(/[A-Za-z0-9]/) || ["?"])[0].toUpperCase())}</span><img src="/api/icon?id=${a.id}&generation=${encodeURIComponent(A.apps_id || S.scan_id || "")}" alt="" loading="lazy" decoding="async"></span>`;
 }
 function appsView() {
+  if (!A.ready && !A.apps.length && !appsError) return pagehead('Applications', 'Your apps, their data, and the space they leave behind.') + banners() + empty('Analyzing applications', 'Measuring disk footprints and caches for all installed apps.', 'apps', '', {scanning:true,percent:A.total ? A.progress*100/A.total : null});
   let apps = A.apps.filter(
     (a) =>
       (!idleOnly || (a.idle_days > 180 && !a.running)) &&
@@ -699,6 +700,7 @@ function duplicatesView() {
       ),
     );
   const rows = sets.flat();
+  if (S.scanning && !rows.length) return pagehead('Duplicate files', 'Keep the original. Let go of the extra copies.') + banners() + empty('Checking for duplicates…', 'Scanning and comparing file hashes. Matching copies will appear here.', 'dup', '', {scanning:true});
   return (
     pagehead(
       "Duplicate files",

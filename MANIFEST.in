@@ -5,7 +5,7 @@ recursive-include mac_deep_cleaner/web *.html *.css *.js *.json
 recursive-include desktop *.swift
 recursive-include scripts *.py *.sh *.cjs
 recursive-include Formula *.rb
-recursive-include tests *.py *.cjs
+recursive-include tests *.py *.cjs *.swift
 
 recursive-include docs *.md
 global-exclude .DS_Store *.py[cod]

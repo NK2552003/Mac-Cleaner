@@ -102,10 +102,6 @@ final class WindowChrome: NSView {
 final class CleanerWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
-    override func performClose(_ sender: Any?) {
-        close()
-        NSApp.terminate(sender)
-    }
 }
 
 final class WorkspaceContentView: NSView {

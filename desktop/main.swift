@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var origin: URL?
     private var terminating = false
     private var opened = false
+    private var presentation = WindowPresentation()
     private var statusItem: NSStatusItem?
     private var statusTimer: Timer?
     private var spaceMenuItem: NSMenuItem?
@@ -65,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Mac Deep Cleaner"
         window.delegate = self
+        window.isReleasedWhenClosed = false
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.appearance = NSAppearance(named: .darkAqua)
@@ -160,6 +162,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     @objc private func showWorkspace() {
+        presentation.requestShow()
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        NSApp.unhide(nil)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         refreshStatus()
@@ -171,6 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     @objc private func menuSafeClean() {
+        showWorkspace()
         cleanMenuItem?.isEnabled = false
         webView.evaluateJavaScript("window.MDCNative?.safeClean(); void 0", completionHandler: nil)
     }
@@ -325,20 +331,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         alert.beginSheetModal(for: window)
     }
 
-    func windowDidEnterFullScreen(_ notification: Notification) {
-        for type: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
-            window.standardWindowButton(type)?.isHidden = false
+    func windowWillEnterFullScreen(_ notification: Notification) { presentation.willEnter() }
+    func windowWillExitFullScreen(_ notification: Notification) { presentation.willExit() }
+
+    private func applyPresentation(_ action: WindowPresentation.Action) {
+        switch action {
+        case .none: break
+        case .hide: window.orderOut(nil)
+        case .exitFullscreen: window.toggleFullScreen(nil)
+        case .show: showWorkspace()
         }
+    }
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
         updateWindowShape()
+        applyPresentation(presentation.didEnter())
     }
     func windowDidExitFullScreen(_ notification: Notification) {
-        for type: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
-            window.standardWindowButton(type)?.isHidden = true
-        }
         updateWindowShape()
+        applyPresentation(presentation.didExit())
+    }
+    func windowDidFailToEnterFullScreen(_ window: NSWindow) {
+        updateWindowShape()
+        applyPresentation(presentation.didExit())
+    }
+    func windowDidFailToExitFullScreen(_ window: NSWindow) {
+        updateWindowShape()
+        applyPresentation(presentation.failedExit())
     }
     private func updateWindowShape() {
         let isFS = window.styleMask.contains(.fullScreen)
+        for type: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
+            window.standardWindowButton(type)?.isHidden = !isFS
+        }
         (window.contentView as? WorkspaceContentView)?.setFullScreen(isFS)
         webView.evaluateJavaScript("document.documentElement.classList.toggle('is-fullscreen', \(isFS));", completionHandler: nil)
     }
@@ -347,7 +372,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func windowDidResignKey(_ notification: Notification) { chrome?.needsDisplay = true }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        sender.orderOut(nil)
+        applyPresentation(presentation.requestClose())
         // The status item keeps the local dashboard available until explicit Quit.
         return false
     }

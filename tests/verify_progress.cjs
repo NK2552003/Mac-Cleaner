@@ -54,13 +54,29 @@ const assert = require('node:assert/strict');
           animation.currentTime=animation.effect.getTiming().duration*fraction;
           return new DOMMatrix(getComputedStyle(el).transform).d;
         };
-        const result={open:sample(0),closed:sample(.375),reopened:sample(.5)};
+        const result={open:sample(0),closed:sample(.16),reopened:sample(.5)};
         animation.play();
         return result;
       });
       assert(eyes.open>.99 && eyes.closed<.1 && eyes.reopened>.99,'Eyes must close briefly and reopen');
       assert.equal(await indicator.locator('.loader-nose').evaluate(el=>getComputedStyle(el).transform),'none','Blinking must not squash the nose');
       assert.equal(await indicator.locator('.loader-orbit').evaluate(el=>getComputedStyle(el).animationTimingFunction),'linear');
+      if(label==='clean') {
+        // Observe a real blink under repeated polling, then compare rendered frames.
+        await page.evaluate(()=>{ draw(); window.blinkRedraw=setInterval(()=>draw(),140); });
+        try {
+          await page.waitForFunction(()=>Number(getComputedStyle(document.querySelector('.loader-eyelids')).opacity)>.9, null, {timeout:1800});
+        } finally { await page.evaluate(()=>clearInterval(window.blinkRedraw)); }
+        const avatar=indicator.locator('.loader-visual');
+        await avatar.evaluate(el=>el.getAnimations({subtree:true}).forEach(a=>{a.pause();a.currentTime=0;}));
+        const opened=await avatar.screenshot({path:`/tmp/mdc-workspace-check/blink-${engine}-open.png`});
+        await avatar.evaluate(el=>el.querySelectorAll('.loader-blink,.loader-eyelids').forEach(g=>{const a=g.getAnimations()[0];a.currentTime=a.effect.getTiming().duration*.16;}));
+        const closed=await avatar.screenshot({path:`/tmp/mdc-workspace-check/blink-${engine}-closed.png`});
+        assert(!opened.equals(closed),'Blinking must visibly change rendered SVG pixels');
+        await avatar.evaluate(el=>el.querySelectorAll('.loader-blink,.loader-eyelids').forEach(g=>{const a=g.getAnimations()[0];a.currentTime=a.effect.getTiming().duration*.5;}));
+        const reopened=await avatar.screenshot();
+        assert(opened.equals(reopened),'Eyes must render fully open again after a blink');
+      }
       await page.emulateMedia({reducedMotion:'reduce'});
       assert.equal(await indicator.locator('.loader-orbit').evaluate(el=>el.getAnimations().length),0,'Reduced motion must stop decorative animation');
       assert.equal(await indicator.locator('.loader-blink').evaluate(el=>el.getAnimations().length),0,'Reduced motion must stop blinking');
@@ -68,6 +84,13 @@ const assert = require('node:assert/strict');
         await page.setViewportSize({width,height:900});
         await page.evaluate(theme=>applyTheme(theme),theme);
         assert(await indicator.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label} overflow at ${width}`);
+        if(await indicator.evaluate(el=>el.classList.contains('is-centered'))) {
+          const visual=await indicator.locator('.loader-visual').boundingBox();
+          const copy=await indicator.locator('.loader-copy').boundingBox();
+          assert(copy.y>=visual.y+visual.height,`${label} content must sit below the mascot`);
+          assert(Math.abs((visual.x+visual.width/2)-(copy.x+copy.width/2))<2,`${label} content must be centered`);
+          assert.equal(await indicator.evaluate(el=>getComputedStyle(el).textAlign),'center');
+        }
         const box=await indicator.boundingBox();
         assert(box.width>100 && box.x>=0 && box.x+box.width<=width+1);
         if(width===390) await page.screenshot({path:`/tmp/mdc-workspace-check/progress-${engine}-${label}-${theme}.png`});
@@ -85,9 +108,22 @@ const assert = require('node:assert/strict');
         assert.equal(await page.locator('.overview .brand-loader').count(),1,'Storage loader belongs inside its overview card');
         await page.evaluate(()=>{S.items=[];draw();});
         assert.equal(await page.locator('#main .brand-loader').count(),1,'An empty scan must not add a second loader');
+        assert.equal(await page.locator('.overview .brand-loader.is-centered').count(),1);
+      }
+      if(view==='dups') {
+        await page.evaluate(()=>{S.items=[];draw();});
+        assert.equal(await page.locator('#main .brand-loader.is-centered').count(),1);
       }
       await page.evaluate(()=>{S.scanning=false;draw();});
       assert.equal(await page.locator('#main .scan-indicator').count(),0);
+      await page.emulateMedia({reducedMotion:'no-preference'});
+      const emptyMascot=page.locator('#main .empty > .loader-visual.is-still');
+      assert.equal(await emptyMascot.count(),1,'Completed empty results must retain the mascot');
+      assert.equal(await emptyMascot.evaluate(el=>el.getAnimations({subtree:true}).length),0,'Completed empty results must not look like an ongoing scan');
+      const visual=await emptyMascot.boundingBox();
+      const title=await page.locator('#main .empty > h3').boundingBox();
+      assert(title.y>=visual.y+visual.height);
+      assert(Math.abs((visual.x+visual.width/2)-(title.x+title.width/2))<2,'Empty-state text must be centered below its mascot');
       await page.close();
     }
     for(const [view,endpoint,refresh] of [
@@ -138,11 +174,17 @@ const assert = require('node:assert/strict');
     assert.match(await page.locator('.scan-indicator').innerText(),/42%/);
     assert.equal(await page.locator('.loader-value').innerText(),'42%');
     await page.unroute('**/api/ghosts/state');
+    await page.route('**/api/ghosts/state',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({...state,ghosts:[],scan:{...state.scan,done:false,msg:'Scanning in progress',pct:42}})}));
+    await page.evaluate(()=>GhostUI.enter(true));
+    assert.equal(await page.locator('#main .brand-loader').count(),1);
+    assert.equal(await page.locator('#main .brand-loader.is-centered').count(),1,'An empty Ghost scan must center its mascot');
+    assert.equal(await page.locator('#ghostCardsContainer .empty').count(),0,'Ghost scans must not show a second empty state');
+    await page.unroute('**/api/ghosts/state');
     await page.evaluate(()=>GhostUI.enter(true));
     await page.waitForFunction(()=>!document.querySelector('#main .scan-indicator'));
     await page.close();
     fs.writeFileSync(`/tmp/mdc-workspace-check/progress-${engine}-report.json`,JSON.stringify(evidence,null,2));
     assert.deepEqual(errors,[]);
-    console.log(`Progress (${engine}) passed: ${checked} theme/window checks across loading, report refreshes, Ghost percentage/cancel controls, single-loader placement, uninterrupted orbit/blink clocks, eyes closing/reopening, reduced motion, completion and error states.`);
+    console.log(`Progress (${engine}) passed: ${checked} theme/window checks across loading, report refreshes, Ghost percentage/cancel controls, single-loader placement, uninterrupted orbit/blink clocks, visible blinking frames, centered empty states, reduced motion, completion and error states.`);
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

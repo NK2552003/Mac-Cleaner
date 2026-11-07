@@ -31,7 +31,9 @@
 .filter-pill.review.active{color:var(--caution)}
 .filter-pill.locked.active{color:var(--risky)}
 .ghost-sort-wrap{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
-.ghost-sort-select{padding:6px 10px;background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--text);font-size:12px}
+select.ghost-sort-select:not([data-enhanced]){padding:6px 10px;background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--text);font-size:12px}
+.ghost-sort-select.dropdown{padding:0;border:0;background:none;min-width:150px}
+.ghost-sort-select .dropdown-trigger{font-size:12px}
 
 /* Batch Banish Bar */
 .ghost-batch-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 16px;margin-bottom:16px;background:var(--raised);border:1px solid var(--safe);border-radius:10px;color:var(--safe);font-size:13px;font-weight:500}

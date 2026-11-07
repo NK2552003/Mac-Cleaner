@@ -6,14 +6,14 @@ All notable changes to **mac-deep-cleaner** will be documented in this file.
 
 ### Added
 
-- Logo-matched SVG loading artwork with feature-specific symbols, colors, and motion, shared across all workspaces. Animation timing survives polling and redraws, with subtle eye blinks, Reduce Motion support, and measured progress where available.
-- Related-tool links connect cleanup, applications, large files, duplicates, optimization, disks, Homebrew, Ghost Files, and Settings. Browser back/forward and direct view/Care-tab links preserve navigation context.
+- Logo-matched SVG loading artwork with feature-specific symbols, colors, and motion, shared across all workspaces. Animation timing survives polling and redraws, with visible eye blinks, Reduce Motion support, and measured progress where available.
+- Related-tool links connect cleanup, applications, large files, duplicates, optimization, disks, Homebrew, Ghost Files, and Settings. Browser back/forward and direct workspace links preserve navigation context; old Care links fall back to Storage Cleanup.
 - Complete offline translations for all 42 bundled languages: 1,990 source messages and 83,580 locale entries, including the new workflows. Translation maintenance includes resumable Google Cloud batches and protected-token validation.
 - An isolated browser regression runner covers all workspaces with fresh temporary fixtures, including 128 theme/language/window combinations.
 - Persistent cleanup results show successes, failures, and restore access without a stack of overlapping notifications. Desktop navigation shows labels by default and remembers the user's preference.
 - Real filesystem deletion/restore browser checks and WCAG accessibility audits cover cleanup, app removal, dialogs, cleanup history, and both themes. Home-folder permission gaps are visible with a Privacy settings shortcut.
 - Durable SQLite Trash journal, recovery of interrupted journal updates, conflict-safe one-click/CLI restore, and cross-process cleanup/restore locking.
-- Native menu bar free space, memory pressure, and one-click minimal cleanup; the window can close while the app stays in the menu bar.
+- Native menu bar free space, memory pressure, safe-item selection for review, and Cleanup history; the window can close while the app stays in the menu bar.
 - Persistent Ghost allowlist and heuristic ownership evidence scores/explanations.
 - Localization framework with 194 provider locale choices, 42 complete offline language packs, import/export, optional consented Google Cloud generation of shipped UI strings, English fallback, and RTL layouts. Coverage is shown in Settings.
 - Responsive/keyboard-accessible new views, reduced-motion handling, and native menu localization through loaded packs.
@@ -23,6 +23,10 @@ All notable changes to **mac-deep-cleaner** will be documented in this file.
 
 ### Fixed
 
+- Closing the fullscreen window now exits its Space before hiding. Dock/menu-bar reopening cancels a pending hide, restores minimized or hidden windows, and recovers from failed fullscreen exits. Custom and native close buttons share the same lifecycle; explicit Quit retains running-operation protection.
+- Ghost Files' Sort control has one button border, with no second padded wrapper. Sorting and layout are checked in both themes and narrow/short windows.
+- Mascot eyes blink within the first second, with visible closed eyelids and occasional double blinks. Rendered-frame checks verify closing and reopening while polling preserves the animation clock.
+- Empty workspaces center the mascot above centered status and explanatory text. Completed empty results keep a static mascot; active scans animate it, and Storage Cleanup retains one loader inside its overview card.
 - Storage Cleanup displays one loader inside its overview card. Removed duplicate scan banners, old progress tracks, and skeleton placeholders; retained cancellation and clear completion/error states.
 - Ghost Files excludes macOS service folders (including Animoji, CloudDocs, SESStorage, and IntelligenceFlow), Shortcuts' legacy Workflow groups, shared crash-reporting/runtime caches, and loose support files without an app identity. App-group claims from installed apps and normalized group/team identifiers now protect shared owners. Unreadable subtrees are skipped with a permission warning instead of becoming empty ghosts. System exclusions cannot be unlocked or removed through stale Ghost results.
 - Safe bulk selection no longer includes Trash emptying, command execution, or cloud eviction. Emptying Trash requires a separate selection and explicit permanent-deletion confirmation.

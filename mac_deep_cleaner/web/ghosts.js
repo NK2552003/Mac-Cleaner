@@ -79,7 +79,7 @@ window.GhostUI = (() => {
   function progress(job, kind) {
     if (!job || (job.done && !job.error && !job.cancelled)) return "";
     if (job.done) return `<div class="error-banner" role="status">${icon('alert')}<span>${esc(job.error || job.msg)}</span></div>`;
-    return scanIndicator(job.msg, {feature:'ghosts',key:`ghosts:${kind}:${report?.scan_id || 'initial'}`,percent:job.pct, actions:button(I18n.t('Cancel'), 'ghost-cancel', {data:{kind}})});
+    return scanIndicator(job.msg, {feature:'ghosts',key:`ghosts:${kind}:${report?.scan_id || 'initial'}`,percent:job.pct, centered:kind === 'scan' && !report?.ghosts.some(g => !g.hidden), actions:button(I18n.t('Cancel'), 'ghost-cancel', {data:{kind}})});
   }
 
   function renderProgressHtml() {
@@ -248,7 +248,7 @@ window.GhostUI = (() => {
   }
 
   function render() {
-    if (!report) return empty("Looking for the local workspace…", error || "No files are changed by opening this page.", "ghost");
+    if (!report) return empty("Looking for the local workspace…", error || "No files are changed by opening this page.", "ghost", "", {scanning:!error});
     const rawGhosts = report.ghosts.filter(g => !g.hidden);
     const safeCount = rawGhosts.filter(g => g.final_verdict === "likely_safe").length;
     const reviewCount = rawGhosts.filter(g => g.final_verdict === "review").length;
