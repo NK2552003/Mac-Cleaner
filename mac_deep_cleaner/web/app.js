@@ -54,7 +54,7 @@ const bytes = (n) => {
     unit++;
   }
   return [
-    unit ? n.toFixed(n >= 100 ? 1 : 2) : String(Math.round(n)),
+    new Intl.NumberFormat(I18n.locale(), {minimumFractionDigits: unit ? (n >= 100 ? 1 : 2) : 0, maximumFractionDigits: unit ? (n >= 100 ? 1 : 2) : 0}).format(n),
     ["B", "KB", "MB", "GB", "TB"][unit],
   ];
 };
@@ -62,19 +62,32 @@ const fmt = (n) => bytes(n).join(" ");
 const ago = (t) => {
   if (!t) return "Not recorded";
   const d = Math.max(0, Math.floor((Date.now() / 1000 - t) / 86400));
-  return d < 1
-    ? "Today"
-    : d < 30
-      ? `${d} days ago`
-      : d < 365
-        ? `${Math.floor(d / 30)} months ago`
-        : `${Math.floor(d / 365)} years ago`;
+  const formatter = new Intl.RelativeTimeFormat(I18n.locale(), {numeric: 'auto'});
+  return d < 30 ? formatter.format(-d, 'day')
+    : d < 365 ? formatter.format(-Math.floor(d / 30), 'month')
+      : formatter.format(-Math.floor(d / 365), 'year');
 };
+const itemName = item => item.name_key
+  ? I18n.t(item.name_key, item.name_values || {}) + (item.name_detail ? ': ' + item.name_detail : '')
+  : item.name;
 const sum = (items) => items.reduce((n, i) => n + i.size, 0);
+const distinctStorage = (items) => {
+  const parents = new Set();
+  return [...items].sort((a,b) => (a.path || '').length - (b.path || '').length).filter(item => {
+    if (!item.path) return true;
+    let path = item.path;
+    while (path) {
+      if (parents.has(path)) return false;
+      path = path.slice(0, path.lastIndexOf('/'));
+    }
+    parents.add(item.path);
+    return true;
+  });
+};
 const eligible = (i) => i && !i.protected && !i.managed && i.category !== "Ghost Files";
 const safetyLabel = { safe: "Safe", caution: "Caution", risky: "Risky" };
 const safety = (s) =>
-  `<span class="safety ${s}"><i class="dot"></i>${safetyLabel[s] || esc(s)}</span>`;
+  `<span class="safety ${s}"><i class="dot"></i>${esc(I18n.t(safetyLabel[s] || s))}</span>`;
 const attrs = (obj) =>
   Object.entries(obj)
     .map(([k, v]) => ` data-${k}="${esc(v)}"`)
@@ -85,8 +98,12 @@ const button = (
   { style = "", symbol = "", disabled = false, data = {}, aria = "" } = {},
 ) =>
   `<button type="button" class="button ${style}" data-action="${action}"${attrs(data)} ${disabled ? "disabled" : ""} ${aria ? `aria-label="${esc(aria)}"` : ""}>${symbol ? icon(symbol) : ""}${esc(label)}</button>`;
+function scanIndicator(message = 'Scanning in progress', {actions = '', percent = null} = {}) {
+  const value = typeof percent === 'number' && Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : null;
+  return `<div class="scan-banner scan-indicator${value === null ? '' : ' is-determinate'}" role="status"><div class="scan-indicator-row">${icon('refresh')}<span>${esc(I18n.t(message || 'Scanning in progress'))}</span>${value === null ? '' : `<small data-no-translate>${Math.round(value)}%</small>`}${actions}</div><div class="scan-track" aria-hidden="true"><i${value === null ? '' : ` style="width:${value}%"`}></i></div></div>`;
+}
 const empty = (title, description, symbol = "search", action = "", { scanning = false } = {}) =>
-  `<div class="empty ${scanning ? "is-scanning" : ""}">${icon(symbol)}<h3>${esc(title)}</h3><p>${esc(description)}</p>${scanning ? '<div class="scan-pill"><span class="radar-dot"></span><span>Scanning in progress</span></div>' : ""}${action}</div>`;
+  `<div class="empty ${scanning ? "is-scanning" : ""}">${scanning ? scanIndicator(title) : `${icon(symbol)}<h3>${esc(title)}</h3>`}<p>${esc(description)}</p>${action}</div>`;
 const metric = (label, value, note) =>
   `<div class="metric"><span>${esc(label)}</span><b>${esc(value)}</b><small>${esc(note)}</small></div>`;
 const bar = (parts) =>
@@ -100,6 +117,7 @@ const navs = [
   ["big", "Large files", "nav_big"],
   ["dups", "Duplicates", "nav_dups"],
   ["ghosts", "Ghost Files", "ghost"],
+  ["care", "Care center", "nav_care"],
   ["settings", "Settings", "nav_settings"],
 ];
 let S = {
@@ -139,6 +157,7 @@ let stateTimer,
   busy = false,
   pendingAsk = null,
   detailKind = null;
+let lastCleanup = null;
 try {
   mode = localStorage.getItem("mdc_mode") === "dev" ? "dev" : "normal";
 } catch {}
@@ -147,12 +166,15 @@ const group = (i) =>
     ? i.group || i.category
     : i.category;
 const canSelect = () =>
-  ready && !S.scanning && !S.error && !S.busy && !busy && !connectionError;
+  ready && !S.scanning && !S.error && !S.busy && !busy && !connectionError && !ToolkitUI.isRunning() && !CareUI.isRunning();
+const viewStates = new Map();
+const formDrafts = new Map();
+const draftFields = new Set(['careRules', 'careLanguages', 'careWeekday', 'careHour']);
 const selectedItems = () =>
   S.items.filter((i) => eligible(i) && selected.has(i.id));
 function totals() {
   const t = { all: 0, safe: 0, caution: 0, risky: 0 };
-  for (const i of S.items)
+  for (const i of distinctStorage(S.items.filter(eligible)))
     if (eligible(i)) {
       t.all += i.size;
       t[i.safety] = (t[i.safety] || 0) + i.size;
@@ -209,15 +231,80 @@ async function setGhostLevel(level) {
 }
 function settingsView() {
   const level = S.features?.ghosts_level || 0;
-  return `<div class="pagehead"><div><h1>Settings</h1><p>Choose what runs on your Mac.</p></div></div>${banners()}
-    <section class="tool-section"><div class="section-title"><h2>Appearance</h2></div>
-    <div class="feature-setting"><div><h3>Theme</h3><p>Switch between a dark and a light workspace.</p></div>
-    <button type="button" class="theme-switch ${theme === "light" ? "is-light" : ""}" data-action="theme" role="switch" aria-checked="${theme === "light"}" aria-label="Light mode"><span class="theme-label">${icon(theme === "light" ? "sun" : "moon")}${theme === "light" ? "Light mode" : "Dark mode"}</span><span class="theme-track" aria-hidden="true"><i></i></span></button></div></section>
-    <section class="tool-section"><div class="section-title"><h2>Experimental</h2></div>
-    <div class="feature-setting"><div><h3>Ghost Files</h3><p>Find leftovers from apps you have deleted. Review each one before moving it to the Trash.</p></div>
-    <button class="button ${level ? "primary" : ""}" data-action="feature-ghost-level" data-level="${level ? 0 : 1}" role="switch" aria-checked="${!!level}" aria-label="Ghost Files" ${busy || S.busy ? "disabled" : ""}>${level ? "On" : "Off"}</button></div>
-    ${level ? `<div class="feature-levels" aria-label="Ghost Files mode">${button("Ghosts (no AI)", "feature-ghost-level", {style:level === 1 ? "primary" : "", data:{level:1},disabled:!!S.busy})}${button("Ghosts + AI narration", "feature-ghost-level", {style:level === 2 ? "primary" : "", data:{level:2},disabled:!!S.busy})}${button("Open Ghost Files", "navigate", {data:{view:"ghosts"},symbol:"arrow"})}</div>${window.GhostUI ? GhostUI.settings() : '<p>Loading feature settings…</p>'}` : '<p class="note">Off by default. No Ghost Files scanning, AI probing, or downloads run while disabled.</p>'}
-    </section>`;
+  return `<div class="pagehead"><div><h1>${esc(I18n.t("Settings"))}</h1><p>${esc(I18n.t("Choose what runs on your Mac."))}</p></div></div>${banners()}
+    <div class="settings-stream">
+      <section class="settings-section">
+        <div class="settings-section-head">
+          <h2>${icon("sun")}${esc(I18n.t("Appearance"))}</h2>
+          <p>${esc(I18n.t("Switch between a dark and a light workspace."))}</p>
+        </div>
+        <div class="settings-row">
+          <div>
+            <h3>${esc(I18n.t("Theme"))}</h3>
+            <p>${esc(I18n.t(theme === "light" ? "Light mode" : "Dark mode"))}</p>
+          </div>
+          <button type="button" class="theme-switch ${theme === "light" ? "is-light" : ""}" data-action="theme" role="switch" aria-checked="${theme === "light"}" aria-label="${esc(I18n.t("Light mode"))}"><span class="theme-label">${icon(theme === "light" ? "sun" : "moon")}${esc(I18n.t(theme === "light" ? "Light mode" : "Dark mode"))}</span><span class="theme-track" aria-hidden="true"><i></i></span></button>
+        </div>
+        <div class="settings-row">
+          <div>
+            <h3>${esc(I18n.t("Developer options"))}</h3>
+            <p>${esc(I18n.t("Show low-level command details and developer tools."))}</p>
+          </div>
+          <button type="button" class="button ${mode === "dev" ? "primary" : ""}" data-action="mode" data-mode="${mode === "dev" ? "normal" : "dev"}" role="switch" aria-checked="${mode === "dev"}">${esc(I18n.t(mode === "dev" ? "Enabled" : "Off by default"))}</button>
+        </div>
+      </section>
+
+      ${I18n.settings()}
+
+      <section class="settings-section">
+        <div class="settings-section-head">
+          <h2>${icon("ghost")}${esc(I18n.t("Experimental"))}</h2>
+          <p>${esc(I18n.t("Find leftovers from apps you have deleted. Review each one before moving it to the Trash."))}</p>
+        </div>
+        <div class="settings-row">
+          <div>
+            <h3>${esc(I18n.t("Ghost Files"))}</h3>
+            <p>${esc(I18n.t("Find leftovers from apps you have deleted. Review each one before moving it to the Trash."))}</p>
+          </div>
+          <button class="button ${level ? "primary" : ""}" data-action="feature-ghost-level" data-level="${level ? 0 : 1}" role="switch" aria-checked="${!!level}" aria-label="Ghost Files" ${busy || S.busy ? "disabled" : ""}>${esc(I18n.t(level ? "On" : "Off"))}</button>
+        </div>
+        ${level ? `<div class="feature-levels" aria-label="Ghost Files mode">${button(I18n.t("Ghosts (no AI)"), "feature-ghost-level", {style:level === 1 ? "primary" : "", data:{level:1},disabled:!!S.busy})}${button(I18n.t("Ghosts + AI narration"), "feature-ghost-level", {style:level === 2 ? "primary" : "", data:{level:2},disabled:!!S.busy})}${button(I18n.t("Open Ghost Files"), "navigate", {data:{view:"ghosts"},symbol:"arrow"})}</div>${window.GhostUI ? GhostUI.settings() : `<p>${esc(I18n.t("Loading feature settings…"))}</p>`}` : `<p class="note">${esc(I18n.t("Off by default. No Ghost Files scanning, AI probing, or downloads run while disabled."))}</p>`}
+      </section>
+
+      <section class="settings-section">
+        <div class="settings-section-head">
+          <h2>${icon("shield")}${esc(I18n.t("Storage & Maintenance"))}</h2>
+          <p>${esc(I18n.t("Automate carefully. See what changed. Keep control."))}</p>
+        </div>
+        <div class="settings-row">
+          <div>
+            <h3>${esc(I18n.t("Cleanup profiles"))}</h3>
+            <p>${esc(I18n.t("Choose a preset, then review every selected item."))}</p>
+          </div>
+          ${button(I18n.t("Care center"), "settings-care", {symbol:"arrow"})}
+        </div>
+        <div class="settings-row">
+          <div>
+            <h3>${esc(I18n.t("Weekly cleanup"))}</h3>
+            <p>${esc(I18n.t("Old cache and log files only. Moves to Trash with restore history."))}</p>
+          </div>
+          ${button(I18n.t("Review schedule"), "settings-care", {symbol:"arrow"})}
+        </div>
+      </section>
+
+      <section class="settings-section settings-about-section">
+        <div class="about-card-content">
+          <div>
+            <h3 style="font-size:15px;margin:0 0 4px">${esc(I18n.t("About Mac Deep Cleaner"))}</h3>
+            <p>${esc(I18n.t("All scanning, analysis, and maintenance runs locally on your Mac."))}</p>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            ${S.version ? `<span class="badge" data-no-translate>v${esc(S.version)}</span>` : ''}
+            <small style="color:var(--muted)">${esc(I18n.t("macOS Native"))}</small>
+          </div>
+        </div>
+      </section>
+    </div>`;
 }
 
 async function api(path, body) {
@@ -269,6 +356,7 @@ async function load() {
       S.scan_id !== undefined &&
       (next.scan_id !== S.scan_id || next.revision !== S.revision);
     if (changed) {
+      ToolkitUI.invalidate();
       selected.clear();
       focusId = null;
       bigIds = [];
@@ -276,7 +364,14 @@ async function load() {
       A = { apps: [], ready: false };
       closeDetail();
     }
-    if (!ready && next.initial_view && navs.some(n => n[0] === next.initial_view) && view === "clean") view = next.initial_view;
+    if (!ready) {
+      const [route, tab] = location.hash.slice(1).split('/');
+      const initial = navs.some(n => n[0] === route) ? route : next.initial_view;
+      if (navs.some(n => n[0] === initial)) view = initial;
+      if (view === 'care' && tab) CareUI.selectTab(tab);
+      const careTab = view === 'care' ? CareUI.tab() : '';
+      window.history.replaceState({mdcView:view, careTab}, '', location.pathname + '#' + view + (careTab ? '/' + careTab : ''));
+    }
     if (!ready && next.settings) {
       mode = next.settings.mode;
       minmb = next.settings.min_mb;
@@ -291,11 +386,12 @@ async function load() {
         S.items.some((i) => i.id === id && eligible(i)),
       ),
     );
-    draw();
+    if (!(view === "settings" && $("languagePackFile")?.files.length)) draw();
     if (view === "big" && !S.scanning && !bigReady) loadBig();
     if (view === "apps" && !A.ready) loadApps();
     if (["optimize", "disks"].includes(view)) ToolkitUI.enter(view);
     if (view === "homebrew") HomebrewUI.enter();
+    if (view === "care") CareUI.enter();
     stateTimer = setTimeout(load, S.scanning || S.busy ? 1400 : 10000);
   } catch (e) {
     connectionError = e.message;
@@ -354,6 +450,7 @@ function toast(message, error = false) {
     `<span>${esc(message)}</span><button aria-label="Dismiss notification">${icon("x")}</button>`;
   item.querySelector("button").onclick = () => item.remove();
   $("toasts").append(item);
+  while ($("toasts").children.length > 4) $("toasts").firstElementChild.remove();
   setTimeout(() => item.remove(), error ? 10000 : 6500);
 }
 function chrome() {
@@ -362,25 +459,32 @@ function chrome() {
     .filter(([v]) => v !== "ghosts" || S.features?.ghosts_level > 0)
     .map(
       ([v, name, symbol]) =>
-        `<button class="nav-button ${view === v ? "active" : ""}" data-action="navigate" data-view="${v}" title="${name}" aria-label="${name}" ${view === v ? 'aria-current="page"' : ""}>${icon(symbol)}<span class="nav-full">${name}</span><span class="nav-short">${{ clean: "Cleanup", apps: "Apps", big: "Large files", dups: "Duplicates", optimize: "Optimize", disks: "Disks", homebrew: "Homebrew", ghosts: "Ghosts", settings: "Settings" }[v]}</span></button>`,
+        `<button class="nav-button ${view === v ? "active" : ""}" data-action="navigate" data-view="${v}" title="${esc(I18n.t(name))}" aria-label="${esc(I18n.t(name))}" ${view === v ? 'aria-current="page"' : ""}>${icon(symbol)}<span class="nav-full">${esc(I18n.t(name))}</span><span class="nav-short">${esc(I18n.t({ clean: "Cleanup", apps: "Apps", big: "Large files", dups: "Duplicates", optimize: "Optimize", disks: "Disks", homebrew: "Homebrew", ghosts: "Ghosts", settings: "Settings", care: "Care" }[v]))}</span></button>`,
     )
     .join("");
-  $("modeSwitch").innerHTML = `<button class="rail-control mode-control ${mode === "dev" ? "enabled" : ""}" data-action="mode" data-mode="${mode === "dev" ? "normal" : "dev"}" role="switch" aria-checked="${mode === "dev"}" aria-label="Developer mode" title="Developer mode: ${mode === "dev" ? "on" : "off"}">${icon("code")}<span class="rail-label">Developer mode</span><span class="mode-indicator" aria-hidden="true"></span></button>`;
+  $("modeSwitch").innerHTML = `<button class="rail-control mode-control ${mode === "dev" ? "enabled" : ""}" data-action="mode" data-mode="${mode === "dev" ? "normal" : "dev"}" role="switch" aria-checked="${mode === "dev"}" aria-label="${esc(I18n.t("Developer mode"))}" title="${esc(I18n.t("Developer mode"))}: ${mode === "dev" ? "on" : "off"}">${icon("code")}<span class="rail-label">${esc(I18n.t("Developer mode"))}</span><span class="mode-indicator" aria-hidden="true"></span></button>`;
   $("breadcrumb").innerHTML =
-    `${icon("monitor")}<span>This Mac</span><span aria-hidden="true">/</span><strong>${title}</strong>`;
+    `${icon("monitor")}<span>${esc(I18n.t("This Mac"))}</span><span aria-hidden="true">/</span><strong>${esc(I18n.t(title))}</strong>`;
+  updateActivityStatus();
+  document.title = `${I18n.t(title)} — Mac Deep Cleaner`;
+}
+function updateActivityStatus() {
+  const scanning = S.scanning || !!document.querySelector('#main .scan-indicator');
+  const working = S.busy || busy || ToolkitUI.isRunning() || CareUI.isRunning() || window.GhostUI?.isRunning();
   $("status").className =
-    "status" + (connectionError ? " offline" : S.scanning ? " working" : "");
-  $("status").textContent = connectionError
+    "status" + (connectionError ? " offline" : scanning || working ? " working" : "");
+  $("status").textContent = I18n.t(connectionError
     ? "Disconnected"
     : !ready
       ? "Connecting"
-      : S.scanning
+    : working
+      ? "Working…"
+    : scanning
         ? "Scan in progress"
-        : "Scan complete";
-  document.title = `${title} — Mac Deep Cleaner`;
+        : "Scan complete");
 }
 function pagehead(title, subtitle) {
-  return `<div class="pagehead"><div><h1>${title}</h1><p>${subtitle}</p></div><div class="head-actions">${button(S.scanning ? "Scanning" : "Rescan", "rescan", { symbol: "refresh", disabled: !ready || S.scanning || busy })}</div></div>`;
+  return `<div class="pagehead"><div><h1>${esc(I18n.t(title))}</h1><p>${esc(I18n.t(subtitle))}</p></div><div class="head-actions">${button(S.scanning ? I18n.t("Scanning") : I18n.t("Rescan"), "rescan", { symbol: "refresh", disabled: !ready || S.scanning || S.busy || busy || ToolkitUI.isRunning() || CareUI.isRunning() })}</div></div>`;
 }
 function banners() {
   return (
@@ -388,8 +492,9 @@ function banners() {
       ? `<div class="error-banner" role="alert">${icon("alert")}<span>${esc(connectionError)}</span>${button("Retry", "retry")}</div>`
       : "") +
     (ready && S.scanning
-      ? `<div class="scan-banner" role="status">${icon("refresh")}<span>Scanning your Mac. ${esc(S.progress || "Finding storage you can review…")}</span></div>`
-      : "")
+      ? scanIndicator(S.progress || "Finding storage you can review…")
+      : "") +
+    (S.warnings?.length ? `<details class="scan-limits"><summary>${icon('shield')}${esc(I18n.t('Some locations could not be scanned'))}</summary><p>${esc(I18n.t('macOS denied access to these locations. Review privacy permissions, then rescan for complete results.'))}</p><ul>${S.warnings.map(path => `<li class="path" data-no-translate>${esc(path)}</li>`).join('')}</ul>${button(I18n.t('Privacy settings'), 'toolkit-open', {data:{action:'privacy-settings'},style:'link'})}</details>` : '')
   );
 }
 function overview() {
@@ -400,48 +505,48 @@ function overview() {
       ? Math.min(100, Math.round((disk.used / disk.total) * 100))
       : null,
     C = 2 * Math.PI * 59;
-  return `<section class="overview" aria-label="Storage overview"><div class="overview-main"><div><div class="overview-label">${icon("clean")}${S.scanning ? "Potential space found so far" : "Potential to reclaim"}</div><div class="storage-number">${ready ? n : "—"}<span>${ready ? u : ""}</span></div><p class="overview-copy">${S.scanning ? "Results will be ready to review when the scan finishes." : `${S.items.filter(eligible).length.toLocaleString()} items found across your Mac. You choose what goes.`}</p><div class="overview-cta">${button("Select safe items", "select-safe", { style: "primary", symbol: "check", disabled: !canSelect() || !S.items.some((i) => eligible(i) && i.safety === "safe" && !i.manual && i.action !== "root") })}<small>Review before removing anything</small></div></div><div class="disk-panel"><div class="disk-ring"><svg viewBox="0 0 148 148" aria-hidden="true"><circle class="ticks" cx="74" cy="74" r="70"/><circle class="track" cx="74" cy="74" r="59"/><circle class="usage" cx="74" cy="74" r="59" stroke-dasharray="${(C * (used || 0)) / 100} ${C}"/></svg><div class="ring-label"><b>${used === null ? "—" : used + "%"}</b><span>disk used</span></div></div><div class="disk-info"><h3>Your Mac’s storage</h3><p>Available<strong class="free">${disk ? fmt(disk.free) : "—"}</strong></p><p>Total capacity<strong>${disk ? fmt(disk.total) : "—"}</strong></p></div></div></div>${S.scanning ? '<div class="scan-track"><i></i></div>' : ""}<div class="risk-summary">${[
-    ["safe", "Safe to remove"],
-    ["caution", "Review first"],
-    ["risky", "Needs care"],
+  return `<section class="overview" aria-label="${esc(I18n.t("Storage overview"))}"><div class="overview-main"><div><div class="overview-label">${icon("clean")}${esc(I18n.t(S.scanning ? "Potential space found so far" : "Potential to reclaim"))}</div><div class="storage-number">${ready ? n : "—"}<span>${ready ? u : ""}</span></div><p class="overview-copy">${S.scanning ? esc(I18n.t("Results will be ready to review when the scan finishes.")) : `${S.items.filter(eligible).length.toLocaleString(I18n.locale())} ${esc(I18n.t("items found across your Mac. You choose what goes."))}`}</p><div class="overview-cta">${button(I18n.t("Select safe items"), "select-safe", { style: "primary", symbol: "check", disabled: !canSelect() || !S.items.some((i) => eligible(i) && i.safety === "safe" && !i.manual && i.action === "trash") })}<small>${esc(I18n.t("Review before removing anything"))}</small></div></div><div class="disk-panel"><div class="disk-ring"><svg viewBox="0 0 148 148" aria-hidden="true"><circle class="ticks" cx="74" cy="74" r="70"/><circle class="track" cx="74" cy="74" r="59"/><circle class="usage" cx="74" cy="74" r="59" stroke-dasharray="${(C * (used || 0)) / 100} ${C}"/></svg><div class="ring-label"><b>${used === null ? "—" : used + "%"}</b><span>${esc(I18n.t("disk used"))}</span></div></div><div class="disk-info"><h3>${esc(I18n.t("Your Mac’s storage"))}</h3><p>${esc(I18n.t("Available"))}<strong class="free">${disk ? fmt(disk.free) : "—"}</strong></p><p>${esc(I18n.t("Total capacity"))}<strong>${disk ? fmt(disk.total) : "—"}</strong></p></div></div></div>${S.scanning ? '<div class="scan-track"><i></i></div>' : ""}<div class="risk-summary">${[
+    ["safe", I18n.t("Safe to remove")],
+    ["caution", I18n.t("Review first")],
+    ["risky", I18n.t("Needs care")],
   ]
     .map(
       ([key, label]) =>
-        `<button class="risk-stat" data-action="safety-summary" data-safety="${key}" aria-label="Show ${key} items"><div><span class="stat-label"><i class="dot ${key}"></i>${label}</span><b>${fmt(t[key])}</b></div>${icon("chevron")}</button>`,
+        `<button class="risk-stat" data-action="safety-summary" data-safety="${key}" aria-label="${esc(I18n.t("Show"))} ${esc(label)}"><div><span class="stat-label"><i class="dot ${key}"></i>${esc(label)}</span><b>${fmt(t[key])}</b></div>${icon("chevron")}</button>`,
     )
     .join("")}</div></section>`;
 }
 function filteredRows(source = S.items) {
-  const query = q.toLowerCase().trim();
+  const query = q.toLocaleLowerCase(I18n.locale()).trim();
   return source
     .filter(
       (i) =>
         (!cat || group(i) === cat) &&
         (safetyFilter === "all" || i.safety === safetyFilter) &&
         (i.size >= minmb * 1e6 || i.size === 0) &&
-        `${i.name} ${i.path}`.toLowerCase().includes(query),
+        `${itemName(i)} ${i.name} ${i.path}`.toLocaleLowerCase(I18n.locale()).includes(query),
     )
     .sort((a, b) => b.size - a.size || a.id - b.id);
 }
 function searchField(id, value, placeholder) {
-  return `<label class="search">${icon("search")}<span class="sr-only">${placeholder}</span><input type="search" id="${id}" placeholder="${placeholder}" value="${esc(value)}" autocomplete="off"></label>`;
+  return `<label class="search">${icon("search")}<span class="sr-only">${esc(placeholder)}</span><input type="search" id="${id}" placeholder="${esc(placeholder)}" value="${esc(value)}" autocomplete="off"></label>`;
 }
 function filters(rows, { categories = true } = {}) {
   const gs = groups();
-  return `<div class="toolbar">${searchField("itemSearch", q, "Search files, folders or paths")}${categories ? `<select id="categoryFilter" class="category-filter" aria-label="Category"><option value="">All categories</option>${gs.map(([n, r]) => `<option value="${esc(n)}" ${cat === n ? "selected" : ""}>${esc(n)} (${r.length})</option>`).join("")}</select>` : ""}<select id="sizeFilter" aria-label="Minimum item size">${[
-    [0, "Any size"],
-    [1, "Over 1 MB"],
-    [10, "Over 10 MB"],
-    [100, "Over 100 MB"],
-    [1000, "Over 1 GB"],
+  return `<div class="toolbar">${searchField("itemSearch", q, I18n.t("Search files, folders or paths"))}${categories ? `<select id="categoryFilter" class="category-filter" aria-label="${esc(I18n.t("Category"))}"><option value="">${esc(I18n.t("All categories"))}</option>${gs.map(([n, r]) => `<option value="${esc(n)}" ${cat === n ? "selected" : ""}>${esc(n)} (${r.length})</option>`).join("")}</select>` : ""}<select id="sizeFilter" aria-label="${esc(I18n.t("Minimum item size"))}">${[
+    [0, I18n.t("Any size")],
+    [1, I18n.t("Over 1 MB")],
+    [10, I18n.t("Over 10 MB")],
+    [100, I18n.t("Over 100 MB")],
+    [1000, I18n.t("Over 1 GB")],
   ]
     .map(
       ([n, name]) =>
-        `<option value="${n}" ${minmb === n ? "selected" : ""}>${name}</option>`,
+        `<option value="${n}" ${minmb === n ? "selected" : ""}>${esc(name)}</option>`,
     )
     .join(
       "",
-    )}</select></div><div class="filter-row"><div class="filter-tabs" aria-label="Filter by safety">${["all", "safe", "caution", "risky"].map((s) => `<button class="filter-tab ${s === safetyFilter ? "active" : ""}" data-action="safety" data-safety="${s}" aria-pressed="${s === safetyFilter}">${s === "all" ? "All items" : safetyLabel[s]}</button>`).join("")}</div><span>${rows.length.toLocaleString()} results, largest first</span></div>`;
+    )}</select></div><div class="filter-row"><div class="filter-tabs" aria-label="${esc(I18n.t("Filter by safety"))}">${["all", "safe", "caution", "risky"].map((s) => `<button class="filter-tab ${s === safetyFilter ? "active" : ""}" data-action="safety" data-safety="${s}" aria-pressed="${s === safetyFilter}">${s === "all" ? esc(I18n.t("All items")) : esc(safetyLabel[s])}</button>`).join("")}</div><span>${rows.length.toLocaleString(I18n.locale())} ${esc(I18n.t("results, largest first"))}</span></div>`;
 }
 function fileIcon(i) {
   const name = CATI[i.category] || (mode === "dev" ? "code" : "folder");
@@ -468,20 +573,20 @@ function fileList(rows) {
     .slice(0, visibleLimit)
     .map(
       (i) =>
-        `<div class="item-row ${selected.has(i.id) ? "selected" : ""} ${focusId === i.id ? "focused" : ""}"><input type="checkbox" data-select="${i.id}" aria-label="Select ${esc(i.name)}" ${selected.has(i.id) ? "checked" : ""} ${!eligible(i) || !canSelect() ? "disabled" : ""}><button class="item-main" data-action="inspect" data-id="${i.id}" aria-label="Details for ${esc(i.name)}">${fileIcon(i)}<span class="item-text"><span class="item-name">${esc(i.name)}${i.protected ? '<span class="tag">Protected</span>' : i.managed ? '<span class="tag">macOS</span>' : i.active_project ? '<span class="tag">Active</span>' : ""}</span><span class="item-path" title="${esc(i.path)}">${esc(i.path || "Managed by a terminal command")}</span></span></button>${safety(i.safety)}<span class="item-size">${fmt(i.size)}<span class="size-bar"><i style="width:${Math.max(3, (i.size / mx) * 100)}%"></i></span></span></div>`,
+        `<div class="item-row ${selected.has(i.id) ? "selected" : ""} ${focusId === i.id ? "focused" : ""}"><input type="checkbox" data-select="${i.id}" aria-label="Select ${esc(itemName(i))}" ${selected.has(i.id) ? "checked" : ""} ${!eligible(i) || !canSelect() ? "disabled" : ""}><button class="item-main" data-action="inspect" data-id="${i.id}" aria-label="Details for ${esc(itemName(i))}">${fileIcon(i)}<span class="item-text"><span class="item-name"><span data-no-translate>${esc(itemName(i))}</span>${i.protected ? '<span class="tag">Protected</span>' : i.managed ? '<span class="tag">macOS</span>' : i.active_project ? '<span class="tag">Active</span>' : ""}</span><span class="item-path" title="${esc(i.path)}">${esc(i.path || "Managed by a terminal command")}</span></span></button>${safety(i.safety)}<span class="item-size">${fmt(i.size)}<span class="size-bar"><i style="width:${Math.max(3, (i.size / mx) * 100)}%"></i></span></span></div>`,
     )
     .join(
       "",
-    )}<div class="list-footer"><span>${Math.min(visibleLimit, rows.length)} of ${rows.length.toLocaleString()} items</span>${rows.length > visibleLimit ? button("Show more", "more", { style: "link" }) : "<span>Sorted by size</span>"}</div>`;
+    )}<div class="list-footer"><span>${Math.min(visibleLimit, rows.length)} of ${rows.length.toLocaleString(I18n.locale())} items</span>${rows.length > visibleLimit ? button("Show more", "more", { style: "link" }) : "<span>Sorted by size</span>"}</div>`;
 }
 function inspectorContent(i, { close = true } = {}) {
-  if (i?.category === "Ghost Files") return `<div class="inspect-heading"><h3>${esc(i.name)}</h3>${close ? button("", "close-inspector", {style:"ghost icon-only",symbol:"x",aria:"Close details"}) : ""}</div><div class="inspect-content"><p>${esc(i.reason)}</p><p class="path">${esc(i.path)}</p>${button("Review in Ghost Files", "navigate", {data:{view:"ghosts"},style:"primary"})}</div>`;
+  if (i?.category === "Ghost Files") return `<div class="inspect-heading"><h3 data-no-translate>${esc(itemName(i))}</h3>${close ? button("", "close-inspector", {style:"ghost icon-only",symbol:"x",aria:I18n.t("Close details")}) : ""}</div><div class="inspect-content"><p>${esc(i.reason)}</p><p class="path">${esc(i.path)}</p>${button(I18n.t("Review in Ghost Files"), "navigate", {data:{view:"ghosts"},style:"primary"})}</div>`;
   if (!i)
-    return `<div class="inspector-empty">${icon("file")}<h3>A closer look</h3><p>Select a file to see its location and what happens when it’s removed.</p><small>${icon("shield")}Protected files stay on your Mac. Every cleanup starts with a review.</small></div>`;
-  return `<div class="inspect-heading">${fileIcon(i)}<div><h3>${esc(i.name)}</h3><small>${fmt(i.size)}</small></div>${close ? button("", "close-inspector", { style: "ghost icon-only", symbol: "x", aria: "Close details" }) : ""}</div><div class="inspect-content"><dl class="facts"><div><dt>Safety</dt><dd>${safety(i.safety)}</dd></div><div><dt>Status</dt><dd>${i.protected ? "Protected" : i.managed ? "Managed by macOS" : i.active_project ? "Active project" : i.readonly ? "Read-only" : "Available for review"}</dd></div><div><dt>Category</dt><dd>${esc(group(i))}</dd></div></dl><section class="inspect-section"><h3>Location</h3><p class="path">${esc(i.path || "No local file path")}</p></section><section class="inspect-section"><h3>What happens if removed</h3><p>${esc(i.reason || "Review this item before removing it.")}</p>${i.regen ? `<small>${esc(i.regen)}</small>` : ""}</section>${i.keep ? `<section class="inspect-section"><h3>Original copy kept</h3><p class="path">${esc(i.keep)}</p></section>` : ""}${mode === "dev" && i.cmd ? `<section class="inspect-section"><h3>Terminal command</h3><code>${esc(i.cmd)}</code></section>` : ""}<div class="inspect-actions">${eligible(i) ? button(selected.has(i.id) ? "Remove from selection" : "Add to cleanup", "toggle", { style: selected.has(i.id) ? "" : "primary", symbol: selected.has(i.id) ? "x" : "check", disabled: !canSelect(), data: { id: i.id } }) : ""}${i.path ? button("Reveal in Finder", "reveal", { symbol: "folder", data: { id: i.id } }) + button("Copy path", "copy", { symbol: "dup", data: { id: i.id } }) + button("Keep out of future scans", "pin", { style: "link", symbol: "pin", data: { id: i.id }, disabled: !canSelect() }) : ""}</div></div>`;
+    return `<div class="inspector-empty">${icon("file")}<h3>${esc(I18n.t("A closer look"))}</h3><p>${esc(I18n.t("Select a file to see its location and what happens when it’s removed."))}</p><small>${icon("shield")}${esc(I18n.t("Protected files stay on your Mac. Every cleanup starts with a review."))}</small></div>`;
+  return `<div class="inspect-heading">${fileIcon(i)}<div><h3 data-no-translate>${esc(itemName(i))}</h3><small>${fmt(i.size)}</small></div>${close ? button("", "close-inspector", { style: "ghost icon-only", symbol: "x", aria: I18n.t("Close details") }) : ""}</div><div class="inspect-content"><dl class="facts"><div><dt>${esc(I18n.t("Safety"))}</dt><dd>${safety(i.safety)}</dd></div><div><dt>${esc(I18n.t("Status"))}</dt><dd>${esc(I18n.t(i.protected ? "Protected" : i.managed ? "Managed by macOS" : i.active_project ? "Active project" : i.readonly ? "Read-only" : "Available for review"))}</dd></div><div><dt>${esc(I18n.t("Category"))}</dt><dd>${esc(group(i))}</dd></div></dl><section class="inspect-section"><h3>${esc(I18n.t("Location"))}</h3><p class="path">${esc(i.path || I18n.t("No local file path"))}</p></section><section class="inspect-section"><h3>${esc(I18n.t("What happens if removed"))}</h3><p>${esc(i.reason || I18n.t("Review this item before removing it."))}</p>${i.regen ? `<small>${esc(i.regen)}</small>` : ""}</section>${i.keep ? `<section class="inspect-section"><h3>${esc(I18n.t("Original copy kept"))}</h3><p class="path">${esc(i.keep)}</p></section>` : ""}${mode === "dev" && i.cmd ? `<section class="inspect-section"><h3>${esc(I18n.t("Terminal command"))}</h3><code>${esc(i.cmd)}</code></section>` : ""}<div class="inspect-actions">${eligible(i) ? button(I18n.t(selected.has(i.id) ? "Remove from selection" : "Add to cleanup"), "toggle", { style: selected.has(i.id) ? "" : "primary", symbol: selected.has(i.id) ? "x" : "check", disabled: !canSelect(), data: { id: i.id } }) : ""}${i.path ? button(I18n.t("Reveal in Finder"), "reveal", { symbol: "folder", data: { id: i.id } }) + button(I18n.t("Copy path"), "copy", { symbol: "dup", data: { id: i.id } }) + button(I18n.t("Keep out of future scans"), "pin", { style: "link", symbol: "pin", data: { id: i.id }, disabled: !canSelect() }) : ""}</div></div>`;
 }
 function workspace(rows) {
-  return `<div class="workspace"><section class="list-panel" aria-label="Files">${fileList(rows)}</section><aside class="inspector" aria-label="File inspector">${inspectorContent(S.items.find((i) => i.id === focusId))}</aside></div>`;
+  return `<div class="workspace"><section class="list-panel" aria-label="${esc(I18n.t("Files"))}">${fileList(rows)}</section><aside class="inspector" aria-label="${esc(I18n.t("File inspector"))}">${inspectorContent(S.items.find((i) => i.id === focusId))}</aside></div>`;
 }
 function cleanView() {
   const rows = filteredRows();
@@ -492,10 +597,10 @@ function cleanView() {
     ) +
     banners() +
     overview() +
-    `<div class="section-title" id="filesTitle"><h2>Explore your files</h2><span class="count">${S.items.length.toLocaleString()}</span>${button("Select caution items", "select-caution", { style: "link", disabled: !canSelect() })}</div>` +
+    `<div class="section-title" id="filesTitle"><h2>${esc(I18n.t("Explore your files"))}</h2><span class="count">${S.items.length.toLocaleString(I18n.locale())}</span>${button(I18n.t("Select caution items"), "select-caution", { style: "link", disabled: !canSelect() })}</div>` +
     filters(rows) +
     workspace(rows) +
-    `<p class="note">${icon("shield")}Nothing is removed until you review and confirm. Some items need extra care.</p>`
+    `<p class="note">${icon("shield")}${esc(I18n.t("Nothing is removed until you review and confirm. Some items need extra care."))}</p>`
   );
 }
 function bigView() {
@@ -508,13 +613,13 @@ function bigView() {
       "Find the files with the biggest footprint on your Mac.",
     ) +
     banners() +
-    `<div class="metrics">${metric("Files found", source.length.toLocaleString(), "Up to 100 largest files")}${metric("Combined size", fmt(sum(source)), "Includes protected files")}${metric("Largest file", source.length ? fmt(Math.max(...source.map((i) => i.size))) : "—", "Sorted from largest to smallest")}${metric("Protected files", source.filter((i) => !eligible(i)).length, "Kept out of every cleanup")}</div>` +
+    `<div class="metrics">${metric("Files found", source.length.toLocaleString(I18n.locale()), "Up to 100 largest files")}${metric("Combined size", fmt(sum(source)), "Includes protected files")}${metric("Largest file", source.length ? fmt(Math.max(...source.map((i) => i.size))) : "—", "Sorted from largest to smallest")}${metric("Protected files", source.filter((i) => !eligible(i)).length, "Kept out of every cleanup")}</div>` +
     (bigError
       ? `<div class="error-banner">${esc(bigError)}${button("Retry", "retry-big")}</div>`
       : "") +
     filters(rows, { categories: false }) +
     (S.scanning || !bigReady
-      ? `<div class="list-panel">${empty(S.scanning ? "Analyzing file sizes…" : "Loading large files", S.scanning ? "Scanning for the largest files on your Mac. Results will appear when complete." : "Reading the results from your Mac.", S.scanning ? "refresh" : "file", "", { scanning: S.scanning })}</div>`
+      ? `<div class="list-panel">${empty(S.scanning ? "Analyzing file sizes…" : "Loading large files", S.scanning ? "Scanning for the largest files on your Mac. Results will appear when complete." : "Reading the results from your Mac.", "file", "", { scanning: S.scanning || !bigError })}</div>`
       : workspace(rows))
   );
 }
@@ -549,9 +654,9 @@ function appsView() {
       ? `<div class="error-banner">${esc(appsError)}${button("Retry", "retry-apps")}</div>`
       : "") +
     (!A.ready
-      ? `<div class="scan-banner" role="status">${icon("refresh")}<span>Analyzing applications${A.total ? ` (${A.progress} of ${A.total})` : ""}. App data appears as it’s measured.</span></div>`
+      ? scanIndicator('Analyzing applications', {percent: A.total ? A.progress * 100 / A.total : null})
       : "") +
-    `<div class="metrics">${metric("Applications", A.apps.length, A.ready ? "Installed on your Mac" : "Analysis in progress")}${metric("App size", fmt(sum(A.apps)), "Application bundles")}${metric("Stored data", fmt(A.apps.reduce((n, a) => n + a.data_size, 0)), "Caches, support and settings")}${metric("Unused for 6 months", idle.length, fmt(idle.reduce((n, a) => n + a.total, 0)) + " combined footprint")}</div><div class="toolbar">${searchField("appSearch", aq, "Search applications")}<select id="appSort" aria-label="Sort applications">${[
+    `<div class="metrics">${metric("Applications", A.apps.length, A.ready ? "Installed on your Mac" : "Analysis in progress")}${metric("App size", fmt(sum(A.apps)), "Application bundles")}${metric("Stored data", fmt(A.apps.reduce((n, a) => n + a.data_size, 0)), "Caches, support and settings")}${metric("Unused for 6 months", idle.length, I18n.t("{size} combined footprint", {size: fmt(idle.reduce((n, a) => n + a.total, 0))}))}</div><div class="toolbar">${searchField("appSearch", aq, "Search applications")}<select id="appSort" aria-label="Sort applications">${[
       ["total", "Total footprint"],
       ["size", "App size"],
       ["data", "Stored data"],
@@ -569,7 +674,7 @@ function appsView() {
         ? `<div class="apps-grid">${apps
             .map(
               (a) =>
-                `<button class="app-card" data-action="app" data-id="${a.id}"><div class="app-card-top">${appIcon(a)}<div><h3>${esc(a.name)}</h3><small>${a.running ? "Running now" : esc(a.category || a.source || "Application")}</small></div></div><div class="app-card-bottom"><b class="num">${fmt(a.total)}</b><span>${ago(a.last_used)}</span></div>${bar(
+                `<button class="app-card" data-action="app" data-id="${a.id}"><div class="app-card-top">${appIcon(a)}<div><h3 data-no-translate>${esc(a.name)}</h3><small>${a.running ? "Running now" : esc(a.category || a.source || "Application")}</small></div></div><div class="app-card-bottom"><b class="num">${fmt(a.total)}</b><span>${ago(a.last_used)}</span></div>${bar(
                   [
                     [(a.size / mx) * 100, "#f0f0f0"],
                     [(a.cache_size / mx) * 100, "#8ccbb2"],
@@ -623,25 +728,25 @@ function duplicatesView() {
       "Keep the original. Let go of the extra copies.",
     ) +
     banners() +
-    `<div class="metrics">${metric("Duplicate groups", sets.length, "Matched by file content")}${metric("Extra copies", rows.length, "Available for review")}${metric("Potential to reclaim", fmt(sum(rows)), "Only extra copies counted")}${metric("Originals kept", sets.length, "One copy is always protected")}</div><div class="toolbar">${searchField("duplicateSearch", q, "Search duplicate files or paths")}</div><p class="note" style="margin:0 0 20px">${icon("shield")}Files are compared by content. The original copy shown in each group stays on your Mac.</p>${
+    `<div class="metrics">${metric(I18n.t("Duplicate groups"), sets.length, I18n.t("Matched by file content"))}${metric(I18n.t("Extra copies"), rows.length, I18n.t("Available for review"))}${metric(I18n.t("Potential to reclaim"), fmt(sum(rows)), I18n.t("Only extra copies counted"))}${metric(I18n.t("Originals kept"), sets.length, I18n.t("One copy is always protected"))}</div><div class="toolbar">${searchField("duplicateSearch", q, I18n.t("Search duplicate files or paths"))}</div><p class="note" style="margin:0 0 20px">${icon("shield")}${esc(I18n.t("Files are compared by content. The original copy shown in each group stays on your Mac."))}</p>${
       matches.length
         ? matches
             .slice(0, visibleLimit)
             .map((g) => {
               const all = g.filter(eligible).every((i) => selected.has(i.id));
-              return `<section class="duplicate-card"><div class="duplicate-head"><span class="file-icon">${icon("dup")}</span><div><h3>${esc(g[0].name)}</h3><p>${g.length + 1} copies found. ${fmt(sum(g))} in extra copies.</p></div>${button(all ? "Deselect extras" : "Select extras", "duplicate-set", { symbol: all ? "x" : "check", data: { ids: g.map((i) => i.id).join(",") }, disabled: !canSelect() })}</div><div class="kept-copy">${icon("shield")}<span><strong>Keeping</strong> ${esc(g[0].keep)}</span></div>${g.map((i) => `<label class="duplicate-file"><input type="checkbox" data-select="${i.id}" aria-label="Select duplicate ${esc(i.path)}" ${selected.has(i.id) ? "checked" : ""} ${!canSelect() || !eligible(i) ? "disabled" : ""}><span>${esc(i.path)}</span><b>${fmt(i.size)}</b></label>`).join("")}</section>`;
+              return `<section class="duplicate-card"><div class="duplicate-head"><span class="file-icon">${icon("dup")}</span><div><h3>${esc(g[0].name)}</h3><p>${g.length + 1} ${esc(I18n.t("copies found"))}. ${fmt(sum(g))} ${esc(I18n.t("in extra copies"))}.</p></div>${button(I18n.t(all ? "Deselect extras" : "Select extras"), "duplicate-set", { symbol: all ? "x" : "check", data: { ids: g.map((i) => i.id).join(",") }, disabled: !canSelect() })}</div><div class="kept-copy">${icon("shield")}<span><strong>${esc(I18n.t("Keeping"))}</strong> ${esc(g[0].keep)}</span></div>${g.map((i) => `<label class="duplicate-file"><input type="checkbox" data-select="${i.id}" aria-label="${esc(I18n.t("Select duplicate"))} ${esc(i.path)}" ${selected.has(i.id) ? "checked" : ""} ${!canSelect() || !eligible(i) ? "disabled" : ""}><span>${esc(i.path)}</span><b>${fmt(i.size)}</b></label>`).join("")}</section>`;
             })
             .join("") +
           (matches.length > visibleLimit
-            ? button("Show more groups", "more", { style: "ghost" })
+            ? button(I18n.t("Show more groups"), "more", { style: "ghost" })
             : "")
         : empty(
-            S.scanning ? "Checking for duplicates…" : "No duplicate files found",
+            S.scanning ? I18n.t("Checking for duplicates…") : I18n.t("No duplicate files found"),
             S.scanning
-              ? "Scanning and comparing file hashes. Matching copies will appear here."
+              ? I18n.t("Scanning and comparing file hashes. Matching copies will appear here.")
               : q
-                ? "Try another name or path."
-                : "There are no extra copies in the scanned locations.",
+                ? I18n.t("Try another name or path.")
+                : I18n.t("There are no extra copies in the scanned locations."),
             S.scanning ? "refresh" : "dup",
             "",
             { scanning: S.scanning },
@@ -650,6 +755,10 @@ function duplicatesView() {
   );
 }
 function preserveFocus(render) {
+  // Keep unsaved form edits through periodic state refreshes.
+  const draftIds = ['careRules','careLanguages','careWeekday','careHour','languageSearch','languageSelect','translationLanguage','translationKey'];
+  const drafts = new Map(draftIds.filter(id => $(id)).map(id => [id, $(id).value]));
+  const mainTop = $("main")?.scrollTop;
   const active = document.activeElement,
     position = { x: window.scrollX, y: window.scrollY },
     id = active?.id,
@@ -660,6 +769,9 @@ function preserveFocus(render) {
     selection = [active.selectionStart, active.selectionEnd];
   } catch {}
   render();
+  for (const [draftId, value] of drafts) if ($(draftId)) $(draftId).value = value;
+  for (const [draftId, value] of formDrafts) if ($(draftId)) $(draftId).value = value;
+  Dropdowns.enhance($("main"));
   let target = id && $(id);
   if (!target && active?.dataset.select)
     target = document.querySelector(
@@ -677,11 +789,12 @@ function preserveFocus(render) {
       } catch {}
   }
   window.scrollTo(position.x, position.y);
+  if (mainTop !== undefined && $("main")) $("main").scrollTop = mainTop;
 }
 function draw({ animate = false } = {}) {
   preserveFocus(() => {
     chrome();
-    $("main").innerHTML = {
+    $("main").innerHTML = cleanupResult() + {
       clean: cleanView,
       apps: appsView,
       big: bigView,
@@ -690,11 +803,14 @@ function draw({ animate = false } = {}) {
       disks: ToolkitUI.diskView,
       homebrew: HomebrewUI.render,
       settings: settingsView,
+      care: CareUI.render,
       ghosts: () => window.GhostUI ? GhostUI.render() : empty("Opening Ghost Files…", "Loading the optional workspace."),
-    }[view]();
+    }[view]() + relatedTools();
     drawSelection();
     Dropdowns.enhance($("main"));
+    updateActivityStatus();
     watchMore();
+    if (window.I18n?.translateDOM) I18n.translateDOM();
   });
   if (animate) {
     $("main").classList.remove("page-enter");
@@ -721,29 +837,55 @@ function draw({ animate = false } = {}) {
 function drawSelection() {
   const items = selectedItems(),
     el = $("selection");
-  el.hidden = !items.length || ["optimize", "disks", "homebrew", "ghosts", "settings"].includes(view);
+  el.hidden = !items.length || ["optimize", "disks", "homebrew", "ghosts", "settings", "care"].includes(view);
   if (!items.length) {
     el.innerHTML = "";
     return;
   }
-  el.innerHTML = `<span class="selection-icon">${icon("check")}</span><div class="selection-summary"><strong>${items.length} ${items.length === 1 ? "item" : "items"} selected</strong><small>${fmt(sum(items))} ready for review</small></div><button class="clear" data-action="clear-selection">Clear</button>${button(busy ? "Working…" : "Review cleanup", "review", { style: "primary", symbol: "arrow", disabled: !canSelect() })}`;
+  el.innerHTML = `<span class="selection-icon">${icon("check")}</span><div class="selection-summary"><strong>${items.length} ${esc(I18n.t("Selected items"))}</strong><small>${fmt(sum(distinctStorage(items)))} ${esc(I18n.t("Available for review"))}</small></div><button class="clear" data-action="clear-selection">${esc(I18n.t("Clear"))}</button>${button(busy ? I18n.t("Working…") : I18n.t("Review cleanup"), "review", { style: "primary", symbol: "arrow", disabled: !canSelect() })}`;
 }
-function navigate(v) {
+function relatedTools() {
+  const targets = {
+    clean:[['big','Large files'],['dups','Duplicates'],['care','Cleanup history','history'],['disks','Disks & volumes']],
+    apps:[['care','App slimming','slimming'],['care','Startup items','startup'],['ghosts','Ghost Files']],
+    big:[['dups','Duplicates'],['care','Large files map','overview'],['clean','Storage cleanup']],
+    dups:[['care','Similar media','media'],['big','Large files'],['care','Cleanup history','history']],
+    optimize:[['care','Startup items','startup'],['disks','Disks & volumes'],['homebrew','Homebrew']],
+    disks:[['big','Large files'],['clean','Storage cleanup'],['optimize','Optimize your Mac']],
+    homebrew:[['apps','Applications'],['care','Startup items','startup'],['clean','Storage cleanup']],
+    care:[['clean','Storage cleanup'],['dups','Duplicates'],['apps','Applications'],['settings','Settings']],
+    ghosts:[['apps','Applications'],['care','Cleanup history','history'],['care','Ghost allowlist','rules']],
+    settings:[['care','Cleanup profiles','overview'],['care','Custom rules','rules'],['optimize','Optimize your Mac']],
+  }[view] || [];
+  return `<nav class="related-tools" aria-label="${esc(I18n.t('Related tools'))}"><span>${esc(I18n.t('Related tools'))}</span>${targets.filter(([v]) => v !== 'ghosts' || S.features?.ghosts_level).map(([v,label,tab]) => `<a class="button link" href="#${v}${tab ? '/' + tab : ''}" data-action="related-tool" data-view="${v}" ${tab ? `data-tab="${tab}"` : ''}>${icon('arrow')}${esc(I18n.t(label))}</a>`).join('')}</nav>`;
+}
+function navigate(v, options = {}) {
   if (!navs.some((n) => n[0] === v) || (v === "ghosts" && !S.features?.ghosts_level)) return;
   window.GhostUI?.leave();
+  HomebrewUI.leave();
+  Dropdowns.close();
+  viewStates.set(view, {q, cat, safetyFilter, minmb, focusId, visibleLimit, scroll:$('main').scrollTop});
   if (matchMedia("(max-width:900px)").matches) setSidebar(false);
   view = v;
-  q = "";
-  cat = "";
-  safetyFilter = "all";
-  minmb = 10;
-  focusId = null;
-  visibleLimit = 100;
+  const saved = options.reset ? null : viewStates.get(v);
+  q = options.query ?? saved?.q ?? "";
+  cat = options.category ?? saved?.cat ?? "";
+  safetyFilter = saved?.safetyFilter ?? "all";
+  minmb = options.minmb ?? saved?.minmb ?? S.settings?.min_mb ?? 10;
+  focusId = saved?.focusId ?? null;
+  visibleLimit = saved?.visibleLimit ?? 100;
+  if (v === 'care' && options.tab) CareUI.selectTab(options.tab);
   closeDetail();
   draw({ animate: true });
   window.scrollTo({ top: 0, behavior: "instant" });
+  if ($("main")) { $("main").scrollTop = saved?.scroll || 0; $("main").focus({preventScroll:true}); }
+  if (options.history !== false) {
+    const careTab = v === 'care' ? CareUI.tab() : '';
+    window.history.pushState({mdcView:v, careTab}, '', location.pathname + '#' + v + (careTab ? '/' + careTab : ''));
+  }
   if (["optimize", "disks"].includes(v)) ToolkitUI.enter(v);
   if (v === "homebrew") HomebrewUI.enter();
+  if (v === "care") CareUI.enter();
   if (["ghosts", "settings"].includes(v) && S.features?.ghosts_level) ensureGhostFeature().then(() => GhostUI.enter()).catch(e => toast(e.message, true));
   if (v === "apps" && !A.ready) loadApps();
   if (v === "big" && !S.scanning && !bigReady) loadBig();
@@ -762,7 +904,7 @@ function selectLevel(level) {
     if (
       !eligible(i) ||
       i.safety !== level ||
-      (level === "safe" && (i.manual || i.action === "root"))
+      (level === "safe" && (i.manual || i.action !== "trash"))
     )
       continue;
     if (!selected.has(i.id)) count++;
@@ -819,7 +961,7 @@ function renderAppDrawer() {
     scroll = $("detailDialog").scrollTop;
   const focusPart = document.activeElement?.dataset.part;
   $("detailDialog").innerHTML =
-    `<div class="drawer-head">${appIcon(a)}<div><h2>${esc(a.name)}</h2><small>${esc(a.version || "Version unavailable")} / ${esc(a.source || "Application")}${a.running ? " / Running now" : ""}</small></div>${button("", "close-detail", { style: "ghost icon-only", symbol: "x", aria: "Close application details" })}</div><div class="drawer-body"><div class="metrics">${metric("Total footprint", fmt(a.total), "App and stored data")}${metric("Caches", fmt(a.cache_size), "Can be regenerated")}${metric("Last opened", ago(a.last_used), a.running ? "Running now" : "")}</div>${bar(
+    `<div class="drawer-head">${appIcon(a)}<div><h2 data-no-translate>${esc(a.name)}</h2><small>${esc(a.version || "Version unavailable")} / ${esc(a.source || "Application")}${a.running ? " / Running now" : ""}</small></div>${button("", "close-detail", { style: "ghost icon-only", symbol: "x", aria: "Close application details" })}</div><div class="drawer-body"><div class="metrics">${metric("Total footprint", fmt(a.total), "App and stored data")}${metric("Caches", fmt(a.cache_size), "Can be regenerated")}${metric("Last opened", ago(a.last_used), a.running ? "Running now" : "")}</div>${bar(
       [
         [(a.size / total) * 100, "#f0f0f0"],
         [(a.cache_size / total) * 100, "#8ccbb2"],
@@ -841,10 +983,11 @@ function ask({
   allowPermanent = false,
   requiresBackup = false,
 }) {
+  if (pendingAsk) return Promise.resolve({confirmed:false, permanent:false, phrase:'', backupAck:false});
   return new Promise((resolve) => {
     pendingAsk = { resolve, phrase, allowPermanent, confirm, danger, requiresBackup };
     $("confirmDialog").innerHTML =
-      `<div class="modal-head"><h2 id="confirmTitle">${esc(title)}</h2>${button("", "cancel-confirm", { style: "ghost icon-only", symbol: "x", aria: "Close confirmation" })}</div><div class="modal-body">${body}${allowPermanent ? '<label class="check-label"><input id="permanent" type="checkbox">Delete permanently instead of using Trash</label><div class="review-warning" id="permanentWarning" hidden>Permanent deletion cannot be undone.</div>' : ""}<label class="phrase-label" id="phraseLabel" ${phrase ? "" : "hidden"}>Type <strong id="phraseText">${esc(phrase)}</strong> to continue<input type="text" id="confirmPhrase" autocomplete="off" spellcheck="false" aria-label="Confirmation phrase"></label></div><div class="modal-actions">${button("Cancel", "cancel-confirm")}${button(confirm, "confirm", { style: danger ? "danger" : "primary", disabled: !!phrase || requiresBackup })}</div>`;
+      `<div class="modal-head"><h2 id="confirmTitle">${esc(title)}</h2>${button("", "cancel-confirm", { style: "ghost icon-only", symbol: "x", aria: "Close confirmation" })}</div><div class="modal-body">${body}${allowPermanent ? '<label class="check-label"><input id="permanent" type="checkbox">Delete permanently instead of using Trash</label><div class="review-warning" id="permanentWarning" hidden>Permanent deletion cannot be undone.</div>' : ""}<label class="phrase-label" id="phraseLabel" ${phrase ? "" : "hidden"}>Type <strong id="phraseText" data-no-translate>${esc(phrase)}</strong> to continue<input type="text" id="confirmPhrase" autocomplete="off" spellcheck="false" aria-label="Confirmation phrase"></label></div><div class="modal-actions">${button("Cancel", "cancel-confirm")}${button(confirm, "confirm", { style: danger ? "danger" : "primary", disabled: !!phrase || requiresBackup })}</div>`;
     Overlays.open($("confirmDialog"));
     $("confirmDialog").querySelector('[data-action="cancel-confirm"]').focus();
   });
@@ -860,7 +1003,7 @@ function updateConfirmation() {
   btn.disabled = (!!phrase && $("confirmPhrase").value !== phrase) || (pendingAsk.requiresBackup && !$("diskBackupAck")?.checked);
   btn.className =
     "button " + (pendingAsk.danger || perm ? "danger" : "primary");
-  btn.textContent = perm ? "Delete permanently" : pendingAsk.confirm;
+  btn.textContent = I18n.t(perm ? "Delete permanently" : pendingAsk.confirm);
 }
 function finishAsk(confirmed) {
   if (!pendingAsk) return;
@@ -874,15 +1017,39 @@ function finishAsk(confirmed) {
   Overlays.close($("confirmDialog")).then(() => pending.resolve({ confirmed, permanent, phrase, backupAck }));
 }
 function reviewList(items) {
-  return `<div class="review-total"><span>${items.length} ${items.length === 1 ? "item" : "items"} selected</span><b>${fmt(sum(items))}</b></div><div class="review-items">${items.map((i) => `<div class="review-item"><span>${esc(i.name)}</span><b>${fmt(i.size)}</b></div>`).join("")}</div>`;
+  return `<div class="review-total"><span>${items.length} ${items.length === 1 ? "item" : "items"} selected</span><b>${fmt(sum(distinctStorage(items)))}</b></div><div class="review-items">${items.map((i) => `<div class="review-item"><span>${esc(itemName(i))}</span><b>${fmt(i.size)}</b></div>`).join("")}</div>`;
+}
+function cleanupResult() {
+  if (!lastCleanup || !['clean','apps','big','dups'].includes(view)) return '';
+  const rows = lastCleanup.results || [];
+  const completed = rows.filter(r => r.ok && r.message !== 'included in selected parent').length;
+  const failed = rows.filter(r => r.ok === false).length;
+  const moved = rows.some(r => r.ok && r.action === 'trash') && !lastCleanup.permanent;
+  const outcomes = {trash:lastCleanup.permanent ? 'Deleted permanently' : 'Moved to Trash',
+    empty:'Trash emptied', evict:'Local copy removed', cmd:'Command completed', root:'Terminal action needed'};
+  return `<section class="cleanup-result ${failed ? 'has-failures' : ''}" aria-label="${esc(I18n.t('Cleanup results'))}">
+    <div class="cleanup-result-heading">${icon(failed ? 'alert' : 'check')}<div><h2>${esc(I18n.t('Cleanup results'))}</h2><p>${esc(I18n.t('{completed} completed · {failed} failed', {completed, failed}))} · ${fmt(lastCleanup.processed_bytes ?? lastCleanup.freed)}</p></div>${button('', 'dismiss-cleanup-result', {style:'ghost icon-only',symbol:'x',aria:I18n.t('Dismiss results')})}</div>
+    ${moved ? `<p>${esc(I18n.t('Moved files can be restored from Cleanup history. Trash still uses disk space.'))}</p>` : ''}
+    <details ${failed ? 'open' : ''}><summary>${esc(I18n.t('View results'))}</summary><ul>${rows.map(r => `<li><div><strong data-no-translate>${esc(r.name)}</strong><span>${esc(I18n.t(r.ok === false ? r.message : r.message === 'included in selected parent' ? 'Included in selected folder' : outcomes[r.action] || r.message))}</span></div>${icon(r.ok === false ? 'alert' : r.ok ? 'check' : 'terminal')}</li>`).join('')}</ul></details>
+    ${moved ? `<a class="button link" href="#care/history" data-action="related-tool" data-view="care" data-tab="history">${esc(I18n.t('Cleanup history'))}${icon('arrow')}</a>` : ''}
+  </section>`;
 }
 function resultToast(r, permanent = false) {
-  if (r.fails?.length)
+  const inlineResults = r.results && ['clean','apps','big','dups'].includes(view);
+  if (inlineResults) {
+    // Earlier selection and operation notices must not obscure the final report.
+    $('toasts').querySelectorAll('.toast:not(.error)').forEach(item => item.remove());
+  }
+  if (r.results) {
+    lastCleanup = {...r, permanent};
+    if (['clean','apps','big','dups'].includes(view)) $('main').scrollTop = 0;
+  }
+  if (r.fails?.length && !inlineResults)
     toast(
       `${r.fails.length} ${r.fails.length === 1 ? "item could" : "items could"} not be removed. ${r.fails.map((f) => f.join(": ")).join("; ")}`,
       true,
     );
-  if (r.freed)
+  if (r.freed && !inlineResults)
     toast(
       `${fmt(r.freed)} processed.${permanent ? "" : " Files moved to Trash still use disk space until Trash is emptied."}`,
     );
@@ -894,13 +1061,16 @@ function resultToast(r, permanent = false) {
         r.root.map((cmd) => `<p><code>${esc(cmd)}</code></p>`).join(""),
       confirm: "Done",
     });
-  if (!r.freed && !r.fails?.length && !r.root?.length)
+  if (r.warning) toast(r.warning, true);
+  if (!inlineResults && !r.freed && !r.fails?.length && !r.root?.length && !r.results?.some(row => row.ok))
     toast("No files were removed. The items may have changed since the scan.");
 }
 async function reviewCleanup() {
   if (!canSelect()) return;
   const items = selectedItems();
   if (!items.length) return;
+  const emptyTrash = items.some(i => i.action === 'empty');
+  if (emptyTrash && items.length !== 1) return toast(I18n.t('Empty Trash separately from other cleanup operations.'), true);
   const risky = items.some((i) => i.safety === "risky"),
     special = items.filter((i) =>
       ["cmd", "empty", "evict", "root"].includes(i.action),
@@ -912,11 +1082,11 @@ async function reviewCleanup() {
     title: "Review your cleanup",
     body:
       reviewList(items) +
-      `<p>Files are moved to the Trash by default. Review the selection before continuing.</p>${risky ? '<div class="review-warning">Risky items may contain personal data that cannot be regenerated.</div>' : ""}${special.length ? `<div class="review-warning">${special.map((i) => esc(i.name) + ": " + { empty: "empties this location permanently", cmd: "runs its cleanup command; changes may be permanent", evict: "removes the local cloud copy", root: "requires a command in Terminal" }[i.action]).join("<br>")}</div>` : ""}`,
-    confirm: special.length ? "Remove selected items" : "Move to Trash",
+      `<p>Files are moved to the Trash by default. Review the selection before continuing.</p>${risky ? '<div class="review-warning">Risky items may contain personal data that cannot be regenerated.</div>' : ""}${special.length ? `<div class="review-warning">${special.map((i) => esc(itemName(i)) + ": " + { empty: "empties this location permanently", cmd: "runs its cleanup command; changes may be permanent", evict: "removes the local cloud copy", root: "requires a command in Terminal" }[i.action]).join("<br>")}</div>` : ""}`,
+    confirm: emptyTrash ? "Empty Trash" : special.length ? "Remove selected items" : "Move to Trash",
     danger: risky || special.some((i) => ["empty", "cmd"].includes(i.action)),
-    phrase: risky ? "I UNDERSTAND" : "",
-    allowPermanent: true,
+    phrase: emptyTrash ? "DELETE" : risky ? "I UNDERSTAND" : "",
+    allowPermanent: !emptyTrash && items.some(i => i.action === 'trash'),
   });
   if (!answer.confirmed) return;
   if (
@@ -936,7 +1106,7 @@ async function reviewCleanup() {
       ids: items.map((i) => i.id),
       permanent: answer.permanent,
       ack: risky,
-      permanent_ack: answer.permanent,
+      permanent_ack: answer.permanent || emptyTrash,
       scan_id: scanId,
       revision,
     });
@@ -945,7 +1115,7 @@ async function reviewCleanup() {
     bigReady = false;
     A = { apps: [], ready: false };
     closeDetail();
-    resultToast(r, answer.permanent);
+    resultToast(r, answer.permanent || emptyTrash);
     await load();
     if (view === "apps") await loadApps();
   } catch (e) {
@@ -1016,7 +1186,7 @@ async function cleanApp(m) {
   }
 }
 async function rescan() {
-  if (S.scanning || busy) return;
+  if (S.scanning || S.busy || busy || ToolkitUI.isRunning() || CareUI.isRunning()) return;
   if (selected.size) {
     const answer = await ask({
       title: "Start a new scan?",
@@ -1058,17 +1228,26 @@ async function revealPath(path) {
   toast("Location opened in Finder.");
 }
 async function dispatch(action, el) {
+  if (action === "settings-care") return navigate("care");
+  if (action === "related-tool") return navigate(el.dataset.view, {tab:el.dataset.tab});
   if (action === "feature-ghost-level") return setGhostLevel(Number(el.dataset.level));
   if (action.startsWith("ghost-")) return window.GhostUI?.dispatch(action, el);
+  if (action === "quick-language" || action.startsWith("locale-")) return I18n.dispatch(action, el);
+  if (action.startsWith("care-")) return CareUI.dispatch(action, el);
   if (action.startsWith("brew-")) return HomebrewUI.dispatch(action, el);
   if (action.startsWith("toolkit-")) return ToolkitUI.dispatch(action, el);
   const id = Number(el.dataset.id),
     i = S.items.find((x) => x.id === id);
   switch (action) {
-    case "toggle-sidebar": return setSidebar(!sidebarExpanded);
+    case "toggle-sidebar":
+      setSidebar(!sidebarExpanded);
+      try { localStorage.setItem('mdc_sidebar', sidebarExpanded ? 'expanded' : 'collapsed'); } catch {}
+      return;
+    case "dismiss-cleanup-result": lastCleanup = null; return draw();
     case "collapse-sidebar": return setSidebar(false);
     case "navigate":
       return navigate(el.dataset.view);
+    case "language": { return I18n.activate(el.dataset.language); }
     case "theme": {
       applyTheme(theme === "light" ? "dark" : "light");
       try { localStorage.setItem("mdc_theme", theme); } catch {}
@@ -1077,8 +1256,8 @@ async function dispatch(action, el) {
       return draw();
     }
     case "mode":
+      await api("/api/settings", { mode:el.dataset.mode });
       mode = el.dataset.mode;
-      await api("/api/settings", { mode });
       try {
         localStorage.setItem("mdc_mode", mode);
       } catch {}
@@ -1133,6 +1312,7 @@ async function dispatch(action, el) {
       return;
     case "reveal":
       if (i?.path) return revealPath(i.path);
+      if (el.dataset.path) return revealPath(el.dataset.path);
       return;
     case "pin":
       if (!i || !canSelect()) return;
@@ -1210,6 +1390,8 @@ async function dispatch(action, el) {
 }
 document.addEventListener("click", (e) => {
   const el = e.target.closest("[data-action]");
+  if (el?.tagName === 'A' && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) return;
+  if (el?.tagName === 'A') e.preventDefault();
   if (el && !el.disabled)
     Promise.resolve(dispatch(el.dataset.action, el)).catch((error) =>
       toast(error.message, true),
@@ -1217,8 +1399,10 @@ document.addEventListener("click", (e) => {
 });
 document.addEventListener("input", (e) => {
   const el = e.target;
+  if (draftFields.has(el.id)) formDrafts.set(el.id, el.value);
   if (el.id === "confirmPhrase") return updateConfirmation();
   if (["itemSearch", "duplicateSearch", "appSearch"].includes(el.id)) {
+    if (e.isComposing) return;
     if (el.id === "appSearch") aq = el.value;
     else q = el.value;
     visibleLimit = 100;
@@ -1227,6 +1411,7 @@ document.addEventListener("input", (e) => {
 });
 document.addEventListener("change", (e) => {
   const el = e.target;
+  if (draftFields.has(el.id)) formDrafts.set(el.id, el.value);
   if (el.dataset.select !== undefined) return toggle(Number(el.dataset.select));
   if (el.dataset.part !== undefined) {
     const a = A.apps.find((a) => a.id === openAppId);
@@ -1251,6 +1436,9 @@ document.addEventListener("change", (e) => {
 });
 Overlays.bind($("confirmDialog"), () => finishAsk(false));
 Overlays.bind($("detailDialog"), closeDetail);
+window.addEventListener('popstate', event => {
+  if (event.state?.mdcView) navigate(event.state.mdcView, {history:false, tab:event.state.careTab});
+});
 matchMedia("(max-width:1240px)").addEventListener("change", (e) => {
   if (!e.matches && detailKind === "file") closeDetail();
 });
@@ -1287,8 +1475,30 @@ document.addEventListener(
 $("brandMark").innerHTML =
   '<img src="/assets/app_icon.png" alt="" width="34" height="34">';
 $("sidebarToggle").innerHTML = icon("sidebar") + '<span class="rail-label">Sidebar</span>';
+function preferredSidebar() {
+  let preference;
+  try { preference = localStorage.getItem('mdc_sidebar'); } catch {}
+  setSidebar(matchMedia('(min-width:1180px)').matches && preference !== 'collapsed');
+}
+preferredSidebar();
+matchMedia('(min-width:1180px)').addEventListener('change', preferredSidebar);
 $("main").addEventListener("animationend", (event) => {
   if (event.target === $("main")) $("main").classList.remove("page-enter");
 });
 draw();
 load();
+
+// Native menu bar actions use the same authenticated and versioned cleanup path.
+window.MDCNative = {
+  metrics: async () => ({free: S.disk?.free, scanning:S.scanning, busy:!!S.busy || busy}),
+  safeClean: async () => {
+    if (!canSelect()) { toast('Wait for the scan or current operation to finish.',true); return; }
+    const result = await api('/api/care/profile',{profile:'minimal',scan_id:S.scan_id,revision:S.revision});
+    if(!result.ids.length) { toast('No eligible files in the minimal profile.'); return; }
+    busy=true;
+    try { resultToast(await api('/api/clean',{ids:result.ids,scan_id:S.scan_id,revision:S.revision,permanent:false})); await load(); }
+    catch(e) {toast(e.message,true);} finally {busy=false;draw();}
+  }
+};
+
+I18n.init();

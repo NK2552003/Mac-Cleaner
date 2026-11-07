@@ -20,14 +20,27 @@ with tempfile.TemporaryDirectory(prefix='mdc-ghost-ui-') as directory, contextli
     for target, value in [('mac_deep_cleaner.feature_config.CONFIG',root/'config.json'),
         ('mac_deep_cleaner.ghosts.ofrenda.LEDGER',root/'ofrenda.json'),
         ('mac_deep_cleaner.ghosts.haunt.CACHE',root/'cache.json'),
+        ('mac_deep_cleaner.settings.SETTINGS_DIR',str(root/'settings')),
+        ('mac_deep_cleaner.settings.SETTINGS_FILE',str(root/'settings/settings.json')),
         ('mac_deep_cleaner.cleanup.HOME',str(root)),('mac_deep_cleaner.cleanup.IS_MAC',False)]:
         stack.enter_context(patch(target,value))
-    roots = {k:root/'Library'/k for k in ('Caches','Preferences','Application Support')}
+    roots = {k:root/'Library'/k for k in ('Caches','Preferences','Application Support','Group Containers')}
     for base in roots.values(): base.mkdir(parents=True)
     for kind,name,size in [('Caches','org.moonlit.lantern',1_400_000),
         ('Preferences','org.paper.atlas.plist',240_000),
         ('Application Support','Forgotten Notes',320_000)]:
-        (roots[kind]/name).write_bytes(b'x'*size)
+        target = roots[kind]/name
+        if kind == 'Application Support':
+            target.mkdir()
+            target = target/'data'
+        target.write_bytes(b'x'*size)
+    for kind, name in [('Application Support','CloudDocs'), ('Application Support','Animoji'),
+            ('Application Support','SESStorage'), ('Application Support','default.store'),
+            ('Application Support','default.store-wal'),
+            ('Group Containers','group.is.workflow.my.app'),
+            ('Group Containers','group.ABCDE12345.com.apple.shortcuts'),
+            ('Caches','com.plausiblelabs.crashreporter.data'), ('Caches','main.kts.compiled.cache')]:
+        (roots[kind]/name).write_bytes(b'system or shared service data: retain')
     # Exercise the real finder without consulting host apps, Spotlight, PATH,
     # running processes, Homebrew, or IDE extensions.
     stack.enter_context(patch('mac_deep_cleaner.ghosts.controller.find_ghosts',

@@ -95,6 +95,7 @@ class Toolkit:
 
     def _run(self, plan, job):
         output = []
+        outcome = 'succeeded'
         try:
             if plan['kind'] == 'brew':
                 current = self.brew.plan(plan['request'])
@@ -114,18 +115,18 @@ class Toolkit:
                 with self.lock:
                     job['output'] = '\n\n'.join(output)[-24000:]
             with self.lock:
-                job['status'] = 'succeeded'
                 job['output'] = '\n\n'.join(output)[-24000:] or 'Operation completed successfully.'
         except Exception as exc:  # noqa: BLE001 - keep the job visible and always release its lock
             with self.lock:
-                job['status'] = 'failed'
+                outcome = 'failed'
                 job['error'] = str(exc) if isinstance(exc, APIError) else 'The operation failed unexpectedly. Check the current state before retrying.'
         finally:
             if plan['kind'] == 'brew':
                 self.brew.invalidate()
             with self.lock:
                 job['finished_at'] = time.time()
-            self.operation.release()
+                self.operation.release()
+                job['status'] = outcome
 
     def open(self, action):
         if not isinstance(action, str) or action not in SHORTCUTS:

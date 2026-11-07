@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
   await page.locator('.disk-heading h2').waitFor();
   assert.equal(await page.locator('[data-action="toolkit-disk-action"][data-tool="erase"]').count(),0);
   await page.screenshot({path:'/tmp/mdc-ui-check/disks-desktop.png'});
-  await page.locator('.disk-choice[data-target="disk8"]').click();
+  await page.locator('.disk-choice[data-target="disk9s1"]').click();
   await page.locator('[data-action="toolkit-disk-action"][data-tool="erase"]').click();
   await page.getByLabel('Volume name',{exact:true}).fill('My Work SSD');
   await page.getByRole('button',{name:'Review operation',exact:true}).click();
@@ -63,7 +63,7 @@ const assert = require('node:assert/strict');
   }
   // Modal input/confirmation must fit at the narrowest supported width too.
   await page.setViewportSize({width:320,height:740});
-  await page.locator('.disk-choice[data-target="disk8"]').click();
+  await page.locator('.disk-choice[data-target="disk9s1"]').click();
   await page.locator('[data-action="toolkit-disk-action"][data-tool="partition"]').click();
   assert(await page.locator('#diskOperationForm').evaluate(e => e.scrollWidth <= e.clientWidth + 1));
   await page.getByRole('button',{name:'Review operation',exact:true}).click();

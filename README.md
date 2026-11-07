@@ -6,7 +6,7 @@
 
 # Mac Deep Cleaner
 
-**Reclaim gigabytes of disk space with confidence — the safest, smartest macOS storage analyzer and cleanup suite.**
+**Understand your Mac’s storage, review cleanup, and restore files when you need them.**
 
 [![PyPI Version](https://img.shields.io/pypi/v/mac-deep-cleaner.svg)](https://pypi.org/project/mac-deep-cleaner/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
@@ -18,9 +18,13 @@
 
 ---
 
-**Mac Deep Cleaner v3.2.0** combines storage analysis, reviewed cleanup, system diagnostics, maintenance, Homebrew package management, and external-disk management in a local dashboard, native macOS app, and command-line tools. File cleanup uses Trash by default; disk formatting and selected maintenance commands are permanent and require a separate review.
+**Mac Deep Cleaner v3.0.0** combines storage analysis, reviewed cleanup, system diagnostics, maintenance, Homebrew package management, and external-disk management in a local dashboard, native macOS app, and command-line tools. File cleanup uses Trash by default; disk formatting and selected maintenance commands are permanent and require a separate review.
 
-Version 3.2.0 adds a dedicated **Homebrew** manager with dependency explanations, groups, reverse trees, size rankings, update checks, services, and reviewed maintenance. **Disks & volumes** now hides recovery/system records by default and uses one scrolling page.
+Version 3.0.0 adds **Care center**: opt-in weekly cleanup, durable Trash restore, cleanup profiles, a large-file treemap, disk trends, similar-media review, startup/browser tools, app-copy slimming, HTML reports, and custom JSON rules. The native app has a menu bar widget. Settings supports 194 language choices, 42 complete bundled language packs, optional cloud translation of interface text, and offline language-pack import/export. Languages without a complete installed pack fall back to English.
+
+Current development builds include persistent cleanup results, labeled desktop navigation, scan-permission notices, and separate typed confirmation for emptying Trash. App cache cleanup preserves WebKit and HTTP storage containing local app data. See the [quality audit and verification matrix](docs/quality-audit.md) for the tested behavior and platform limits.
+
+See the [v3.0.0 feature guide, limits, and setup](docs/v3.0.0.md).
 
 ```bash
 # Three convenient commands, same powerful tool
@@ -36,7 +40,7 @@ mdc                 # Fast CLI shorthand
 | **Safety First** | **Modern UI & Desktop App** | **Deep Local Analysis** |
 | :--- | :--- | :--- |
 | Never deletes without review | Responsive dashboard with dark-minimal aesthetic | Intelligent application footprints & leftovers |
-| Finder Trash protection by default | Integrated macOS native window chrome & full-screen | Dev toolchains, Docker, caches, logs, Xcode |
+| Trash history and conflict-safe restore | Integrated macOS native window chrome & full-screen | Dev toolchains, Docker, caches, logs, Xcode |
 | Protected & macOS-managed path guards | Optional Rich & Questionary interactive terminal UI | Duplicate file detection with content hashing |
 | Validated scan generations & revisions | No app telemetry; Homebrew can fetch metadata | Fast multi-threaded local scanning |
 
@@ -210,10 +214,10 @@ See [Apple’s APFS volume guide](https://support.apple.com/guide/disk-utility/d
 To build the standalone native `.app` bundle with the integrated Swift window chrome:
 
 ```bash
-python3 scripts/build_mac.py
+bash scripts/build.sh app
 ```
 
-The resulting `Mac Deep Cleaner.app` will be placed in `dist/`.
+The resulting `Mac Deep Cleaner.app` will be placed in `dist/`. The script uses an isolated `.venv` and the existing `scripts/build_mac.py` builder. `bash scripts/build.sh build` creates the wheel and source archive; `bash scripts/build.sh pkg` creates a local macOS installer. Builds are locally signed unless a signing identity is supplied to the native builder.
 
 ### Shared App Icon
 
@@ -223,7 +227,7 @@ The resulting `Mac Deep Cleaner.app` will be placed in `dist/`.
 
 ## Cleanup & Safety Rules
 
-- **Cleanup Defaults:** Ordinary file cleanup moves files to Finder's Trash. Disk erase/repartition and explicitly reviewed maintenance commands do not use Trash. Trash moves do not immediately increase free disk space until Trash is emptied.
+- **Cleanup Defaults:** Ordinary file cleanup moves files to the user's Trash and records their original locations for app-based restore. Disk erase/repartition and explicitly reviewed maintenance commands do not use Trash. Trash moves do not immediately increase free disk space until Trash is emptied.
 - **Strict Verification:** The backend verifies scan generation tokens, exact file IDs, inode matches, and path restrictions before performing any changes.
 - **System Protection:** System files (`com.apple.*`, SIP paths, running app bundles) are strictly locked and protected.
 - **Privacy & Permissions:** For full analysis of user caches and containers, grant Full Disk Access to Terminal (or Mac Deep Cleaner) in **System Settings → Privacy & Security → Full Disk Access**.
@@ -233,9 +237,9 @@ The resulting `Mac Deep Cleaner.app` will be placed in `dist/`.
 ## Development & verification
 
 ```bash
-python3 -m pip install -e ".[dev]"
-python3 -m pytest -q
-python3 -m build
+bash scripts/build.sh venv
+.venv/bin/python -m pytest -q
+bash scripts/build.sh build
 ```
 
 Disk safety and job tests inject a fake command runner. They never erase, partition, unmount, or maintain the host Mac. Optional browser checks also use this fixture:
@@ -255,3 +259,7 @@ The browser suites check review/execute flows, cancellation, backup acknowledgem
 ## License
 
 Distributed under the Apache 2.0 License. See `LICENSE` for more information.
+
+## Repository contents
+
+Commit application and native source, tests, build scripts, documentation, workflows, the source icon in `assets/`, and bundled locale JSON files. `.gitignore` excludes generated distributions/apps, virtual environments, caches, browser dependencies, local reports, editor metadata, and credentials. The release version is defined once in `mac_deep_cleaner/__init__.py`; package metadata and UI/build consumers read that value.

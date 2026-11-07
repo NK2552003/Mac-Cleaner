@@ -55,10 +55,11 @@ window.Dropdowns = (() => {
     menu.dataset.direction = placeAbove ? "up" : "down";
   }
 
-  function highlight(index, scroll = true) {
+  function highlight(index, scroll = true, step = 1) {
     const choices = options();
-    if (!choices.length) return;
+    if (!choices.length || choices.every(option => option.disabled)) return;
     active = (index + choices.length) % choices.length;
+    while (choices[active].disabled) active = (active + step + choices.length) % choices.length;
     const rows = [...menu.children];
     rows.forEach((row, i) => row.classList.toggle("is-active", i === active));
     trigger()?.setAttribute(
@@ -136,14 +137,14 @@ window.Dropdowns = (() => {
   }
 
   function enhance(root = document) {
-    for (const select of root.querySelectorAll("select:not([data-enhanced])")) {
+    for (const select of root.querySelectorAll("select:not([data-enhanced]):not([data-native-select])")) {
       select.dataset.enhanced = "true";
       if (!select.id) select.id = `dropdown${++sequence}`;
       const wrapper = document.createElement("div");
       wrapper.className = `dropdown ${select.className}`;
       select.before(wrapper);
       wrapper.append(select);
-      select.hidden = true;
+      select.classList.add("sr-select");
       select.tabIndex = -1;
       select.setAttribute("aria-hidden", "true");
       const control = document.createElement("button");
@@ -165,6 +166,15 @@ window.Dropdowns = (() => {
       control.append(label);
       control.insertAdjacentHTML("beforeend", chevron);
       wrapper.append(control);
+    }
+    for (const select of root.querySelectorAll('select[data-enhanced]')) {
+      const control = trigger(select.id);
+      if (!control) continue;
+      control.disabled = select.disabled;
+      control.firstElementChild.textContent = select.selectedOptions[0]?.textContent || 'Choose';
+      const label = select.getAttribute('aria-label') || [...(select.labels?.[0]?.childNodes || [])]
+        .filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent.trim()).join(' ').trim();
+      if (label) control.setAttribute('aria-label', label);
     }
     if (opened) {
       if (!model() || !trigger()) close();
@@ -191,6 +201,7 @@ window.Dropdowns = (() => {
       const control = event.target.closest("[data-dropdown]");
       if (!control) return;
       const select = document.getElementById(control.dataset.dropdown);
+      if (!select || select.disabled) return;
       const isOpen = opened === select.id;
       if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
         event.preventDefault();
@@ -199,7 +210,7 @@ window.Dropdowns = (() => {
         else if (event.key === "End") index = select.options.length - 1;
         else if (isOpen) index += event.key === "ArrowDown" ? 1 : -1;
         if (!isOpen) open(select.id, index);
-        else highlight(index);
+        else highlight(index, true, ['ArrowUp', 'End'].includes(event.key) ? -1 : 1);
       } else if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         if (isOpen) choose(active);
@@ -227,7 +238,7 @@ window.Dropdowns = (() => {
         for (let offset = 0; offset < choices.length; offset++) {
           const index = (start + offset) % choices.length;
           if (
-            choices[index].textContent.toLocaleLowerCase().startsWith(query)
+            !choices[index].disabled && choices[index].textContent.toLocaleLowerCase().startsWith(query)
           ) {
             highlight(index);
             break;

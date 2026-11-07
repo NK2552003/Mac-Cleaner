@@ -1,5 +1,6 @@
 import AppKit
 import WebKit
+import Darwin
 
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate, NSWindowDelegate, WKScriptMessageHandler {
     private var window: NSWindow!
@@ -11,8 +12,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var origin: URL?
     private var terminating = false
     private var opened = false
+    private var statusItem: NSStatusItem?
+    private var statusTimer: Timer?
+    private var spaceMenuItem: NSMenuItem?
+    private var pressureMenuItem: NSMenuItem?
+    private var cleanMenuItem: NSMenuItem?
+    private var translations: [String: String] = [:]
+    private var menuSources: [ObjectIdentifier: String] = [:]
+
+    private func localized(_ source: String) -> String { translations[source] ?? source }
+
+    private func loadNativeLanguage() {
+        let support = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Mac Deep Cleaner")
+        guard let data = try? Data(contentsOf: support.appendingPathComponent("settings.json")),
+              let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let language = settings["language"] as? String,
+              language.range(of: "^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8}){0,3}$", options: .regularExpression) != nil,
+              language != "en" else { return }
+        let variants = language.contains("-") ? [String(language.split(separator: "-")[0]), language] : [language]
+        for variant in variants {
+            let bundled = Bundle.main.resourceURL?.appendingPathComponent("engine/_internal/mac_deep_cleaner/web/locales/" + variant + ".json")
+            let custom = support.appendingPathComponent("locales/" + variant + ".json")
+            for url in [bundled, custom].compactMap({ $0 }) {
+                if let data = try? Data(contentsOf: url),
+                   let pack = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let messages = pack["messages"] as? [String: String] {
+                    translations.merge(messages) { _, new in new }
+                }
+            }
+        }
+    }
+
+    private func translateMenu(_ menu: NSMenu?) {
+        guard let menu = menu else { return }
+        for item in menu.items where !item.isSeparatorItem {
+            let key = ObjectIdentifier(item)
+            let source = menuSources[key] ?? item.title
+            menuSources[key] = source
+            item.title = localized(source)
+            if let submenu = item.submenu {
+                submenu.title = item.title
+                translateMenu(submenu)
+            }
+        }
+    }
+
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        loadNativeLanguage()
         setupMenu()
         window = CleanerWindow(contentRect: NSRect(x: 0, y: 0, width: 1320, height: 880),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
@@ -49,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             """,
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         userContent.add(self, name: "themeChange")
+        userContent.add(self, name: "languageChange")
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -56,10 +104,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let container = WorkspaceContentView(frame: window.contentView!.bounds, webView: webView)
         window.contentView = container
         chrome = container.chrome
-        webView.loadHTMLString("<body style='background:#181818;color:#f5f5f5;font:15px -apple-system;display:grid;place-items:center;height:90vh'>Starting Mac Deep Cleaner…</body>", baseURL: nil)
+        let starting = localized("Starting Mac Deep Cleaner…").replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
+        webView.loadHTMLString("<body style='background:#181818;color:#f5f5f5;font:15px -apple-system;display:grid;place-items:center;height:90vh'>\(starting)</body>", baseURL: nil)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        setupStatusItem()
         launchEngine()
+    }
+
+    private func setupStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = item
+        item.button?.image = NSImage(systemSymbolName: "internaldrive", accessibilityDescription: "Mac Deep Cleaner")
+        item.button?.imagePosition = .imageLeading
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        spaceMenuItem = menu.addItem(withTitle: "Checking free space…", action: nil, keyEquivalent: "")
+        pressureMenuItem = menu.addItem(withTitle: "Memory pressure: checking…", action: nil, keyEquivalent: "")
+        spaceMenuItem?.isEnabled = false
+        pressureMenuItem?.isEnabled = false
+        menu.addItem(.separator())
+        let open = menu.addItem(withTitle: "Open Mac Deep Cleaner", action: #selector(showWorkspace), keyEquivalent: "")
+        open.target = self
+        cleanMenuItem = menu.addItem(withTitle: "Safe clean (minimal profile → Trash)", action: #selector(menuSafeClean), keyEquivalent: "")
+        cleanMenuItem?.target = self
+        cleanMenuItem?.isEnabled = false
+        let history = menu.addItem(withTitle: "Cleanup history and tools", action: #selector(showCare), keyEquivalent: "")
+        history.target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit Mac Deep Cleaner", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+        item.menu = menu
+        translateMenu(menu)
+        refreshStatus()
+        statusTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.refreshStatus() }
+    }
+
+    private func refreshStatus() {
+        if let stats = try? FileManager.default.attributesOfFileSystem(forPath: NSHomeDirectory()),
+           let free = stats[.systemFreeSize] as? NSNumber {
+            let formatted = ByteCountFormatter.string(fromByteCount: free.int64Value, countStyle: .decimal)
+            statusItem?.button?.title = " " + formatted
+            statusItem?.button?.toolTip = "Mac Deep Cleaner · " + localized("Free space: {size}").replacingOccurrences(of: "{size}", with: formatted)
+            spaceMenuItem?.title = localized("Free space: {size}").replacingOccurrences(of: "{size}", with: formatted)
+        }
+        var pressure: UInt32 = 0
+        var length = MemoryLayout<UInt32>.size
+        let success = sysctlbyname("kern.memorystatus_vm_pressure_level", &pressure, &length, nil, 0) == 0
+        let label = success ? ([1: "Normal", 2: "Warning", 4: "Critical"][Int(pressure)] ?? "Unknown") : "Unavailable"
+        pressureMenuItem?.title = localized("Memory pressure: {state}").replacingOccurrences(of: "{state}", with: localized(label))
+        if opened {
+            webView.evaluateJavaScript("typeof canSelect === 'function' && canSelect()") { [weak self] result, _ in
+                self?.cleanMenuItem?.isEnabled = (result as? Bool) == true
+            }
+        }
+    }
+
+    @objc private func showWorkspace() {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        refreshStatus()
+    }
+
+    @objc private func showCare() {
+        showWorkspace()
+        webView.evaluateJavaScript("typeof navigate === 'function' && navigate('care')", completionHandler: nil)
+    }
+
+    @objc private func menuSafeClean() {
+        cleanMenuItem?.isEnabled = false
+        webView.evaluateJavaScript("window.MDCNative?.safeClean(); void 0", completionHandler: nil)
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showWorkspace()
+        return true
     }
 
     private func setupMenu() {
@@ -71,7 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit Mac Deep Cleaner", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
-        let editItem = NSMenuItem()
+        let editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
         main.addItem(editItem)
         let edit = NSMenu(title: "Edit")
         edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
@@ -80,7 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
-        let windowItem = NSMenuItem()
+        let windowItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
         main.addItem(windowItem)
         let windowMenu = NSMenu(title: "Window")
         windowMenu.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
@@ -90,6 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         windowItem.submenu = windowMenu
         NSApp.windowsMenu = windowMenu
         NSApp.mainMenu = main
+        translateMenu(main)
     }
 
     private func launchEngine() {
@@ -113,11 +232,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         task.terminationHandler = { [weak self] task in
             DispatchQueue.main.async {
                 guard let self = self, !self.terminating else { return }
-                self.fail("The local service stopped (status \(task.terminationStatus)). Quit and reopen the application.")
+                self.fail(self.localized("The local service stopped (status {status}). Quit and reopen the application.").replacingOccurrences(of: "{status}", with: String(task.terminationStatus)))
             }
         }
         process = task
-        do { try task.run() } catch { fail("Could not start the local service: \(error.localizedDescription)") }
+        do { try task.run() } catch { fail(localized("Could not start the local service: {error}").replacingOccurrences(of: "{error}", with: error.localizedDescription)) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
             guard let self = self, !self.opened, !self.terminating else { return }
             self.fail("The local service did not start. Quit and reopen the application.")
@@ -140,14 +259,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private func fail(_ message: String) {
         let alert = NSAlert()
         alert.messageText = "Mac Deep Cleaner"
-        alert.informativeText = message
+        alert.informativeText = localized(message)
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: localized("Quit"))
         alert.runModal()
         NSApp.terminate(nil)
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "languageChange", message.frameInfo.isMainFrame,
+           let payload = message.body as? [String: Any],
+           let messages = payload["messages"] as? [String: String] {
+            translations = messages
+            translateMenu(NSApp.mainMenu)
+            translateMenu(statusItem?.menu)
+            refreshStatus()
+        }
         if message.name == "themeChange", let theme = message.body as? String {
             DispatchQueue.main.async {
                 self.updateTheme(theme == "light")
@@ -220,19 +347,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func windowDidResignKey(_ notification: Notification) { chrome?.needsDisplay = true }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        NSApp.terminate(nil)
-        // Keep the window visible while the operation guard decides whether to quit.
+        sender.orderOut(nil)
+        // The status item keeps the local dashboard available until explicit Quit.
         return false
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard opened, !terminating else { return .terminateNow }
-        webView.evaluateJavaScript("typeof busy !== 'undefined' && (busy || Boolean(S.busy) || (typeof ToolkitUI !== 'undefined' && ToolkitUI.isRunning()) || Boolean(window.GhostUI?.isRunning()))") { value, _ in
+        webView.evaluateJavaScript("typeof busy !== 'undefined' && (busy || Boolean(S.busy) || (typeof ToolkitUI !== 'undefined' && ToolkitUI.isRunning()) || Boolean(window.GhostUI?.isRunning()) || (typeof CareUI !== 'undefined' && CareUI.isRunning()))") { value, _ in
             if (value as? Bool) == true {
                 let alert = NSAlert()
-                alert.messageText = "An operation is still running"
-                alert.informativeText = "Wait for the current operation to finish before quitting."
-                alert.addButton(withTitle: "Keep running")
+                alert.messageText = self.localized("An operation is still running")
+                alert.informativeText = self.localized("Wait for the current operation to finish before quitting.")
+                alert.addButton(withTitle: self.localized("Keep running"))
                 alert.runModal()
                 sender.reply(toApplicationShouldTerminate: false)
             } else {
@@ -242,10 +369,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         return .terminateLater
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationWillTerminate(_ notification: Notification) {
         terminating = true
+        statusTimer?.invalidate()
         pipe?.fileHandleForReading.readabilityHandler = nil
         if let task = process, task.isRunning {
             task.terminate()

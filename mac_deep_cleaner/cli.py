@@ -142,6 +142,9 @@ def run_toolkit_cli(args):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == 'care':
+        from .care_cli import main as care_main
+        return care_main(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == 'ghosts':
         from .ghost_cli import main as ghost_main
         return ghost_main(sys.argv[2:])
@@ -173,7 +176,7 @@ def main():
     rich_ok = HAVE_RICH and not args.plain
     tty = sys.stdin.isatty() and sys.stdout.isatty() and not args.no_interactive
     fancy = rich_ok and HAVE_Q and tty and not args.report
-    sc = Scanner(args.large_mb, args.old_days, args.dup_min_mb, quiet=rich_ok, pinned=settings["pinned"])
+    sc = Scanner(args.large_mb, args.old_days, args.dup_min_mb, quiet=rich_ok, pinned=settings["pinned"] + settings.get("ghost_allowlist", []))
     S = Session(sc, settings, args) if rich_ok else None
 
     if args.apps:
@@ -212,7 +215,7 @@ def main():
         if not (args.yes or args.dry_run) and input("  proceed? [y/N] ").strip().lower() != "y":
             return
         freed, roots, _fails = execute(items, permanent=args.permanent, dry_run=args.dry_run)
-        print(c(f"\n  {'would free' if args.dry_run else 'freed'} {fmt(freed)}", "1;32"))
+        print(c(f"\n  {'would process' if args.dry_run else 'processed'} {fmt(freed)}", "1;32"))
         for r in roots:
             print("  run manually: " + r)
         return

@@ -1,6 +1,6 @@
 """Optional terminal interface and reports."""
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
 import json
 import os
 import re
@@ -738,8 +738,8 @@ def flow_clean(S, items=None, label="Review & clean"):
         a = agg.setdefault(group_name(r, S.mode), [0, 0])
         a[0] += 1
         a[1] += r.size
-    for n, (c, s) in sorted(agg.items(), key=lambda kv: -kv[1][1]):
-        tb.add_row(n, str(c), Text(fmt(s), style=f"bold {PAL['text']}"))
+    for n, (count, s) in sorted(agg.items(), key=lambda kv: -kv[1][1]):
+        tb.add_row(n, str(count), Text(fmt(s), style=f"bold {PAL['text']}"))
     show(S, Group(title_bar(label, f"{len(sel)} items · {fmt(tot)}"), Padding(tb, (0, 0, 0, 2)),
                   Text.assemble(("  ", ""), (f"safe {fmt(by[SAFE])}", PAL["safe"]), ("   ", ""), (f"caution {fmt(by[CAUTION])}", PAL["caution"]),
                                 ("   ", ""), (f"risky {fmt(by[RISKY])}", PAL["risky"]))))

@@ -1,6 +1,7 @@
 "use strict";
 const HomebrewUI = (() => {
   let report = null, loading = false, message = "", tab = "overview", query = "", filter = "all", limit = 80;
+  let inspectVersion = 0;
   const tabs = [["overview", "Packages"], ["groups", "Dependency groups"], ["heaviest", "Heaviest"], ["updates", "Updates"], ["tidy", "Tidy"], ["services", "Services"]];
   const busyNow = () => ToolkitUI.locked();
   const packageButton = (p, text = p.full_name) => `<button class="brew-package-link" data-action="brew-inspect" data-package="${esc(p.id)}">${esc(text)}</button>`;
@@ -24,9 +25,10 @@ const HomebrewUI = (() => {
     let html = `<div class="pagehead"><div><h1>Homebrew</h1><p>Know why it’s installed. Keep the packages you need.</p></div><div class="head-actions">${button(loading ? "Reading Homebrew…" : "Refresh", "brew-refresh", {symbol:"refresh", disabled:loading || busyNow()})}</div></div>`;
     if (message) html += `<div class="error-banner" role="alert">${icon("alert")}<span>${esc(message)}</span></div>`;
     if (!report) return html + empty(loading ? "Reading your Homebrew environment…" : "Homebrew inventory unavailable", "Collecting installed packages, dependency receipts, sizes, and service status. Large installations can take a minute.", "code", "", {scanning:loading});
+    if (loading) html += scanIndicator('Reading your Homebrew environment…');
     if (!report.available) return html + empty("Homebrew is not installed", report.message, "code", '<a class="button" href="https://brew.sh" target="_blank" rel="noopener noreferrer">Homebrew installation guide</a>');
     const stats = report.stats;
-    html += `<div class="brew-environment"><span>${icon("code")}<strong>${esc(report.prefix)}</strong></span><span>${stats.formulae} formulae</span><span>${stats.casks} casks</span><span>${fmt(stats.size)} measured</span><span>Checked ${new Date(report.checked_at*1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</span></div><div class="brew-nav" role="navigation" aria-label="Homebrew views">${tabs.map(([id,label]) => `<button data-action="brew-tab" data-tab="${id}" class="${tab===id ? "active" : ""}" aria-pressed="${tab===id}">${label}${id === "updates" ? ` <span>${report.update_status ? stats.outdated : "?"}</span>` : id === "tidy" ? ` <span>${stats.orphans}</span>` : ""}</button>`).join("")}</div>`;
+    html += `<div class="brew-environment"><span>${icon("code")}<strong>${esc(report.prefix)}</strong></span><span>${stats.formulae} formulae</span><span>${stats.casks} casks</span><span>${fmt(stats.size)} measured</span><span>Checked ${new Date(report.checked_at*1000).toLocaleTimeString(I18n.locale(), {hour:"2-digit",minute:"2-digit"})}</span></div><div class="brew-nav" role="navigation" aria-label="Homebrew views">${tabs.map(([id,label]) => `<button data-action="brew-tab" data-tab="${id}" class="${tab===id ? "active" : ""}" aria-pressed="${tab===id}">${label}${id === "updates" ? ` <span>${report.update_status ? stats.outdated : "?"}</span>` : id === "tidy" ? ` <span>${stats.orphans}</span>` : ""}</button>`).join("")}</div>`;
     if (report.warnings.length) html += `<details class="tool-warning"><summary>${report.warnings.length} inventory notes${!report.removal_checks ? " · package removal disabled" : ""}</summary><ul>${report.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul></details>`;
     if (tab === "tidy") {
       const orphans = report.packages.filter(p => p.orphan);
@@ -43,7 +45,7 @@ const HomebrewUI = (() => {
         for (const root of roots) {
           const members = report.packages.filter(p => p.roots.includes(root.id));
           if (!matches(root) && !members.some(matches)) continue;
-          html += `<details class="brew-dependency-group"><summary><span>${icon(root.kind === "cask" ? "apps" : "code")}<strong>${esc(root.full_name)}</strong><small>${esc(root.kind)}</small></span><span>${members.length} dependencies</span></summary><div class="brew-group-body"><div class="brew-group-root">${packageButton(root, "Why " + root.full_name + " is installed")}</div>${members.length ? members.map(p => `<div class="brew-group-member">${packageButton(p)}<span>${p.shared ? `Shared by ${p.roots.length} roots` : "Used by this root"}</span></div>`).join("") : '<p>No installed runtime dependencies recorded.</p>'}</div></details>`;
+          html += `<details class="brew-dependency-group"><summary><span>${icon(root.kind === "cask" ? "apps" : "code")}<strong>${esc(root.full_name)}</strong><small>${esc(root.kind)}</small></span><span>${members.length} dependencies</span></summary><div class="brew-group-body"><div class="brew-group-root">${packageButton(root, I18n.t("Why {name} is installed", {name: root.full_name}))}</div>${members.length ? members.map(p => `<div class="brew-group-member">${packageButton(p)}<span>${p.shared ? `Shared by ${p.roots.length} roots` : "Used by this root"}</span></div>`).join("") : '<p>No installed runtime dependencies recorded.</p>'}</div></details>`;
         }
         html += '</div>';
       } else {
@@ -63,7 +65,9 @@ const HomebrewUI = (() => {
     return html + ToolkitUI.history();
   }
   async function inspect(id) {
+    const version = ++inspectVersion;
     const data = await api('/api/brew/explain?package=' + encodeURIComponent(id));
+    if (version !== inspectVersion || view !== 'homebrew') return;
     const p = data.package, displayNames = ids => ids.map(key => byId(key) ? packageButton(byId(key)) : esc(key)).join("");
     detailKind = "homebrew";
     $("detailDialog").innerHTML = `<div class="drawer-head"><span class="file-icon">${icon(p.kind === "cask" ? "apps" : "code")}</span><div><h2>${esc(p.full_name)}</h2><small>${esc(p.kind)} · ${esc(p.tap)}</small></div>${button("", "close-detail", {style:"ghost icon-only", symbol:"x", aria:"Close package details"})}</div><div class="drawer-body"><p>${esc(p.description)}</p><div class="brew-explanation"><h3>Why it’s installed</h3><p>${p.requested === true ? p.kind === "cask" ? "Casks are retained as top-level applications." : "Homebrew records this as intentionally installed." : p.requested === null ? "The installation receipt does not say why it was installed. It is retained for review." : p.orphan ? "Homebrew lists this as an unused dependency. External scripts or apps may still use it." : "This formula was installed as a dependency."}${p.pinned ? " It is pinned against upgrades." : ""}</p>${p.roots.length ? `<h4>Needed by these roots</h4><div class="brew-dependency-links">${displayNames(p.roots)}</div>` : ""}</div><dl class="facts"><div><dt>Installed</dt><dd>${esc(p.versions.join(", "))}</dd></div><div><dt>Measured size</dt><dd>${p.size === null ? "Unknown" : fmt(p.size)} · ${esc(p.size_scope)}</dd></div><div><dt>Update</dt><dd>${p.outdated ? esc(p.latest) : "No update reported"}</dd></div><div><dt>Service</dt><dd>${esc(p.service)}</dd></div></dl><div class="brew-package-actions">${action("Upgrade", "upgrade", p.id, false, !p.outdated || p.pinned || !report.update_status)}${p.kind === "formula" ? action(p.pinned ? "Unpin" : "Pin", p.pinned ? "unpin" : "pin", p.id) + action(p.requested === true ? "Mark as dependency" : "Keep", p.requested === true ? "mark-dependency" : "keep", p.id) : ""}${action("Uninstall", "uninstall", p.id, true, !report.removal_checks || p.pinned || p.runtime_required_by.length > 0 || !['not registered','none','stopped','unloaded'].includes(p.service))}</div>${p.runtime_required_by.length ? '<p class="note">Uninstall is blocked while installed packages depend on this package.</p>' : ""}<section class="inspect-section"><h3>Direct installed dependencies (${p.dependencies.length})</h3><div class="brew-dependency-links">${displayNames(p.dependencies) || '<p>None recorded.</p>'}</div></section><section class="inspect-section"><h3>Reverse dependency tree</h3><p class="note">Each indented package depends on the one above it. Repeated branches are collapsed.</p><div class="brew-reverse-tree">${data.tree.rows.map(r => `<div style="--tree-depth:${Math.min(r.depth,8)}">${r.depth ? '<span aria-hidden="true">↳</span>' : ''}${byId(r.id) ? packageButton(byId(r.id)) : esc(r.name)}${r.cycle ? '<small>Cycle</small>' : r.repeated ? '<small>Shown above</small>' : ''}</div>`).join("")}</div>${data.tree.truncated ? '<p class="note">Showing the first 250 nodes. Export JSON to inspect the complete graph.</p>' : ""}</section></div>`;
@@ -82,10 +86,10 @@ const HomebrewUI = (() => {
       const link = document.createElement('a'); link.href = url; link.download = isJSON ? 'homebrew-report.json' : 'Brewfile'; link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
     }
   }
-  document.addEventListener('input', event => { if (event.target.id === 'brewSearch') { query = event.target.value; limit=80; draw(); } });
+  document.addEventListener('input', event => { if (!event.isComposing && event.target.id === 'brewSearch') { query = event.target.value; limit=80; draw(); } });
   document.addEventListener('change', event => { if (event.target.id === 'brewGroup') { filter = event.target.value; limit=80; draw(); } });
   document.addEventListener('mdc-job-finished', event => {
     if (event.detail.kind === 'brew') { report = null; if (view === 'homebrew') refresh(); }
   });
-  return {render, enter, dispatch};
+  return {render, enter, dispatch, leave:() => {inspectVersion++;}};
 })();

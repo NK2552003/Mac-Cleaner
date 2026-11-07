@@ -44,6 +44,7 @@ class CleanerService:
         self.closed = False
         self.toolkit = Toolkit(self.operation, self._ready_to_change)
         self._ghosts = None
+        self._care = None
 
     def _ready_to_change(self):
         with self.lock:
@@ -63,7 +64,7 @@ class CleanerService:
             if self.scanner:
                 self.scanner.close()
             self.scanner = self.scanner_factory(self.args.large_mb, self.args.old_days, self.args.dup_min_mb,
-                                                quiet=True, pinned=self.settings['pinned'])
+                                                quiet=True, pinned=self.settings['pinned'] + self.settings.get('ghost_allowlist', []))
             self.analyzer = None
             self.icons.clear()
             self.scan_id = secrets.token_hex(16)
@@ -75,6 +76,8 @@ class CleanerService:
     def close(self):
         self.closed = True
         self.toolkit.closed = True
+        if self._care:
+            self._care.cancelled.set()
         if self._ghosts:
             self._ghosts.close()
         if self.scanner:
@@ -99,6 +102,7 @@ class CleanerService:
             disk = shutil.disk_usage(HOME)
             return {'version': __version__, 'initial_view': getattr(self.args, 'view', 'clean'),
                     'scanning': not sc.done, 'progress': sc.progress, 'error': sc.error,
+                    'warnings': list(getattr(sc, 'warnings', [])),
                     'items': items, 'cats': CAT_NAMES, 'tools': TOOLCHAIN_NAMES, 'desc': CAT_DESC,
                     'scan_id': self.scan_id, 'revision': self.revision, 'busy': self.operation.locked(),
                     'settings': {'mode': self.settings['mode'], 'min_mb': self.settings['min_mb'], 'theme': self.settings.get('theme', 'dark')},
@@ -140,6 +144,7 @@ class CleanerService:
 
     def _known_paths(self):
         paths = {i.path for i in self.scanner.items if i.path}
+        paths.update(f[0] for f in getattr(self.scanner, 'walk_files', []))
         if self.analyzer:
             for app in self.analyzer.apps:
                 paths.add(app.path)
@@ -205,7 +210,16 @@ class CleanerService:
         finally:
             self.operation.release()
 
+    def care(self):
+        with self.lock:
+            if self._care is None:
+                from .care import Care
+                self._care = Care(self)
+            return self._care
+
     def post(self, route, body):
+        if route.startswith("/api/care/"):
+            return self.care().post(route, body)
         if route == '/api/ghosts/config':
             return self.ghost_config(body)
         if route.startswith('/api/ghosts/'):
@@ -229,7 +243,7 @@ class CleanerService:
             return {'ok': bool(known and reveal(path))}
         if route == '/api/open-url':
             target_url = body.get('url', '')
-            if isinstance(target_url, str) and (target_url.startswith('https://') or target_url.startswith('http://')):
+            if isinstance(target_url, str) and target_url.startswith(('https://', 'http://')):
                 import subprocess
                 subprocess.run(['/usr/bin/open', target_url], check=False)
                 return {'ok': True}
@@ -243,7 +257,10 @@ class CleanerService:
                 self.start_scan()
                 return {'scan_id': self.scan_id}
             if route == '/api/settings':
-                if 'theme' in body:
+                if 'language' in body:
+                    from .localization import locale_code
+                    updated = {**self.settings, 'language': locale_code(body['language'])}
+                elif 'theme' in body:
                     if body['theme'] not in ('dark', 'light'):
                         raise APIError(400, 'Unknown theme.')
                     updated = {**self.settings, 'theme': body['theme']}
@@ -266,7 +283,9 @@ class CleanerService:
                 with self.lock, self.scanner.lock:
                     self.settings = updated
                     self.scanner.pinned.add(path)
-                    self.scanner.items[:] = [i for i in self.scanner.items if not self._under(i.path, path)]
+                    self.scanner.items[:] = [i for i in self.scanner.items
+                                            if not self._under(i.path, path) and not self._under(path, i.path)]
+                    self.scanner.walk_files[:] = [f for f in self.scanner.walk_files if not self._under(f[0], path)]
                     self.revision += 1
                 return {'ok': True}
             self._booleans(body)
@@ -276,6 +295,11 @@ class CleanerService:
                     chosen = [replace(i, selected=True) for i in self.scanner.items if i.id in ids]
                 if len(chosen) != len(ids) or any(not eligible(i) for i in chosen):
                     raise APIError(400, 'Some selected items are unavailable or protected.')
+                if any(i.action == 'empty' for i in chosen):
+                    if len(chosen) != 1:
+                        raise APIError(400, 'Empty Trash separately from other cleanup operations.')
+                    if body.get('permanent_ack') is not True:
+                        raise APIError(400, 'Permanent deletion requires explicit confirmation.')
                 if any(i.safety == 'risky' for i in chosen) and not body.get('ack'):
                     raise APIError(400, 'Risky items require acknowledgement.')
                 # Keepers outside the selected duplicate set remain protected too.
@@ -330,10 +354,13 @@ class CleanerService:
             self._ghosts.check_selection(chosen, permanent, body or {})
         if any(i.path and any(self._under(i.path, pin) or self._under(pin, i.path) for pin in self.scanner.pinned) for i in chosen):
             raise APIError(409, 'The selection overlaps an excluded location.')
-        done, logs = set(), []
+        done, logs, results = set(), [], []
         def tick(item, ok, _message):
             if ok:
                 done.add(item.path or item.cmd)
+            results.append({'id': item.id, 'name': item.name, 'path': item.path,
+                            'action': item.action, 'ok': ok, 'message': _message,
+                            'size': item.size})
         freed, roots, failures = execute(chosen, permanent=permanent, log=logs.append, tick=tick)
         with self.lock, self.scanner.lock:
             def removed(path):
@@ -345,5 +372,9 @@ class CleanerService:
                     app.parts[:] = [p for p in app.parts if not removed(p.path)]
                 self.analyzer.apps[:] = [a for a in self.analyzer.apps if not removed(a.path)]
             self.revision += 1
+        if self._care:
+            with self._care.lock:
+                self._care.media = None
         warning = self._ghosts.removed(done) if self._ghosts else ''
-        return {'freed': freed, 'root': roots, 'warning': warning, 'fails': [(i.name, message) for i, message in failures], 'log': logs}
+        return {'freed': freed, 'processed_bytes': freed, 'results': results,
+                'root': roots, 'warning': warning, 'fails': [(i.name, message) for i, message in failures], 'log': logs}

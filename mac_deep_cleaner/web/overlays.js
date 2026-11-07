@@ -5,16 +5,19 @@
 const Overlays = (() => {
   const closing = new WeakMap();
   function open(dialog) {
+    window.Dropdowns?.close();
     closing.get(dialog)?.cancel();
     dialog.classList.remove("is-closing");
     // Dialog content is rendered outside <main>, so it needs the shared custom dropdown too.
     window.Dropdowns?.enhance(dialog);
+    if (typeof I18n !== 'undefined') I18n.translateDOM();
     if (!dialog.open) {
       dialog.showModal();
       dialog.scrollTop = 0;
     }
   }
   function close(dialog) {
+    window.Dropdowns?.close();
     if (!dialog.open) return Promise.resolve();
     if (closing.has(dialog)) return closing.get(dialog).promise;
     let resolve, timer;

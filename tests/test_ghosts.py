@@ -6,7 +6,6 @@ import plistlib
 import subprocess
 import sys
 import threading
-import time
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,7 +19,7 @@ from mac_deep_cleaner.errors import APIError
 from mac_deep_cleaner.ghosts import finder, haunt, llm, local_http, ofrenda, ollama_manager
 from mac_deep_cleaner.ghosts.controller import GhostController
 from mac_deep_cleaner.ghosts.finder import Ghost
-from mac_deep_cleaner.ghosts.jobs import Cancelled, Job
+from mac_deep_cleaner.ghosts.jobs import Job
 from mac_deep_cleaner.ghosts.rules import final_verdict, rule_verdict
 from mac_deep_cleaner.scanner import Scanner
 from mac_deep_cleaner.service import CleanerService
@@ -131,6 +130,116 @@ def test_empty_parameters_and_incomplete_inventory_lock(private):
     assert rule_verdict(found[0]) == 'keep'
 
 
+@pytest.mark.parametrize('kind,name', [
+    ('Application Support', name) for name in (
+        'Animoji', 'Memoji', 'CloudDocs', 'DifferentialPrivacy', 'IntelligenceFlow',
+        'IntelligencePlatform', 'SESStorage', 'Categories', 'locationaccessstored',
+        'ProtectedCloudStorage', 'QuickLook', 'Quick Look')
+] + [
+    ('Preferences', 'CloudDocs.plist'), ('Preferences', 'com.apple.finder.plist'),
+    ('Group Containers', 'group.is.workflow.my.app'),
+    ('Group Containers', 'group.is.workflow.shortcuts'),
+    ('Group Containers', 'ABCDE12345.group.com.apple.shortcuts'),
+    ('Group Containers', 'group.ABCDE12345.com.apple.shortcuts'),
+    ('Group Containers', 'abcde12345.com.apple.shortcuts'),
+    ('Group Containers', 'group.com.apple.shortcuts'),
+    ('Caches', 'org.swift.swiftpm'), ('Caches', 'org.llvm.cache'),
+    ('Caches', 'org.webkit.cache'), ('Caches', 'com.plausiblelabs.crashreporter.data'),
+    ('Caches', 'main.kts.compiled.cache'), ('Saved State', 'com.apple.finder.savedState')
+])
+def test_system_and_shared_data_never_become_ghosts(private, kind, name):
+    root = private / 'Library' / kind
+    protected = root / name
+    protected.mkdir(parents=True)
+    payload = protected / 'data'
+    payload.write_bytes(b'system state must remain untouched')
+    abandoned = root / 'org.uninstalled.abandoned'
+    abandoned.mkdir()
+    (abandoned / 'data').write_bytes(b'old app data')
+    found = finder.find_ghosts({kind: root}, (set(), set()))
+    assert [g.path for g in found] == [str(abandoned)]
+    assert payload.read_bytes() == b'system state must remain untouched'
+    candidate = ghost(str(protected), kind=kind, bundle_id=finder.extract_bundle_id(name) or '')
+    assert final_verdict(candidate, 'likely_safe') == 'keep'
+
+
+@pytest.mark.parametrize('name', ['default.store', 'default.store-shm', 'default.store-wal',
+                                  'shared.sqlite', 'shared.sqlite-journal', 'unidentified-data'])
+def test_loose_support_files_are_not_app_uninstall_evidence(private, name):
+    root = private / 'Application Support'
+    root.mkdir()
+    path = root / name
+    path.write_bytes(b'live shared database')
+    assert finder.find_ghosts({'Application Support': root}, (set(), set())) == []
+    assert path.read_bytes() == b'live shared database'
+
+
+@pytest.mark.parametrize('name', ['com.applepie.editor', 'org.swiftly.editor',
+                                  'is.workflower.editor', 'com.uninstalled.animoji',
+                                  'com.plausiblelabs.crashreporterextra'])
+def test_protection_uses_namespace_boundaries(private, name):
+    root = private / 'Caches'
+    root.mkdir()
+    path = root / name
+    path.write_text('old cache')
+    assert [g.path for g in finder.find_ghosts({'Caches': root}, (set(), set()))] == [str(path)]
+
+
+def test_installed_app_group_claims_protect_unrelated_namespaces(private, monkeypatch):
+    apps = private / 'Applications'
+    app = apps / 'Editor.app/Contents'
+    app.mkdir(parents=True)
+    (app / 'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier': 'com.example.editor'}))
+    calls = []
+    def codesign(argv, **kwargs):
+        calls.append(argv)
+        return SimpleNamespace(returncode=0, stdout=plistlib.dumps({
+            'com.apple.security.application-groups': ['group.net.sharedvendor.documents', 7]}))
+    monkeypatch.setattr(finder.subprocess, 'run', codesign)
+    ids, names = finder.installed_apps([apps], include_groups=True)
+    assert 'group.net.sharedvendor.documents' in ids
+    assert calls == [['/usr/bin/codesign', '-d', '--entitlements', ':-', str(app.parent)]]
+    root = private / 'Group Containers'
+    root.mkdir()
+    for name in ['group.net.sharedvendor.documents', 'ABCDE12345.net.sharedvendor.documents',
+                 'net.sharedvendor.documents.helper', 'org.uninstalled.abandoned']:
+        (root / name).write_text('group data')
+    found = finder.find_ghosts({'Group Containers': root}, (ids, names))
+    assert [Path(g.path).name for g in found] == ['org.uninstalled.abandoned']
+
+
+@pytest.mark.parametrize('data', [b'not a plist', plistlib.dumps([]),
+    plistlib.dumps({'com.apple.security.application-groups': 'not-a-list'})])
+def test_unreadable_or_malformed_group_claims_are_optional(private, monkeypatch, data):
+    monkeypatch.setattr(finder.subprocess, 'run', lambda *a, **kw: SimpleNamespace(returncode=0, stdout=data))
+    assert finder.application_groups(private / 'Unsigned.app') == set()
+
+
+def test_unreadable_subtrees_are_not_reported_as_empty_ghosts(private, monkeypatch):
+    root = private / 'Application Support'
+    denied = root / 'Unknown App'
+    denied.mkdir(parents=True)
+    original_walk = finder.os.walk
+    def walk(path, **kwargs):
+        if path == denied:
+            kwargs['onerror'](PermissionError('denied'))
+        return original_walk(path, **kwargs)
+    monkeypatch.setattr(finder.os, 'walk', walk)
+    warnings = []
+    assert finder.find_ghosts({'Application Support': root}, (set(), set()), warnings) == []
+    assert warnings == ['Cannot read Application Support. Check Full Disk Access if needed.']
+
+
+def test_shared_microsoft_service_requires_an_installed_vendor(private):
+    root = private / 'Application Support'
+    service = root / 'OneDrive'
+    service.mkdir(parents=True)
+    (service / 'data').write_text('shared Office state')
+    assert finder.find_ghosts({'Application Support': root}, ({'com.microsoft.Word'}, {'Word'})) == []
+    unmatched = finder.find_ghosts({'Application Support': root}, (set(), set()))
+    assert len(unmatched) == 1 and unmatched[0].confidence == 'low'
+
+
 @pytest.mark.parametrize('confidence,kind,model,expected', [
     ('high', 'Caches', None, 'likely_safe'), ('high', 'Caches', 'keep', 'keep'),
     ('high', 'Caches', 'review', 'review'), ('high', 'Preferences', 'likely_safe', 'review'),
@@ -168,7 +277,10 @@ def test_llm_schema_sanitizing_and_no_path(private, monkeypatch):
     assert candidate.path not in json.dumps(body)
     assert 'personal-user' not in json.dumps(body)
     assert len(json.loads(body['messages'][1]['content'])['app_name']) <= 80
-    assert body['format'] == llm.SCHEMA
+    assert body['format']['required'] == llm.SCHEMA['required']
+    assert body['format']['additionalProperties'] is False
+    assert body['format']['properties']['verdict'] == llm.SCHEMA['properties']['verdict']
+    assert '(en)' in body['format']['properties']['haunting']['description']
     assert final_verdict(candidate, output['verdict']) == 'review'
 
 
@@ -395,6 +507,42 @@ def test_locked_ghost_cannot_bypass_review_or_use_permanent(service, private, mo
     assert Path(item.path).exists()
     assert not ofrenda.records()
     assert not service.post('/api/clean', clean_body(service, item))['fails']
+
+
+@pytest.mark.parametrize('kind,name', [('Application Support', 'Animoji'),
+    ('Group Containers', 'group.is.workflow.my.app'), ('Caches', 'com.apple.cache')])
+def test_stale_system_ghost_cannot_display_unlock_or_delete(service, private, kind, name):
+    path = private / 'Library' / kind / name
+    path.mkdir(parents=True)
+    (path / 'data').write_bytes(b'preserve system data')
+    candidate = ghost(str(path), kind=kind, bundle_id=finder.extract_bundle_id(name) or '',
+                      identity=fingerprint(str(path)))
+    controller = service.ghosts()
+    # Simulate an old false-positive result, including a previously unlocked ID.
+    item = service.scanner.add(path=str(path), name=name, category='Ghost Files',
+                               action='trash', fingerprint=candidate.identity)
+    controller.entries[item.id] = (candidate, {'final_verdict': 'likely_safe'})
+    controller.unlocked.add(item.id)
+    controller.scan_id = service.scan_id
+    assert controller.report()['ghosts'] == []
+    with pytest.raises(APIError, match='no longer in the current scan'):
+        service.post('/api/ghosts/unlock', {**clean_body(service, item), 'id':item.id, 'confirmed':True})
+    with pytest.raises(APIError, match='no longer in the current scan'):
+        service.post('/api/clean', clean_body(service, item))
+    assert (path / 'data').read_bytes() == b'preserve system data'
+    assert not (private / '.Trash').exists()
+
+
+def test_controller_rejects_system_candidate_from_finder(service, private, monkeypatch):
+    path = private / 'Library/Application Support/CloudDocs'
+    path.mkdir(parents=True)
+    (path / 'data').write_text('iCloud state')
+    candidate = ghost(str(path), kind='Application Support', bundle_id='', identity=fingerprint(str(path)))
+    monkeypatch.setattr('mac_deep_cleaner.ghosts.controller.find_ghosts', lambda **kw: [candidate])
+    service.ghosts().scan()
+    assert not wait(service.ghosts().scan_job)['error']
+    assert service.ghosts().report()['ghosts'] == []
+    assert service.scanner.items == []
 
 
 def test_parent_and_app_cleanup_cannot_bypass_ghost(service, private, monkeypatch):

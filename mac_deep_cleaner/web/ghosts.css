@@ -21,7 +21,7 @@
 .ghost-search-wrap{position:relative;flex:1 1 220px;min-width:170px}
 .ghost-search-wrap .search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;display:flex;align-items:center}
 .ghost-search-wrap .search-icon .i{width:15px;height:15px}
-.ghost-search-input{width:100%;padding:7px 12px 7px 34px;background:var(--panel);border:1px solid var(--line);border-radius:9px;color:var(--text);font-size:13px;outline:none;transition:border-color .15s}
+.ghost-search-input[type=search]{width:100%;padding:7px 12px 7px 34px;background:var(--panel);border:1px solid var(--line);border-radius:9px;color:var(--text);font-size:13px;outline:none;transition:border-color .15s}
 .ghost-search-input:focus{border-color:var(--accent)}
 .ghost-filter-pills{display:flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:3px}
 .filter-pill{padding:5px 10px;border-radius:6px;border:0;background:transparent;color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:background .15s,color .15s}
@@ -87,10 +87,9 @@
 .ghost-drawer-title h2{margin:0;font-size:18px;font-weight:600;color:var(--text)}
 .ghost-drawer-title small{color:var(--muted);font-size:12px;margin-top:2px;display:block}
 .ghost-inspect-drawer{padding:24px 28px;display:flex;flex-direction:column;gap:16px}
-.ghost-drawer-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
-.ghost-drawer-card.verdict-card{flex-direction:row;align-items:flex-start;gap:16px;padding:16px 20px;background:var(--raised)}
-.ghost-drawer-card.verdict-card.likely_safe{border-color:rgba(140,203,178,0.35)}
-.ghost-drawer-card.verdict-card.keep{border-color:rgba(230,159,167,0.35)}
+#ghostDrawerContent{display:flex;flex-direction:column;gap:24px;min-width:0}
+.ghost-detail-section{display:flex;flex-direction:column;gap:18px;padding:0 0 24px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;box-shadow:none;min-width:0}
+.ghost-detail-section.verdict-card{flex-direction:row;align-items:flex-start;gap:16px;background:none}
 .verdict-icon-wrap{width:34px;height:34px;border-radius:9px;background:var(--panel);display:grid;place-items:center;flex:none}
 .verdict-icon-wrap .i{width:18px;height:18px}
 .verdict-card.keep .verdict-icon-wrap{color:var(--risky);background:rgba(230,159,167,0.14)}
@@ -121,9 +120,6 @@
 .ghost-ai-source-badge{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:8px}
 .ghost-ai-source-badge .i{width:14px;height:14px;color:var(--accent)}
 .ghost-inspect-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;padding-top:18px;border-top:1px solid var(--line)}
-.ghost-loading-box{padding:48px 16px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px;color:var(--muted);font-size:13px}
-.ghost-spinner{width:24px;height:24px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:ghost-spin .7s linear infinite}
-@keyframes ghost-spin{to{transform:rotate(360deg)}}
 
 /* Pagination */
 .ghost-pagination{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 4px 10px;margin-top:8px;border-top:1px solid var(--line);flex-wrap:wrap}
@@ -133,10 +129,21 @@
 .ghost-hidden-wrap{text-align:center;padding:14px 0}
 
 .ghost-limits{margin:28px 0;color:var(--lavender);font-size:13px}.ghost-limits summary{cursor:pointer}.ghost-limits p{margin:12px 0;max-width:80ch}
-.ghost-progress{padding:16px;background:var(--raised);border:1px solid var(--line);border-radius:12px;margin:12px 0;color:var(--text);overflow-wrap:anywhere}.ghost-progress>div{display:flex;gap:12px;align-items:center;justify-content:space-between}.ghost-progress strong{font-size:13px}.ghost-progress progress{display:block;width:100%;height:6px;accent-color:var(--accent);margin-top:14px}
 .ghost-options{border-top:1px solid var(--line);padding-top:6px}.ghost-options .check-label{margin:12px 0}
 .ghost-setup>p{margin-bottom:20px;color:var(--muted)}.ghost-detected{background:var(--panel);padding:18px;border:1px solid var(--line);border-radius:12px;margin:22px 0;color:var(--text)}.ghost-detected p{font-size:12px;color:var(--muted);margin-top:8px;overflow-wrap:anywhere}
 .ghost-model-label{display:grid;gap:10px;font-weight:500;font-size:13px}.ghost-model-label .dropdown{width:100%;max-width:100%}.ghost-model-label .dropdown-trigger{width:100%;min-height:42px;font-size:13px;font-weight:400}.ghost-model-label select{width:100%;max-width:100%;padding:10px;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px}.ghost-download-size{margin:16px 0;padding:14px 0;font-size:14px;color:var(--text)!important}.ghost-consents{border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}.ghost-consents legend{padding:0 8px}.ghost-consents label,.ghost-consents p{margin:12px 0;align-items:flex-start}.ghost-consents input{margin-top:4px;flex-shrink:0}.ghost-consents p{color:var(--muted);font-size:12px}.ghost-setup blockquote{margin:20px 0;font-size:15px;line-height:1.6;color:var(--text)}
 
 @media(max-width:1100px){.ghost-heading{flex-wrap:wrap}.ghost-heading .head-actions{flex-basis:100%;justify-content:flex-start}.ghost-columns{grid-template-columns:minmax(0,1fr) 240px;gap:18px}.ghost-card{padding:18px}}
 @media(max-width:760px){.ghost-columns{grid-template-columns:minmax(0,1fr)}.ofrenda{position:static;max-height:none}.ghost-ai-banner{flex-wrap:wrap;gap:8px}.ghost-card-head{flex-wrap:wrap}.ghost-card-head>strong{margin-left:44px}.ghost-heading{gap:14px}.ghost-card{padding:16px}.ghost-summary{padding:16px}.ghost-card-actions .button{white-space:normal}.ghost-heading h1{font-size:24px}.ghost-toolbar{flex-direction:column;align-items:stretch}}
+
+.ghost-inspect-drawer .ghost-path-bar{padding:10px 0;background:none;border:0;border-radius:0}
+.ghost-inspect-drawer .ghost-files-list{border:0;border-radius:0;background:none}
+.ghost-inspect-drawer .ghost-files-head{background:none;padding-inline:0}
+.ghost-inspect-drawer .ghost-file-row{padding-inline:0}
+@media(max-width:600px){.ghost-inspect-drawer{padding:20px 16px}}
+
+.ghost-inspect-drawer .ghost-inspect-actions{margin-top:0;padding-top:0;border-top:0}
+
+@media(max-width:760px){.ghost-search-wrap{flex:0 0 auto;min-width:0;width:100%}.ghost-filter-pills{flex-wrap:wrap}}
+[dir=rtl] .ghost-search-wrap .search-icon{left:auto;right:11px}
+[dir=rtl] .ghost-search-input{padding-left:12px;padding-right:34px}

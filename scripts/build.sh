@@ -1,213 +1,107 @@
 #!/usr/bin/env bash
-# =============================================================================
-# Mac Deep Cleaner v3.2.0 — Build & Install Script
-# =============================================================================
-# Usage:
-#   bash build.sh            → default: build wheel + sdist
-#   bash build.sh venv       → create .venv and install in editable mode
-#   bash build.sh install    → pip install the built wheel system/user wide
-#   bash build.sh clean      → remove build artefacts
-#   bash build.sh all        → venv + build + install wheel into venv
-#   bash build.sh test       → compile + smoke-test CLI in venv
-#   bash build.sh pkg        → build a local macOS .pkg installer
-# =============================================================================
-
+# Build, verify, and install Mac Deep Cleaner using the repository's build tools.
+# Usage: bash scripts/build.sh [build|app|pkg|venv|test|install|all|clean]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-# Build/install must run from repo root (where pyproject.toml/setup.py live)
 cd "$ROOT_DIR"
+VENV_DIR="$ROOT_DIR/.venv"
+DIST_DIR="$ROOT_DIR/dist"
+BUILD_DIR="$ROOT_DIR/build"
 
-PACKAGE_NAME="mac-deep-cleaner"
-VENV_DIR=".venv"
-DIST_DIR="dist"
-BUILD_DIR="build"
+# Respect the selected interpreter (including CI's version matrix).
+if [[ -n "${MDC_PYTHON:-}" ]]; then
+    TASK_PYTHON="$MDC_PYTHON"
+elif [[ -x "$VENV_DIR/bin/python" ]]; then
+    TASK_PYTHON="$VENV_DIR/bin/python"
+else
+    TASK_PYTHON="$(command -v python3)"
+fi
+"$TASK_PYTHON" -c 'import sys; assert sys.version_info >= (3, 9), "Python 3.9+ is required"'
+APP_VERSION="$("$TASK_PYTHON" -c 'import runpy; print(runpy.run_path("mac_deep_cleaner/__init__.py")["__version__"])')"
+printf 'Mac Deep Cleaner %s — %s\n' "$APP_VERSION" "$("$TASK_PYTHON" --version)"
 
-# ── Colour helpers ────────────────────────────────────────────────────────────
-green()  { printf '\033[0;32m%s\033[0m\n' "$*"; }
-yellow() { printf '\033[0;33m%s\033[0m\n' "$*"; }
-red()    { printf '\033[0;31m%s\033[0m\n' "$*"; }
-bold()   { printf '\033[1m%s\033[0m\n' "$*"; }
-
-# ── Detect python3 ────────────────────────────────────────────────────────────
-find_python() {
-    for cmd in python3.13 python3.12 python3.11 python3.10 python3.9 python3; do
-        if command -v "$cmd" &>/dev/null; then
-            local ver
-            ver=$("$cmd" -c "import sys; print(sys.version_info >= (3,9))")
-            if [[ "$ver" == "True" ]]; then
-                echo "$cmd"
-                return
-            fi
-        fi
-    done
-    red "ERROR: Python 3.9+ not found. Install it first."
-    exit 1
+ensure_venv() {
+    if [[ ! -x "$VENV_DIR/bin/python" ]]; then
+        "$TASK_PYTHON" -m venv "$VENV_DIR"
+    fi
+    BUILD_PYTHON="$VENV_DIR/bin/python"
 }
 
-PYTHON=$(find_python)
-bold "Using Python: $PYTHON ($($PYTHON --version))"
-
-# ── Mode: clean ───────────────────────────────────────────────────────────────
-do_clean() {
-    yellow "Removing build artefacts…"
-    # Run cleanup from repo root so egg-info paths match current structure.
-    rm -rf \
-        "$ROOT_DIR/$DIST_DIR" \
-        "$ROOT_DIR/$BUILD_DIR" \
-        "$ROOT_DIR/"*.egg-info \
-        "$ROOT_DIR/mac_deep_cleaner.egg-info"
-
-    find "$ROOT_DIR" -type d -name __pycache__ -not -path '*/.venv/*' -exec rm -rf {} + 2>/dev/null || true
-    find "$ROOT_DIR" -type f -name '*.pyc' -not -path '*/.venv/*' -delete 2>/dev/null || true
-    green "Clean done."
-}
-
-# ── Mode: venv ────────────────────────────────────────────────────────────────
 do_venv() {
-    if [[ ! -d "$VENV_DIR" ]]; then
-        yellow "Creating virtual environment at $VENV_DIR …"
-        "$PYTHON" -m venv "$VENV_DIR"
-    else
-        yellow "Virtual environment already exists at $VENV_DIR"
-    fi
-
-    # shellcheck disable=SC1091
-    source "$VENV_DIR/bin/activate"
-    bold "Upgrading pip, setuptools, wheel, build…"
-    pip install --quiet --upgrade pip setuptools wheel build
-
-    bold "Installing mac-deep-cleaner into the venv…"
-    pip install --quiet --force-reinstall ".[dev]" 2>/dev/null || pip install --quiet --force-reinstall .
-
-    green ""
-    green "✓ Virtual environment ready."
-    green "  Activate : source $VENV_DIR/bin/activate"
-    green "  Run      : mac-cleaner scan"
-    green "  Alias    : mdc scan"
-    green "  Deactivate: deactivate"
+    ensure_venv
+    "$BUILD_PYTHON" -m pip install --quiet --upgrade pip setuptools wheel build
+    "$BUILD_PYTHON" -m pip install --quiet -e '.[dev,media]'
+    printf 'Development environment ready: source .venv/bin/activate\n'
 }
 
-# ── Mode: build ───────────────────────────────────────────────────────────────
 do_build() {
-    bold "Building wheel and sdist…"
-    rm -rf "$DIST_DIR" "$BUILD_DIR"
-
-    # Prefer the 'build' frontend if available, else fall back to setup.py
-    if "$PYTHON" -m build --version &>/dev/null 2>&1; then
-        "$PYTHON" -m build --wheel --sdist --outdir "$DIST_DIR"
-    else
-        yellow "'build' not found — installing it first…"
-        "$PYTHON" -m pip install --quiet build
-        "$PYTHON" -m build --wheel --sdist --outdir "$DIST_DIR"
+    ensure_venv
+    if ! "$BUILD_PYTHON" -m build --version >/dev/null 2>&1; then
+        "$BUILD_PYTHON" -m pip install --quiet build
     fi
-
-    green ""
-    green "✓ Build complete. Artefacts:"
-    ls -lh "$DIST_DIR/"
+    mkdir -p "$DIST_DIR"
+    # Remove only this package's stale output; preserve native apps and other artifacts.
+    rm -f "$DIST_DIR"/mac_deep_cleaner-*.whl "$DIST_DIR"/mac_deep_cleaner-*.tar.gz "$DIST_DIR"/mac-deep-cleaner-*.tar.gz
+    rm -rf "$BUILD_DIR/lib" "$BUILD_DIR"/bdist.*
+    "$BUILD_PYTHON" -m build --wheel --sdist --outdir "$DIST_DIR"
 }
 
-# ── Mode: test ────────────────────────────────────────────────────────────────
+do_app() {
+    ensure_venv
+    if ! "$BUILD_PYTHON" -c 'import PIL, PyInstaller' >/dev/null 2>&1; then
+        "$BUILD_PYTHON" -m pip install --quiet pyinstaller '.[media]'
+    fi
+    "$BUILD_PYTHON" "$SCRIPT_DIR/build_mac.py" "$@"
+}
+
+do_pkg() {
+    if [[ "$(uname -s)" != Darwin ]]; then
+        printf 'macOS is required to build an installer.\n' >&2
+        return 1
+    fi
+    do_app
+    pkgbuild --component "$DIST_DIR/Mac Deep Cleaner.app" --install-location /Applications \
+        --identifier com.macdeepcleaner.desktop --version "$APP_VERSION" \
+        "$DIST_DIR/mac-deep-cleaner-$APP_VERSION-macos.pkg"
+}
+
 do_test() {
     do_venv
-    # shellcheck disable=SC1091
-    source "$VENV_DIR/bin/activate"
-
-    bold "Running compile checks…"
-    python -m compileall -q mac_deep_cleaner mc.py
-
-    bold "Running CLI smoke checks…"
-    mac-cleaner --help >/dev/null
-    mdc --help >/dev/null
-    mac-deep-cleaner --help >/dev/null
-    python -m mac_deep_cleaner.cli --help >/dev/null
-
-    if command -v pytest &>/dev/null && [[ -d tests ]]; then
-        bold "Running pytest…"
-        pytest || {
-            code=$?
-            if [[ "$code" -eq 5 ]]; then
-                yellow "No pytest tests collected; smoke checks passed."
-            else
-                exit "$code"
-            fi
-        }
-    else
-        yellow "No tests/ directory found; smoke checks passed."
-    fi
-
-    green "✓ Test checks passed."
+    "$BUILD_PYTHON" -m compileall -q mac_deep_cleaner mc.py
+    for command in mac-cleaner mdc mac-deep-cleaner; do
+        "$VENV_DIR/bin/$command" --help >/dev/null
+        "$VENV_DIR/bin/$command" --version
+    done
+    "$BUILD_PYTHON" -m pytest
 }
 
-# ── Mode: install (system / user) ─────────────────────────────────────────────
 do_install() {
-    # Prefer the wheel we just built
-    WHEEL=$(ls "$DIST_DIR"/*.whl 2>/dev/null | sort -V | tail -1 || true)
-
-    if [[ -z "$WHEEL" ]]; then
-        red "No wheel found in $DIST_DIR — run 'bash build.sh build' first."
-        exit 1
+    ensure_venv
+    local wheel="$DIST_DIR/mac_deep_cleaner-$APP_VERSION-py3-none-any.whl"
+    if [[ ! -f "$wheel" ]]; then
+        printf 'Build the current wheel first: bash scripts/build.sh build\n' >&2
+        return 1
     fi
-
-    bold "Installing $WHEEL …"
-    # Try --user install first (no sudo needed, works on stock macOS)
-    if "$PYTHON" -m pip install --user --force-reinstall "$WHEEL"; then
-        green ""
-        green "✓ Installed with --user flag."
-        green "  Make sure ~/.local/bin (or ~/Library/Python/X.Y/bin) is in your PATH."
-        green "  Add this to your shell profile if needed:"
-        green "    export PATH=\"\$HOME/.local/bin:\$HOME/Library/Python/$($PYTHON -c 'import sys; print(f\"{sys.version_info.major}.{sys.version_info.minor}\")')/bin:\$PATH\""
-    else
-        yellow "User install failed — trying without --user (may need sudo)…"
-        "$PYTHON" -m pip install --force-reinstall "$WHEEL"
-        green "✓ Installed system-wide."
-    fi
-    green "  Run: mac-cleaner scan"
-    green "  Or : mdc scan"
+    "$BUILD_PYTHON" -m pip install --force-reinstall "$wheel"
+    printf 'Installed into .venv. Run .venv/bin/mdc or activate the environment.\n'
 }
 
-# ── Mode: all ─────────────────────────────────────────────────────────────────
-do_all() {
-    do_clean
-    do_venv
-    do_build
-    # Install wheel into the venv we just created
-    # shellcheck disable=SC1091
-    source "$VENV_DIR/bin/activate"
-    WHEEL=$(ls "$DIST_DIR"/*.whl 2>/dev/null | sort -V | tail -1 || true)
-    if [[ -n "$WHEEL" ]]; then
-        pip install --quiet --force-reinstall "$WHEEL"
-        green "✓ Wheel installed into $VENV_DIR"
-    fi
-    green ""
-    green "All done!  Activate your venv:"
-    green "  source $VENV_DIR/bin/activate"
-    green "  mac-cleaner scan"
-    green "  mdc scan"
+do_clean() {
+    rm -rf "$DIST_DIR" "$BUILD_DIR" "$ROOT_DIR"/*.egg-info
+    find "$ROOT_DIR/mac_deep_cleaner" "$ROOT_DIR/tests" -type d -name __pycache__ -prune -exec rm -rf {} +
 }
 
-# ── Mode: pkg ─────────────────────────────────────────────────────────────────
-do_pkg() {
-    "$ROOT_DIR/scripts/build_pkg.sh"
-}
-
-# ── Dispatch ──────────────────────────────────────────────────────────────────
 MODE="${1:-build}"
-
 case "$MODE" in
-    clean)   do_clean   ;;
-    venv)    do_venv    ;;
-    build)   do_build   ;;
+    build) do_build ;;
+    app) shift; do_app "$@" ;;
+    pkg) do_pkg ;;
+    venv) do_venv ;;
+    test) do_test ;;
     install) do_install ;;
-    test)    do_test    ;;
-    pkg)     do_pkg     ;;
-    all)     do_all     ;;
-    *)
-        red "Unknown mode: $MODE"
-        echo "Usage: bash build.sh [clean|venv|build|install|test|pkg|all]"
-        exit 1
-        ;;
+    all) do_venv; do_build; do_install ;;
+    clean) do_clean ;;
+    *) printf 'Usage: bash scripts/build.sh [build|app|pkg|venv|test|install|all|clean]\n' >&2; exit 1 ;;
 esac

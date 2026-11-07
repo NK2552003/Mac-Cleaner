@@ -65,6 +65,7 @@ SHORTCUTS = {
     'battery-settings': ('Battery settings', ['x-apple.systempreferences:com.apple.preference.battery']),
     'time-machine': ('Time Machine', ['x-apple.systempreferences:com.apple.Time-Machine-Settings.extension']),
     'network-settings': ('Network settings', ['x-apple.systempreferences:com.apple.Network-Settings.extension']),
+    'privacy-settings': ('Privacy settings', ['x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles']),
 }
 
 TOOLS = {

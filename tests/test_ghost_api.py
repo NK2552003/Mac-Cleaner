@@ -48,7 +48,7 @@ def request(server, path, body=None, **overrides):
 
 @pytest.mark.parametrize('bad', [{'X-MDC-Token':None}, {'X-MDC-Token':'bad'},
     {'Host':'evil.example'}, {'Origin':None}, {'Origin':'https://evil.example'}, {'Cookie':None}])
-@pytest.mark.parametrize('route', ['/api/ghosts/config', '/api/ghosts/setup/run', '/api/ghosts/remove-ai', '/api/clean'])
+@pytest.mark.parametrize('route', ['/api/ghosts/config', '/api/ghosts/setup/run', '/api/ghosts/remove-ai', '/api/clean', '/api/care/restore', '/api/care/run', '/api/care/rules', '/api/care/language/import', '/api/care/language/generate'])
 def test_every_mutation_needs_host_origin_cookie_and_token(server, route, bad):
     assert request(server, route, {}, **bad)[0] == 403
 

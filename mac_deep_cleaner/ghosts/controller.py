@@ -4,10 +4,11 @@ from dataclasses import replace
 from ..common import fingerprint
 from ..errors import APIError
 from ..feature_config import read_config, update_config
-from .finder import Ghost, find_ghosts
+from .finder import Ghost, find_ghosts, protected_entry
 from .haunt import fallback
 from .jobs import Job
-from .rules import RANK
+from .rules import RANK, REASONS
+from ..localization import translate
 
 
 class GhostController:
@@ -62,7 +63,15 @@ class GhostController:
             else:
                 entries = [{**g.to_dict(), 'id': identifier, **out,
                             'hidden': identifier in self.hidden, 'unlocked': identifier in self.unlocked}
-                           for identifier, (g, out) in self.entries.items() if identifier in live]
+                           for identifier, (g, out) in self.entries.items() if identifier in live
+                           and not protected_entry(g.path, g.kind, g.bundle_id)]
+            locale = service.settings.get('language', 'en')
+            for entry in entries:
+                if entry.get('source') != 'ai' or entry.get('locale', 'en') != locale:
+                    ghost = self.entries[entry['id']][0]
+                    localized = fallback(ghost, locale)
+                    entry.update({key: localized[key] for key in ('haunting', 'source')})
+                    entry['reason'] = translate(REASONS[entry['final_verdict']], locale)
             from .ofrenda import records
             return {'ghosts': entries, 'scan_id': service.scan_id, 'revision': service.revision,
                     'scanned': self.scan_id == service.scan_id, 'scan': self.scan_job.snapshot(),
@@ -93,6 +102,10 @@ class GhostController:
                 self.warnings = list(dict.fromkeys(warnings)) + [
                     'Only standard application folders were checked. Apps on other drives or in custom folders may still own these files.']
                 for ghost in ghosts:
+                    if protected_entry(ghost.path, ghost.kind, ghost.bundle_id):
+                        continue
+                    if ghost.path in service.settings.get("ghost_allowlist", []):
+                        continue
                     if any(service._under(ghost.path, p) or service._under(p, ghost.path)
                            for p in service.scanner.pinned):
                         continue
@@ -131,6 +144,8 @@ class GhostController:
         for item in chosen:
             for identifier, (ghost, output) in self.entries.items():
                 if self.service._under(item.path, ghost.path) or self.service._under(ghost.path, item.path):
+                    if protected_entry(ghost.path, ghost.kind, ghost.bundle_id):
+                        raise APIError(409, 'This ghost is no longer in the current scan.')
                     if item.path != ghost.path:
                         raise APIError(409, 'This selection overlaps a ghost. Review the individual ghost in Ghost Files first.')
                     if output['final_verdict'] == 'keep' and identifier not in self.unlocked:
@@ -169,9 +184,10 @@ class GhostController:
         if type(rest) is not bool:
             raise APIError(400, 'rest must be true or false.')
         model = read_config()['model']
+        locale = self.service.settings.get('language', 'en')
         live = {i.id for i in self.service.scanner.items}
         entries = [(i, g) for i, (g, out) in self.entries.items()
-                   if i in live and i not in self.hidden and (out['source'] != 'ai' or out.get('model') != model)]
+                   if i in live and i not in self.hidden and (out['source'] != 'ai' or out.get('model') != model or out.get('locale', 'en') != locale)]
         batch = entries if rest else entries[:25]
         def work(job):
             from .haunt import narrate
@@ -192,12 +208,13 @@ class GhostController:
                     previous = self.entries[identifier][1]['final_verdict']
                     output['final_verdict'] = min((previous, output['final_verdict']), key=RANK.__getitem__)
                     output['model'] = config['model']
+                    output['locale'] = locale
                     self.entries[identifier] = (ghost, output)
                     self.unlocked.discard(identifier)
                     item = next(i for i in self.service.scanner.items if i.id == identifier)
                     self.apply(item, output)
                     self.service.revision += 1
-            narrate([g for _, g in batch], config['model'], job, receive)
+            narrate([g for _, g in batch], config['model'], job, receive, locale=locale)
         return self.run_job(self.haunt_job, work)
 
     def setup(self, body):
@@ -271,7 +288,7 @@ class GhostController:
             return self.status
         if route == '/api/ghosts/ofrenda':
             from .ofrenda import markdown
-            return {'markdown': markdown()}
+            return {'markdown': markdown(self.service.settings.get('language', 'en'))}
         raise APIError(404, 'Unknown Ghost Files route.')
 
     def icon(self, ghost_id):
@@ -296,7 +313,8 @@ class GhostController:
         config = read_config()
         model = config.get('model') if config.get('level') == 2 else None
         from .research import explain_ghost
-        return explain_ghost(ghost, model=model, force_refresh=force_refresh)
+        return explain_ghost(ghost, model=model, force_refresh=force_refresh,
+                             locale=self.service.settings.get('language', 'en'), verdict=output['final_verdict'])
 
     def post(self, route, body):
         if route == '/api/ghosts/explain':
@@ -339,6 +357,9 @@ class GhostController:
                     if type(identifier) is not int or identifier not in self.entries:
                         raise APIError(400, 'Choose a current ghost.')
                     if route.endswith('/unlock'):
+                        ghost = self.entries[identifier][0]
+                        if protected_entry(ghost.path, ghost.kind, ghost.bundle_id):
+                            raise APIError(409, 'This ghost is no longer in the current scan.')
                         if body.get('confirmed') is not True:
                             raise APIError(400, 'Confirm that you reviewed this locked ghost.')
                         self.unlocked.add(identifier)
@@ -348,7 +369,19 @@ class GhostController:
                         item.protected = False
                         self.service.revision += 1
                     else:
+                        from ..settings import save_settings
+                        path = self.entries[identifier][0].path
+                        updated = {**self.service.settings, 'ghost_allowlist': sorted(set(self.service.settings.get('ghost_allowlist', [])) | {path})}
+                        if not save_settings(updated):
+                            raise APIError(500, 'Could not save the Ghost allowlist.')
+                        self.service.settings = updated
+                        self.service.scanner.pinned.add(path)
                         self.hidden.add(identifier)
+                        # A dismissal must not leave an actionable ghost in the normal cleanup list.
+                        item = next((i for i in self.service.scanner.items if i.id == identifier), None)
+                        if item:
+                            item.protected = True
+                        self.service.revision += 1
                     return {'ok': True}
             finally:
                 self.service.operation.release()

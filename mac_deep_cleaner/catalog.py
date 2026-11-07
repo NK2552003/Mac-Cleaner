@@ -1,7 +1,7 @@
 """macOS scan locations and category definitions."""
 
 import re
-from .common import CAUTION, RISKY, SAFE, c
+from .common import CAUTION, RISKY, SAFE
 from .models import Spec
 
 CATS = [
@@ -32,6 +32,12 @@ L = "~/Library"
 
 
 SPECS = [
+    Spec("Developer & Pro Tools", "~/.gem/ruby/*/cache/*.gem", SAFE, "Downloaded Ruby gem package; installed gems remain.", "RubyGems downloads it again.", "Ruby gem download"),
+    Spec("Developer & Pro Tools", "~/.local/share/gem/ruby/*/cache/*.gem", SAFE, "Downloaded Ruby gem package; installed gems remain.", "RubyGems downloads it again.", "Ruby gem download"),
+    Spec("Developer & Pro Tools", "~/Library/Caches/go-build", SAFE, "Go compiler build cache.", "Rebuilt on the next build.", "Go build cache"),
+    Spec("App Caches", "~/Library/Application Support/Google/Chrome/*/Cache/Cache_Data", SAFE, "Chrome profile cache; cookies and passwords remain.", "Rebuilt as you browse.", "Chrome profile cache"),
+    Spec("App Caches", "~/Library/Application Support/Arc/User Data/*/Cache/Cache_Data", SAFE, "Arc profile cache; cookies and passwords remain.", "Rebuilt as you browse.", "Arc profile cache"),
+
     # ---- System Junk --------------------------------------------------------------
     Spec("System Junk", f"{L}/Logs/DiagnosticReports/*", SAFE, "Crash/diagnostic reports; only useful for bug reports.", "Created again if an app crashes.", "Crash report"),
     Spec("System Junk", f"{L}/Logs/*", SAFE, "Old log files written by apps and the system.", "Apps write fresh logs.", "Logs"),
@@ -87,9 +93,9 @@ SPECS = [
     Spec("Developer & Pro Tools", "~/.android/avd/*", CAUTION, "An Android emulator image with its data.", "Recreate it in Device Manager (apps/data inside are lost).", "Android emulator"),
     Spec("Developer & Pro Tools", f"{L}/Android/sdk/system-images/*", CAUTION, "Android emulator system images.", "Re-download via SDK Manager.", "Android system image"),
     Spec("Developer & Pro Tools", f"{L}/Android/sdk/ndk/*", CAUTION, "An Android NDK version.", "Re-download via SDK Manager.", "Android NDK", check="ndk"),
-    Spec("Developer & Pro Tools", "~/.conda/pkgs", SAFE, "Conda package cache.", "conda re-downloads.", cmd="conda clean -a"),
-    Spec("Developer & Pro Tools", "~/miniconda3/pkgs", SAFE, "Conda package cache.", "conda re-downloads.", cmd="conda clean -a"),
-    Spec("Developer & Pro Tools", "~/anaconda3/pkgs", SAFE, "Conda package cache.", "conda re-downloads.", cmd="conda clean -a"),
+    Spec("Developer & Pro Tools", "~/.conda/pkgs", CAUTION, "Conda package cache; environments may link to these files. Review environments first.", "Conda may need to repair linked environments.", cmd="conda clean --tarballs"),
+    Spec("Developer & Pro Tools", "~/miniconda3/pkgs", CAUTION, "Conda package cache; environments may link to these files. Review environments first.", "Conda may need to repair linked environments.", cmd="conda clean --tarballs"),
+    Spec("Developer & Pro Tools", "~/anaconda3/pkgs", CAUTION, "Conda package cache; environments may link to these files. Review environments first.", "Conda may need to repair linked environments.", cmd="conda clean --tarballs"),
     Spec("Developer & Pro Tools", "~/.nvm/.cache", SAFE, "nvm download cache.", "Re-downloaded."),
     Spec("Developer & Pro Tools", "~/.nvm/versions/node/*", CAUTION, "An installed Node.js version.", "nvm install <version>.", "Node version"),
     Spec("Developer & Pro Tools", "~/.pyenv/versions/*", CAUTION, "An installed Python version (venvs may depend on it).", "pyenv install <version>.", "Python version"),
@@ -123,6 +129,12 @@ SPECS = [
 
 
 EXTRA_SPECS = [
+    Spec("Developer & Pro Tools", "~/.gem/ruby/*/cache/*.gem", SAFE, "Downloaded Ruby gem package; installed gems remain.", "RubyGems downloads it again.", "Ruby gem download"),
+    Spec("Developer & Pro Tools", "~/.local/share/gem/ruby/*/cache/*.gem", SAFE, "Downloaded Ruby gem package; installed gems remain.", "RubyGems downloads it again.", "Ruby gem download"),
+    Spec("Developer & Pro Tools", "~/Library/Caches/go-build", SAFE, "Go compiler build cache.", "Rebuilt on the next build.", "Go build cache"),
+    Spec("App Caches", "~/Library/Application Support/Google/Chrome/*/Cache/Cache_Data", SAFE, "Chrome profile cache; cookies and passwords remain.", "Rebuilt as you browse.", "Chrome profile cache"),
+    Spec("App Caches", "~/Library/Application Support/Arc/User Data/*/Cache/Cache_Data", SAFE, "Arc profile cache; cookies and passwords remain.", "Rebuilt as you browse.", "Arc profile cache"),
+
     # browsers
     Spec("App Caches", f"{L}/Caches/Google/Chrome", SAFE, "Chrome cache.", "Rebuilt as you browse.", "Chrome cache"),
     Spec("App Caches", f"{L}/Caches/com.apple.Safari", SAFE, "Safari cache (sizing it needs Full Disk Access).", "Rebuilt as you browse.", "Safari cache"),

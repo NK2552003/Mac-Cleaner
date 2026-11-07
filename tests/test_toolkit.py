@@ -137,8 +137,63 @@ class DiskSafetyTest(unittest.TestCase):
             self.assertFalse(by_id[identifier]['visible'], identifier)
             self.assertTrue(by_id[identifier]['system_managed'], identifier)
             self.assertFalse(set(by_id[identifier]['actions']) & {'erase','partition','rename','unmount'})
-        for identifier in ('disk0','disk1s2s1','disk8','disk9','disk9s1'):
+        for identifier in ('disk0', 'disk8', 'disk9'):
+            self.assertFalse(by_id[identifier]['visible'], identifier)
+        for identifier in ('disk1s2s1','disk9s1'):
             self.assertTrue(by_id[identifier]['visible'], identifier)
+
+    def test_small_user_volume_visible_efi_and_virtual_images_hidden(self):
+        for identifier, filesystem, content in [('disk8s1', 'msdos', 'EFI'),
+                                                 ('disk8s3', 'exfat', 'Microsoft Basic Data')]:
+            self.runner.infos[identifier] = {**self.runner.infos['disk9s1'],
+                'DeviceIdentifier':identifier, 'VolumeName':'Small volume', 'MountPoint':'',
+                'FilesystemType':filesystem, 'Content':content, 'TotalSize':128_000_000}
+            self.runner.nodes[2]['Partitions'].append({'DeviceIdentifier':identifier, 'Content':content})
+        self.runner.infos['disk20s1'] = {**self.runner.infos['disk9s1'],
+            'DeviceIdentifier':'disk20s1', 'VolumeName':'Installer image'}
+        self.runner.nodes.append({'DeviceIdentifier':'disk20s1'})
+        by_id = {d['id']:d for d in self.report()['devices']}
+        self.assertTrue(by_id['disk8s3']['visible'])
+        self.assertFalse(by_id['disk8s1']['visible'])
+        self.assertFalse(by_id['disk20s1']['visible'])
+        self.assertEqual(by_id['disk9s1']['drive_id'], 'disk8')
+        self.assertEqual(by_id['disk9s1']['container_id'], 'disk9')
+
+    def test_omitted_startup_snapshot_is_recovered_and_storage_aggregated(self):
+        self.runner.nodes[1]['APFSVolumes'] = self.runner.nodes[1]['APFSVolumes'][:1]
+        report = self.report()
+        startup = next(d for d in report['devices'] if d['id'] == report['startup_id'])
+        self.assertTrue(startup['visible'])
+        self.assertEqual(startup['display_used'], startup['total'] - startup['free'])
+        self.assertEqual(startup['display_other'], 0)
+        self.assertEqual(startup['used'], 13_660_000_000)
+
+    def test_writable_apfs_disk_image_is_hidden_and_cannot_be_modified(self):
+        # APFS PhysicalStores can refer to a disk image: only the physical list
+        # establishes that a store is backed by a real drive.
+        self.runner.physical = self.runner.physical[:1]
+        self.runner.infos['disk8']['BusProtocol'] = 'Disk Image'
+        by_id = {d['id']:d for d in self.report()['devices']}
+        for identifier in ('disk8', 'disk8s2', 'disk9', 'disk9s1'):
+            self.assertFalse(by_id[identifier]['visible'], identifier)
+            self.assertFalse(by_id[identifier]['drive_id'], identifier)
+            self.assertFalse(set(by_id[identifier]['actions']) &
+                             {'erase', 'partition', 'mount', 'unmount', 'rename', 'add-volume', 'eject'})
+        with self.assertRaises(APIError):
+            self.plan(target='disk9s1', action='rename')
+
+    def test_empty_external_drive_remains_available_for_setup(self):
+        self.runner.nodes = [d for d in self.runner.nodes if d['DeviceIdentifier'] != 'disk9']
+        self.runner.nodes[2]['Partitions'] = []
+        self.runner.containers = self.runner.containers[:1]
+        drive = next(d for d in self.report()['devices'] if d['id'] == 'disk8')
+        self.assertTrue(drive['visible'])
+
+    def test_apfs_volume_usage_comes_from_apfs_metadata(self):
+        del self.runner.infos['disk9s1']['CapacityInUse']
+        self.runner.containers[1]['Volumes'][0]['CapacityInUse'] = 80_000_000_000
+        volume = next(d for d in self.report()['devices'] if d['id'] == 'disk9s1')
+        self.assertEqual(volume['used'], 80_000_000_000)
 
     def test_erase_plan_uses_exact_argv_and_never_runs(self):
         plan = self.plan(name='Photos & Projects')

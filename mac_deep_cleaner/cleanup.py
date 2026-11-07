@@ -5,12 +5,13 @@ again at execution; duplicate keepers and selected ancestors are protected.
 """
 import hashlib
 import os
-import secrets
 import shlex
 import shutil
+import sqlite3
 import stat
 import subprocess
-from .common import CAUTION, HOME, IS_MAC, RISKY, SAFE, fingerprint, fmt
+
+from .common import HOME, IS_MAC, SAFE, fingerprint, fmt
 
 FORBIDDEN = {HOME, '/', '/Users', '/Applications', '/Library', '/System', '/private', '/usr', '/bin', '/var', '/opt'} | {
     os.path.join(HOME, d) for d in ('Documents', 'Desktop', 'Downloads', 'Pictures', 'Movies', 'Music', 'Library', 'Applications', 'Public')}
@@ -25,7 +26,7 @@ def select_level(items, level):
     count = 0
     for it in items:
         if eligible(it) and (level == 'all' or it.safety == level):
-            if level == SAFE and (it.manual or it.action == 'root'):
+            if level == SAFE and (it.manual or it.action != 'trash'):
                 continue
             it.selected = True
             count += 1
@@ -43,7 +44,7 @@ def guard_ok(path):
     # Reject links in ancestors, even when both ends are within the home folder.
     if os.path.realpath(os.path.dirname(p)) != os.path.dirname(p):
         return False
-    return p.startswith(HOME + os.sep) or p.startswith('/Applications/')
+    return p.startswith((HOME + os.sep, '/Applications/'))
 
 
 def esc_as(p):
@@ -53,28 +54,11 @@ def esc_as(p):
 def to_trash(path):
     if not guard_ok(path):
         return False, 'refused by safety guard'
-    if IS_MAC:
-        # argv keeps filenames out of AppleScript source. Finder supplies Put Back.
-        script = 'on run argv\ntell application "Finder" to delete (POSIX file (item 1 of argv) as alias)\nend run'
-        try:
-            result = subprocess.run(['/usr/bin/osascript', '-e', script, path], capture_output=True, text=True, timeout=60)
-            if result.returncode == 0:
-                return True, 'moved to Trash'
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-    # Useful for generic scans and isolated development, or when Finder AppleScript is unavailable.
-    trash = os.path.join(HOME, '.Trash')
-    if os.path.islink(trash):
-        return False, 'Trash cannot be a symbolic link'
-    os.makedirs(trash, mode=0o700, exist_ok=True)
-    base_name = os.path.basename(path.rstrip(os.sep))
-    dest = os.path.join(trash, base_name)
-    if os.path.lexists(dest):
-        dest = os.path.join(trash, f"{base_name}-{secrets.token_hex(4)}")
+    from .history import History
     try:
-        shutil.move(path, dest)
-        return True, 'moved to Trash'
-    except OSError as exc:
+        History(HOME).move(path)
+        return True, 'moved to Trash; restore from Cleanup history'
+    except (OSError, sqlite3.Error) as exc:
         return False, str(exc)
 
 
@@ -112,7 +96,10 @@ def empty_dir(path):
 
 def _digest(path):
     with open(path, 'rb') as handle:
-        return hashlib.file_digest(handle, 'sha256').digest()
+        digest = hashlib.sha256()
+        for block in iter(lambda: handle.read(1024 * 1024), b''):
+            digest.update(block)
+        return digest.digest()
 
 
 def validate_item(item, selected_paths=()):
@@ -151,6 +138,12 @@ def validate_item(item, selected_paths=()):
 
 
 def execute(items, permanent=False, dry_run=False, log=print, tick=None):
+    from .history import mutation_lock
+    with mutation_lock(HOME):
+        return _execute(items, permanent, dry_run, log, tick)
+
+
+def _execute(items, permanent=False, dry_run=False, log=print, tick=None):
     """Return processed bytes, manual administrator commands, and failures.
 
     Processed bytes are estimates, not a promise of newly available disk space.
@@ -162,9 +155,10 @@ def execute(items, permanent=False, dry_run=False, log=print, tick=None):
     freed, roots, failures, completed = 0, [], [], []
     for item in sorted(chosen, key=lambda i: len(i.path)):
         if item.path and any(item.path == p or item.path.startswith(p + os.sep) for p in completed):
-            item.selected = False
+            if not dry_run:
+                item.selected = False
             if tick:
-                tick(item, True, 'included in selected parent')
+                tick(item, None if dry_run else True, 'included in selected parent')
             continue
         error = validate_item(item, selected_paths)
         if item.path and any(k == item.path or k.startswith(item.path + os.sep) for k in keepers):
@@ -178,6 +172,8 @@ def execute(items, permanent=False, dry_run=False, log=print, tick=None):
             continue
         elif dry_run:
             freed += item.size
+            if item.path:
+                completed.append(item.path)
             log(f'  would process: {item.name} ({fmt(item.size)})')
             if tick:
                 tick(item, None, 'dry run')
@@ -185,7 +181,7 @@ def execute(items, permanent=False, dry_run=False, log=print, tick=None):
         elif item.action in ('cmd', 'evict'):
             cmd = shlex.split(item.cmd) if item.action == 'cmd' else ['/usr/bin/brctl', 'evict', item.path]
             try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=900, check=False)
                 ok, message = result.returncode == 0, result.stderr.strip() or 'completed'
             except (OSError, subprocess.TimeoutExpired) as exc:
                 ok, message = False, str(exc)
