@@ -32,17 +32,43 @@ async function waitForAnimations(page, label, after = null) {
   }
 }
 
+// Read every rectangle in one browser task. Resizing can dispatch the sidebar's
+// media-query listener between separate Playwright boundingBox() calls.
+function loaderLayout(element) {
+  const rect = target => {
+    if (!target) return null;
+    const {x, y, width, height} = target.getBoundingClientRect();
+    return {x, y, width, height};
+  };
+  return {box:rect(element), visual:rect(element.querySelector('.loader-visual')),
+    copy:rect(element.querySelector('.loader-copy, h3')),
+    centered:element.matches('.is-centered, .empty'), textAlign:getComputedStyle(element).textAlign,
+    scrollWidth:element.scrollWidth, clientWidth:element.clientWidth,
+    viewportWidth:window.innerWidth, sidebarExpanded:document.body.classList.contains('sidebar-expanded')};
+}
+
+function assertCenteredLayout(layout, context) {
+  const detail = `${context}: ${JSON.stringify(layout)}`;
+  const {visual, copy, box} = layout;
+  assert(visual?.width > 0 && visual?.height > 0 && copy?.width > 0 && copy?.height > 0, `Missing centered content; ${detail}`);
+  assert(copy.y >= visual.y + visual.height, `Content must sit below the mascot; ${detail}`);
+  assert(Math.abs((visual.x + visual.width / 2) - (copy.x + copy.width / 2)) < 2, `Content must be centered; ${detail}`);
+  assert(Math.abs((visual.x + visual.width / 2) - (box.x + box.width / 2)) < 2, `Mascot must be centered in its section; ${detail}`);
+  assert.equal(layout.textAlign, 'center', detail);
+}
+
 (async()=>{
   const engine=process.env.MDC_TEST_BROWSER || 'chromium';
   assert(['chromium','webkit'].includes(engine));
   const browser=await ({chromium,webkit}[engine]).launch({headless:true});
   const errors=[], evidence=[];
-  let checked=0;
+  let checked=0, activePage=null, lastLayout=null;
   try {
     const workspace=fs.readFileSync('/tmp/mdc-workspace-check/launch-url','utf8');
     async function start(url=workspace){
       const context=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
       const page=await context.newPage();
+      activePage=page;
       page.on('pageerror',e=>errors.push(e.message));
       await page.goto(url);
       await page.waitForFunction(()=>typeof ready!=='undefined'&&ready);
@@ -101,24 +127,24 @@ async function waitForAnimations(page, label, after = null) {
       await page.emulateMedia({reducedMotion:'reduce'});
       assert.equal(await indicator.locator('.loader-orbit').evaluate(el=>el.getAnimations().length),0,'Reduced motion must stop decorative animation');
       assert.equal(await indicator.locator('.loader-blink').evaluate(el=>el.getAnimations().length),0,'Reduced motion must stop blinking');
+      const layouts=[];
       for(const theme of ['dark','light']) for(const width of [1440,390,320]){
         await page.setViewportSize({width,height:900});
         await page.evaluate(theme=>applyTheme(theme),theme);
-        assert(await indicator.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label} overflow at ${width}`);
-        if(await indicator.evaluate(el=>el.classList.contains('is-centered'))) {
-          const visual=await indicator.locator('.loader-visual').boundingBox();
-          const copy=await indicator.locator('.loader-copy').boundingBox();
-          assert(copy.y>=visual.y+visual.height,`${label} content must sit below the mascot`);
-          assert(Math.abs((visual.x+visual.width/2)-(copy.x+copy.width/2))<2,`${label} content must be centered`);
-          assert.equal(await indicator.evaluate(el=>getComputedStyle(el).textAlign),'center');
-        }
-        const box=await indicator.boundingBox();
-        assert(box.width>100 && box.x>=0 && box.x+box.width<=width+1);
+        const layout=await indicator.evaluate(loaderLayout);
+        lastLayout={engine,label,theme,width,...layout};
+        layouts.push(lastLayout);
+        const detail=JSON.stringify(lastLayout);
+        assert.equal(layout.viewportWidth,width,`Viewport must match the requested size; ${detail}`);
+        assert(layout.scrollWidth<=layout.clientWidth+1,`Loader overflow; ${detail}`);
+        if(layout.centered) assertCenteredLayout(layout,`${engine}/${label}/${theme}/${width}`);
+        const {box}=layout;
+        assert(box.width>100 && box.x>=0 && box.x+box.width<=width+1,`Loader must fit the viewport; ${detail}`);
         if(width===390) await page.screenshot({path:`/tmp/mdc-workspace-check/progress-${engine}-${label}-${theme}.png`});
         checked++;
       }
       const result=await new AxeBuilder({page}).include('.scan-indicator').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
-      evidence.push({label,violations:result.violations});
+      evidence.push({label,layouts,violations:result.violations});
       assert.deepEqual(result.violations,[],`${label} accessibility`);
     }
     for(const view of ['clean','dups']){
@@ -141,10 +167,9 @@ async function waitForAnimations(page, label, after = null) {
       const emptyMascot=page.locator('#main .empty > .loader-visual.is-still');
       assert.equal(await emptyMascot.count(),1,'Completed empty results must retain the mascot');
       assert.equal(await emptyMascot.evaluate(el=>el.getAnimations({subtree:true}).length),0,'Completed empty results must not look like an ongoing scan');
-      const visual=await emptyMascot.boundingBox();
-      const title=await page.locator('#main .empty > h3').boundingBox();
-      assert(title.y>=visual.y+visual.height);
-      assert(Math.abs((visual.x+visual.width/2)-(title.x+title.width/2))<2,'Empty-state text must be centered below its mascot');
+      const layout=await page.locator('#main .empty').evaluate(loaderLayout);
+      lastLayout={engine,label:`${view}-empty`,...layout};
+      assertCenteredLayout(layout,`${engine}/${view}/completed-empty`);
       await page.close();
     }
     for(const [view,endpoint,refresh] of [
@@ -207,5 +232,9 @@ async function waitForAnimations(page, label, after = null) {
     fs.writeFileSync(`/tmp/mdc-workspace-check/progress-${engine}-report.json`,JSON.stringify(evidence,null,2));
     assert.deepEqual(errors,[]);
     console.log(`Progress (${engine}) passed: ${checked} theme/window checks across loading, report refreshes, Ghost percentage/cancel controls, single-loader placement, uninterrupted orbit/blink clocks, visible blinking frames, centered empty states, reduced motion, completion and error states.`);
+  } catch (error) {
+    fs.writeFileSync(`/tmp/mdc-workspace-check/progress-${engine}-report.json`,JSON.stringify({checks:evidence,lastLayout,error:error.message},null,2));
+    if(activePage && !activePage.isClosed()) await activePage.screenshot({path:`/tmp/mdc-workspace-check/progress-${engine}-failure.png`,timeout:5000}).catch(()=>{});
+    throw error;
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});
