@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto(fs.readFileSync('/tmp/mdc-care-check/launch-url','utf8'));
+    await page.goto(fs.readFileSync('/tmp/mdc-workspace-check/launch-url','utf8'));
     await page.waitForFunction(() => typeof ready !== 'undefined' && ready);
     await page.locator('#itemSearch').fill('Build');
     await page.locator('#sizeFilter').selectOption('100');
@@ -27,54 +27,27 @@ const assert = require('node:assert/strict');
     await page.goForward();
     await page.waitForFunction(() => view === 'dups');
     assert.equal(await page.locator('#duplicateSearch').inputValue(),'Copy');
-    await page.getByRole('link',{name:'Similar media',exact:true}).click();
-    await page.locator('.media-pair').waitFor();
-    assert.equal(new URL(page.url()).hash,'#care/media');
-    // Direct Care links survive loading and another reload without losing the tab.
-    const direct=await page.context().newPage();
-    await direct.goto(page.url());
-    await direct.locator('.media-pair').waitFor();
-    assert.equal(new URL(direct.url()).hash,'#care/media');
-    await direct.reload();
-    await direct.locator('.media-pair').waitFor();
-    await direct.close();
-    const reveal = page.waitForResponse(r => new URL(r.url()).pathname === '/api/reveal');
-    await page.getByRole('button',{name:'Show first',exact:true}).click();
-    assert.equal((await reveal).status(),200);
-    await page.locator('[data-tab="rules"]').click();
-    const draft='{"rules": []}\n';
-    await page.locator('#careRules').fill(draft);
-    await page.locator('[data-tab="overview"]').click();
-    await page.locator('#careHour').selectOption('17');
-    await page.locator('#careWeekday').selectOption('4');
-    await page.evaluate(() => navigate('apps'));
+    assert.equal(await page.locator('[data-view="care"]').count(),0);
+    assert.equal(await page.locator('script[src*="care.js"],link[href*="care.css"]').count(),0);
+    const legacy=await page.context().newPage();
+    await legacy.goto(page.url().split('#')[0]+'#care/media');
+    await legacy.waitForFunction(()=>typeof ready!=='undefined'&&ready);
+    assert.equal(new URL(legacy.url()).hash,'#clean');
+    await legacy.close();
+    await page.evaluate(()=>navigate('settings'));
+    await page.locator('details').filter({has:page.locator('#translationKey')}).locator('summary').click();
+    await page.locator('#translationKey').fill('fixture-draft');
+    await page.locator('#translationLanguage').selectOption('fr');
+    await page.evaluate(()=>navigate('apps'));
     await page.locator('.app-card').waitFor();
-    await page.getByRole('link',{name:'App slimming',exact:true}).click();
-    await page.locator('#careLanguages').fill('en, fr');
-    await page.locator('[data-tab="rules"]').click();
-    assert.equal(await page.locator('#careRules').inputValue(),draft);
-    await page.locator('[data-tab="overview"]').click();
-    assert.equal(await page.locator('#careHour').inputValue(),'17');
-    assert.equal(await page.locator('#careWeekday').inputValue(),'4');
-    assert.match(await page.locator('#careWeekdayControl').innerText(),/Thursday/);
-    assert.match(await page.locator('#careHourControl').innerText(),/17:00/);
-    assert.equal(await page.locator('.care-schedule-inline').getByText('Day',{exact:true}).count(),0);
-    assert.equal(await page.locator('.care-schedule-inline').getByText('Hour',{exact:true}).count(),0);
-    assert.equal(await page.getByRole('combobox',{name:'Day',exact:true}).count(),1);
-    assert.equal(await page.getByRole('combobox',{name:'Hour',exact:true}).count(),1);
-    await page.locator('[data-action="care-map-file"]').first().click();
-    const mapReveal=page.waitForResponse(r => new URL(r.url()).pathname === '/api/reveal');
-    await page.locator('#confirmDialog [data-action="reveal"]').click();
-    assert.equal((await mapReveal).status(),200);
-    const originalTitle=await page.locator('#confirmTitle').innerText();
-    assert.equal(await page.evaluate(async () => (await ask({title:'Overlapping review',body:'',confirm:'Confirm'})).confirmed),false);
-    assert.equal(await page.locator('#confirmTitle').innerText(),originalTitle);
-    await page.locator('#confirmDialog [data-action="confirm"]').click();
-    await page.locator('[data-action="care-profile"][data-profile="minimal"]').click();
-    await page.waitForFunction(() => view === 'clean' && selected.size === 1);
-    assert.equal(await page.locator('#itemSearch').inputValue(),'');
-    assert.equal(await page.locator('#sizeFilter').inputValue(),'0');
-    assert.equal(await page.locator('#categoryFilter').inputValue(),'');
+    await page.evaluate(()=>navigate('settings'));
+    assert.equal(await page.locator('#translationKey').inputValue(),'');
+    assert.equal(await page.locator('#translationLanguage').inputValue(),'fr');
+    await page.evaluate(()=>navigate('clean',{reset:true}));
+    await page.getByRole('button',{name:'Cleanup history',exact:true}).click();
+    await page.locator('.history-row').waitFor();
+    assert.match(await page.locator('.cleanup-history').innerText(),/Restorable cache/);
+    await page.keyboard.press('Escape');
     await page.evaluate(() => navigate('homebrew'));
     await page.locator('.brew-package-link').first().waitFor();
     let release, intercepted;
@@ -109,7 +82,7 @@ const assert = require('node:assert/strict');
     await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
     assert.equal(await page.locator('#keyboardFixture').inputValue(),'c');
     await page.evaluate(() => navigate('clean',{reset:true}));
-    const views=['clean','apps','big','dups','optimize','disks','homebrew','care','settings'];
+    const views=['clean','apps','big','dups','optimize','disks','homebrew','settings'];
     let checks=0;
     for (const locale of ['en','ar']) {
       await page.evaluate(locale => I18n.activate(locale),locale);
@@ -117,7 +90,7 @@ const assert = require('node:assert/strict');
         await page.setViewportSize({width,height});
         await page.evaluate(theme => applyTheme(theme),theme);
         for (const target of views) {
-          await page.evaluate(target => navigate(target,{tab:target==='care'?'overview':undefined}),target);
+          await page.evaluate(target => navigate(target),target);
           const overflow=await page.locator('#main').evaluate(main => {
             const box=main.getBoundingClientRect();
             return [...main.querySelectorAll('*')].filter(el => {
@@ -131,14 +104,7 @@ const assert = require('node:assert/strict');
         }
       }
     }
-    // Every Care tab has a usable narrow layout, including the accessible table.
-    await page.setViewportSize({width:320,height:740});
-    for (const tab of ['overview','history','media','startup','browsers','slimming','rules']) {
-      await page.evaluate(tab => navigate('care',{tab}),tab);
-      await page.locator('#main details').evaluateAll(els => els.forEach(el => el.open=true));
-      assert(await page.locator('#main').evaluate(el => el.scrollWidth<=el.clientWidth+1),`Care ${tab} overflow`);
-    }
     assert.deepEqual(errors,[]);
-    console.log(`Workspace passed: filters/back-forward, drafts, Finder links, review guard, profile handoff, stale inspector, disk visibility/drive actions, dropdown keyboard, ${checks} theme/locale/layout views and seven Care tabs.`);
+    console.log(`Workspace passed: filters/back-forward, settings drafts, history access, removed Care links, stale inspector, disk visibility/drive actions, dropdown keyboard, ${checks} theme/locale/layout views.`);
   } finally { await browser.close(); }
 })().catch(error => {console.error(error);process.exit(1);});

@@ -28,7 +28,6 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-media = ["Pillow>=10.0"]
 terminal = [
     "rich>=13.0.0",
     "questionary>=2.0.0",
@@ -38,6 +37,7 @@ dev = [
     "pytest-cov",
     "mypy",
     "ruff",
+    "packaging>=23.0",
     "rich>=13.0.0",
     "questionary>=2.0.0",
 ]

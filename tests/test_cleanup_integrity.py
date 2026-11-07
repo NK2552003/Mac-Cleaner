@@ -274,3 +274,51 @@ def test_empty_trash_unlinks_internal_links_without_touching_destinations(home):
     (trash/'link').symlink_to(outside)
     assert cleanup.empty_dir(str(trash))[0]
     assert outside.read_text()=='precious' and not list(trash.iterdir())
+
+
+def test_storage_history_endpoint_restores_exact_bytes(home, service):
+    path = home / 'Restore through storage.data'
+    path.write_bytes(b'original contents')
+    identifier = History(home).move(str(path))
+    revision = service.revision
+    assert service.post('/api/history/restore', {'id': identifier})['ok']
+    assert path.read_bytes() == b'original contents'
+    assert service.revision == revision + 1
+    assert not service.operation.locked()
+
+
+@pytest.mark.parametrize('route', ['/api/care/restore', '/api/care/run', '/api/care/profile',
+                                   '/api/care/media', '/api/care/language/generate'])
+def test_removed_care_routes_cannot_run(service, route):
+    with pytest.raises(APIError) as caught:
+        service.post(route, {})
+    assert caught.value.status == 404
+    assert not service.operation.locked()
+
+
+def test_language_import_is_independent_of_care(home, service):
+    result = service.post('/api/i18n/import', {'locale':'fr', 'messages':{'Settings':'Options'}})
+    assert result['locale'] == 'fr'
+    assert result['messages']['Settings'] == 'Options'
+    assert not service.operation.locked()
+
+
+def test_language_job_failure_releases_operation_lock(service, monkeypatch):
+    from mac_deep_cleaner import localization
+    def fail(*args):
+        raise OSError('fixture provider failure')
+    monkeypatch.setattr(localization, 'generate', fail)
+    service.post('/api/i18n/generate', {'locale':'fr', 'confirmed':True})
+    service.language_jobs().thread.join(3)
+    job = service.language_jobs().report()
+    assert job['done'] and job['error'] == 'fixture provider failure'
+    assert not service.operation.locked()
+
+
+def test_ghost_allowlist_removal_preserves_separate_exclusion(home, service):
+    path = str(home / 'Library/Orphan')
+    service.settings.update({'ghost_allowlist':[path], 'pinned':[path]})
+    service.scanner.pinned.add(path)
+    assert service.post('/api/settings/ghost-allowlist/remove', {'path':path})['ok']
+    assert service.settings['ghost_allowlist'] == []
+    assert path in service.scanner.pinned

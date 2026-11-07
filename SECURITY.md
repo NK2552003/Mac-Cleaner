@@ -8,7 +8,7 @@ Disk mutation plans are held server-side, expire after five minutes, and are con
 
 DNS and Spotlight use a fixed AppleScript command with the native administrator prompt. Disk commands run as the current user. Maintenance output is kept only in session memory (last 20 jobs); exported health reports can contain process names and launch-agent locations, so review them before sharing.
 
-## Homebrew management (3.0.0)
+## Homebrew management (3.5.0)
 
 Homebrew mutations accept only fixed action identifiers and installed package identities resolved from fresh JSON. Formula/cask namespaces and tap names are preserved. Tidy intersects Homebrew’s autoremove preview with the recorded dependency graph, requested/unknown roots, pins, and registered services. Missing dependency receipts, ambiguous identities, or unreadable service checks disable package removal. An unused Homebrew dependency may still be needed by software outside Homebrew; no universal “safe to delete” claim is made.
 
@@ -52,8 +52,8 @@ Ghost Files is disabled by default. The deterministic scanner and safety gate ha
 
 All dashboard mutations require the per-session `X-MDC-Token`, session cookie, exact local Origin and Host. See [Ghost Files](docs/ghost-files.md) for lifecycle, data locations, limitations, and manual release acceptance checks.
 
-## Care center (3.0.0)
+## Cleanup history and language settings (3.5.0)
 
-Trash moves are journaled before atomic renames; restores validate the recorded identity, location, and absence of a destination. Restore and cleanup share a cross-process lock. History does not offer undo for permanent deletion or maintenance commands. App-copy slimming never mutates the installed source bundle. Custom rules are non-executable and limited to named user-cache children; they cannot join scheduled cleanup.
+Ordinary Trash moves retain the durable journal and conflict-safe restore. Care Center's scheduling, custom rules, media comparison, and app-slimming operations have been removed. Native safe-item selection opens Storage Cleanup for review rather than running unattended cleanup.
 
-Language translation is separate from Ghost AI. It is off unless explicitly requested, uses a fixed Google Cloud HTTPS endpoint, and accepts only shipped interface strings. User files, scan data, and command output are not translation inputs. API keys are not persisted. Language packs are validated plain text; confirmation phrases are unchanged. See [v3.0.0](docs/v3.0.0.md) for coverage and operational limits.
+Language translation is separate from Ghost AI. It is off unless explicitly requested, uses a fixed Google Cloud HTTPS endpoint, and accepts only shipped interface strings. User files, scan data, and command output are not translation inputs. API keys are not persisted. Language packs are validated plain text; confirmation phrases are unchanged. See [v3.5.0](docs/v3.5.0.md) for coverage and operational limits.

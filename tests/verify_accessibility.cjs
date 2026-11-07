@@ -9,7 +9,7 @@ const assert=require('node:assert/strict');
     const context=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
     const page=await context.newPage();const errors=[],reports=[];
     page.on('pageerror',e=>errors.push(e.message));
-    await page.goto(fs.readFileSync('/tmp/mdc-care-check/launch-url','utf8'));
+    await page.goto(fs.readFileSync('/tmp/mdc-workspace-check/launch-url','utf8'));
     await page.waitForFunction(()=>typeof ready!=='undefined'&&ready);
     async function audit(name){
       const result=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
@@ -18,19 +18,15 @@ const assert=require('node:assert/strict');
     }
     for(const theme of ['dark','light']){
       await page.evaluate(theme=>applyTheme(theme),theme);
-      for(const view of ['clean','apps','big','dups','optimize','disks','homebrew','care','settings']){
+      for(const view of ['clean','apps','big','dups','optimize','disks','homebrew','settings']){
         await page.evaluate(view=>navigate(view),view);
         await page.waitForTimeout(150);
         await audit(`${theme}/${view}`);
       }
-      await page.evaluate(async()=>{await api('/api/care/inventory',{});navigate('care');});
-      await page.waitForFunction(()=>!CareUI.isRunning());
-      await page.evaluate(()=>CareUI.enter());
-      for(const tab of ['overview','history','media','startup','browsers','slimming','rules']){
-        await page.evaluate(tab=>navigate('care',{tab}),tab);
-        await page.locator('#main details').evaluateAll(els=>els.forEach(el=>el.open=true));
-        await audit(`${theme}/care/${tab}`);
-      }
+      await page.evaluate(()=>HistoryUI.open());
+      await page.locator('.history-row').waitFor();
+      await audit(`${theme}/cleanup-history`);
+      await page.keyboard.press('Escape');
       await page.evaluate(()=>navigate('apps'));
       await page.locator('.app-card').first().click();
       await audit(`${theme}/application-details`);
@@ -43,9 +39,9 @@ const assert=require('node:assert/strict');
       await audit(`${theme}/scan-permissions`);
       await page.evaluate(()=>{S.warnings=[];});
     }
-    fs.writeFileSync('/tmp/mdc-care-check/accessibility-report.json',JSON.stringify(reports,null,2));
+    fs.writeFileSync('/tmp/mdc-workspace-check/accessibility-report.json',JSON.stringify(reports,null,2));
     assert.deepEqual(reports.filter(r=>r.violations.length),[]);
     assert.deepEqual(errors,[]);
-    console.log(`Accessibility passed: ${reports.length} WCAG audits across all workspaces, Care tabs, application details, uninstall reviews and permission notices in both themes.`);
+    console.log(`Accessibility passed: ${reports.length} WCAG audits across all workspaces, cleanup history, application details, uninstall reviews and permission notices in both themes.`);
   }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exit(1)});

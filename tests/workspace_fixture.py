@@ -24,7 +24,6 @@ def configure(service, root, stack):
     service.toolkit.brew = manager(FakeBrewRunner())
     stack.enter_context(patch('mac_deep_cleaner.disks.IS_MAC', True))
     stack.enter_context(patch('mac_deep_cleaner.service.reveal', return_value=True))
-    stack.enter_context(patch('mac_deep_cleaner.review_tools.open_extensions', return_value={'message':'Fixture browser opened'}))
     service.toolkit.health = lambda: {
         'supported':True, 'checked_at':time.time(), 'os':'27.0.1', 'memory_total':16_000_000_000,
         'pressure':'Normal', 'swap':'256 MB', 'battery':'Battery: 82%; charging',
@@ -76,4 +75,4 @@ def configure(service, root, stack):
 
 if __name__ == '__main__':
     sys.argv.append('--workspace')
-    runpy.run_path(str(Path(__file__).with_name('care_fixture.py')), run_name='__main__')
+    runpy.run_path(str(Path(__file__).with_name('storage_fixture.py')), run_name='__main__')

@@ -3,6 +3,7 @@ const fs = require('fs'), path = require('path'), acorn = require('acorn');
 const {execFileSync} = require('node:child_process');
 const root=path.join(__dirname,'../mac_deep_cleaner/web'), messages=new Set();
 function add(text) {
+  if(text.startsWith('ghosts:{')) return; // Animation identity, not UI text.
   text=text.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').trim();
   // Commands and SQL are implementation data, never translated display prose.
   if(/^(?:sudo|brctl|defaults|launchctl|diskutil|tmutil|xattr|mdutil|killall|qlmanage|chmod|chown)\s/.test(text))return;
@@ -45,7 +46,7 @@ function visit(node) {
 for(const name of fs.readdirSync(root).filter(n=>n.endsWith('.js'))) visit(acorn.parse(fs.readFileSync(path.join(root,name),'utf8'),{ecmaVersion:'latest'}));
 extract(fs.readFileSync(path.join(root,'index.html'),'utf8'));
 for(const match of fs.readFileSync(path.join(__dirname,'../desktop/main.swift'),'utf8').matchAll(/(?:withTitle: |localized\(|fail\()"([^"]+)"/g))add(match[1]);
-// Translation dictionaries themselves include canonical navigation and care labels.
+// Translation dictionaries themselves include canonical navigation labels.
 const i18n=acorn.parse(fs.readFileSync(path.join(root,'i18n.js'),'utf8'),{ecmaVersion:'latest'});
 function keys(node) {
  if(!node||typeof node!=='object')return;
@@ -89,33 +90,17 @@ for(const value of [
   'restored','trashed','missing','changed','image','video','on','off','running','stopped',
   'Safe','Caution','Risky','Clean up','Scan','Scanning','Rescan','Scan in progress','Scan complete',
   'Free space','Memory pressure','Total space','Available space','Storage cleanup','Optimize your Mac',
-  'Disks & volumes','Homebrew','Applications','Large files','Duplicates','Ghost Files','Care center','Settings',
-  'Cleanup','Apps','Optimize','Disks','Ghosts','Care','Mac Deep Cleaner','This Mac','Developer mode',
+  'Disks & volumes','Homebrew','Applications','Large files','Duplicates','Ghost Files','Settings',
+  'Cleanup','Apps','Optimize','Disks','Ghosts','Mac Deep Cleaner','This Mac','Developer mode',
   'Developer mode: on','Developer mode: off','Connecting','Disconnected','Clear','Clear selection','Review cleanup',
   'Working…','Select all','Deselect all','Select caution items','Explore your files','Sorted by size','Show more',
   'Protected','macOS','Active','Read-only','Available for review','Location','What happens if removed',
   'Original copy kept','Terminal command','A closer look','Add to cleanup','Remove from selection','Reveal in Finder',
   'Copy path','Keep out of future scans','Cancel','Confirm','Close','Done','Delete','Restore','Enable','Disable',
-  'Refresh','Refresh inventory','Manage extensions','Open Login Items','Overview','Cleanup history','Similar media',
-  'Startup items','Browsers','App slimming','Custom rules','Cleanup profiles','Minimal','Developer','Designer',
-  'Weekly cleanup','Off by default','Enabled','Day','Hour','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday',
-  'Disable schedule','Review schedule','Share a report','Download HTML report','Large files map','Space over time',
-  'View data table','Accessible file list','No recorded cleanup yet.','Find similar media','Show first','Show second',
-  'Additional languages to keep','Review slim copy','Example rule','Save rules','Ghost allowlist','Remove from allowlist',
-  'No dismissed ghosts.','Automate carefully. See what changed. Keep control.','Choose a preset, then review every selected item.',
-  'Old cache and log files only. Moves to Trash with restore history.','Export findings as HTML. Print the report to save a PDF.',
-  'Compare image fingerprints and three video frames. Similarity is not proof of duplication.',
-  'Inspect local applications, startup definitions, and browser extensions.',
-  'Add review-only rules for children of one named app cache directory.',
+  'Refresh','Open Login Items','Cleanup history','No recorded cleanup yet.',
+  'Ghost allowlist','Remove from allowlist','No dismissed ghosts.',
   'Up to 1,000 recent Trash moves. Restore is available while the recorded item is unchanged and its original location is free. Permanent deletion and command-based cleanup cannot be undone.',
-  'Only user LaunchAgents can be changed here. Disabling affects future launches; it does not kill running apps. Manage modern login/background items in System Settings.',
-  'Full paths are omitted; filenames can still be personal. Review before sharing.',
-  'Requires the optional Python media extra (Pillow); videos also require ffmpeg and ffprobe. Nothing is installed automatically. Scans at most 500 media files from the storage scan, with a three-minute budget.',
-  'Creates a separate ad-hoc signed copy in Downloads. Your installed app is retained. Keep English/Base plus the languages below. Compatibility, notarization, entitlements, and updates may be affected; test the copy before using it.',
-  'JSON only; no executable commands. Every match is caution-level and excluded from profiles and scheduling. Save, rescan, then review matching files in Storage cleanup.',
   'Dismissed Ghost Files stay off future Ghost scans. Remove an entry to reconsider it.',
-  'Area represents allocated bytes in the 40 largest scanned files. Excluded folders and files below the scan threshold are not included.',
-  'One local sample per hour while this workspace is open, plus scheduled runs. Missing hours are not interpolated measurements. Trash moves do not free disk space.',
   'Nothing is removed until you review and confirm. Some items need extra care.',
   'Time','Used','Free','Homebrew packages & services','Casks','Formulae','Services','Outdated','Installed','Leaves',
   'Upgrade','Uninstall','Start','Stop','Restart','Verify filesystem','Verify partition map','Mount','Unmount','Eject',

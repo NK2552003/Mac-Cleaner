@@ -7,6 +7,7 @@ const I18n = (() => {
   } catch {}
 
   let pack = {}, metadata = null, failure = '', observer, pending = false;
+  let translating = false, importing = false, jobMessage = '', jobError = '', jobTimer;
   const originals = new WeakMap();
 
   let templates = [], sources = new Map(), persistence = Promise.resolve();
@@ -139,6 +140,8 @@ const I18n = (() => {
     const currentTranslated = Object.entries(pack).filter(([source, value]) => source !== value).length;
 
     return `<section class="settings-section language-settings">
+      ${translating || importing ? scanIndicator(jobMessage || 'Working…', {feature:'settings',key:'translation'}) : ''}
+      ${jobError ? `<div class="error-banner" role="alert">${esc(jobError)}</div>` : ''}
       <div class="settings-section-head">
         <div class="head-with-badge">
           <h2>${icon("file")} ${esc(t("Language / भाषा / Idioma"))}</h2>
@@ -171,7 +174,7 @@ const I18n = (() => {
         <summary>${esc(t("Import or share an offline language pack"))}</summary>
         <p><span dir="ltr" data-no-translate style="font-family:ui-monospace,monospace;font-size:12px;opacity:0.8">JSON: &#123;&quot;locale&quot;:&quot;fr&quot;,&quot;messages&quot;:&#123;&quot;Settings&quot;:&quot;Paramètres&quot;&#125;&#125;</span><br>${esc(t("Only known interface messages are accepted; no HTML or code."))}</p>
         <input id="languagePackFile" type="file" accept=".json,application/json" aria-label="${esc(t("Language pack JSON"))}">
-        <div class="care-actions" style="margin-top:10px">
+        <div class="language-actions" style="margin-top:10px">
           ${button(t('Import language pack'), 'locale-import')}
           ${button(t('Export current pack'), 'locale-export')}
           ${button(t('Download English template'), 'locale-template')}
@@ -189,12 +192,13 @@ const I18n = (() => {
         <label for="translationKey" style="display:block;margin:10px 0 6px">${esc(t("Google Cloud Translation API key (never saved)"))}</label>
         <input id="translationKey" type="password" autocomplete="off" spellcheck="false" placeholder="Or set MDC_TRANSLATE_API_KEY before launch" style="width:100%;max-width:380px;margin-bottom:12px">
         <div>${button(t('Generate selected language'), 'locale-generate')}</div>
-        <p style="margin-top:8px"><small>${metadata?.messages || 0} source messages · ${metadata?.characters || 0} characters before cache exclusions.</small></p>
+        <p style="margin-top:8px"><small>${esc(t('{count} source messages · {characters} characters before cache exclusions.', {count:metadata?.messages || 0, characters:metadata?.characters || 0}))}</small></p>
       </details>
     </section>`;
   }
 
   async function dispatch(action, el) {
+    if (['locale-generate','locale-import'].includes(action) && (translating || importing)) return;
     if (action === 'quick-language') {
       const code = el?.dataset?.code;
       if (code) return activate(code);
@@ -211,18 +215,21 @@ const I18n = (() => {
       if (!answer.confirmed) return;
       const key = $('translationKey').value;
       $('translationKey').value = '';
-      await api('/api/care/language/generate', { locale: code, key, confirmed: true });
-      navigate('care');
-      return CareUI.enter();
+      await api('/api/i18n/generate', { locale: code, key, confirmed: true });
+      translating = true; jobError = '';
+      return pollJob();
     }
     if (action === 'locale-import') {
       const file = $('languagePackFile').files[0];
       if (!file) throw new Error('Choose a JSON language pack.');
       if (file.size > 1500000) throw new Error('Language packs must be smaller than 1.5 MB.');
       const document = JSON.parse(await file.text());
-      await api('/api/care/language/import', document);
-      navigate('care');
-      return CareUI.enter();
+      importing = true; jobError = '';
+      try {
+        const result = await api('/api/i18n/import', document);
+        await refresh(result.locale);
+      } finally { importing = false; draw(); updateActivityStatus(); }
+      return;
     }
     const data = await api(action === 'locale-template' ? '/api/i18n/catalog' : '/api/i18n/pack?locale=' + encodeURIComponent(language));
     const blob = new Blob([JSON.stringify({ locale: data.locale, messages: data.messages }, null, 2)], { type: 'application/json' });
@@ -238,6 +245,18 @@ const I18n = (() => {
     if (locale) await activate(locale);
   }
 
+  async function pollJob() {
+    clearTimeout(jobTimer);
+    try {
+      const job = await api('/api/i18n/job');
+      translating = !job.done; jobMessage = job.message; jobError = job.error;
+      if (job.done && job.result?.locale) await refresh(job.result.locale);
+      if (view === 'settings') draw();
+      updateActivityStatus();
+    } catch (e) { jobError = e.message; }
+    if (translating) jobTimer = setTimeout(pollJob, 1200);
+  }
+
   async function init() {
     try { metadata = await api('/api/i18n'); } catch (e) { failure = e.message; }
     observer = new MutationObserver(() => {
@@ -251,6 +270,7 @@ const I18n = (() => {
     });
     try { await activate(metadata?.language || language, false); }
     catch (e) { failure = e.message; translateDOM(); }
+    await pollJob();
   }
 
   document.addEventListener('input', event => {
@@ -262,5 +282,5 @@ const I18n = (() => {
   });
 
   set(language);
-  return { t, set, activate, init, refresh, settings, dispatch, locale: () => language, translateDOM };
+  return { t, set, activate, init, refresh, settings, dispatch, isRunning:() => translating || importing, locale: () => language, translateDOM };
 })();

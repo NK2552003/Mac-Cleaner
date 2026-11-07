@@ -117,7 +117,6 @@ const navs = [
   ["big", "Large files", "nav_big"],
   ["dups", "Duplicates", "nav_dups"],
   ["ghosts", "Ghost Files", "ghost"],
-  ["care", "Care center", "nav_care"],
   ["settings", "Settings", "nav_settings"],
 ];
 let S = {
@@ -166,10 +165,10 @@ const group = (i) =>
     ? i.group || i.category
     : i.category;
 const canSelect = () =>
-  ready && !S.scanning && !S.error && !S.busy && !busy && !connectionError && !ToolkitUI.isRunning() && !CareUI.isRunning();
+  ready && !S.scanning && !S.error && !S.busy && !busy && !connectionError && !ToolkitUI.isRunning() && !(HistoryUI.isRunning() || I18n.isRunning());
 const viewStates = new Map();
 const formDrafts = new Map();
-const draftFields = new Set(['careRules', 'careLanguages', 'careWeekday', 'careHour']);
+const draftFields = new Set(['translationLanguage']);
 const selectedItems = () =>
   S.items.filter((i) => eligible(i) && selected.has(i.id));
 function totals() {
@@ -272,24 +271,8 @@ function settingsView() {
       </section>
 
       <section class="settings-section">
-        <div class="settings-section-head">
-          <h2>${icon("shield")}${esc(I18n.t("Storage & Maintenance"))}</h2>
-          <p>${esc(I18n.t("Automate carefully. See what changed. Keep control."))}</p>
-        </div>
-        <div class="settings-row">
-          <div>
-            <h3>${esc(I18n.t("Cleanup profiles"))}</h3>
-            <p>${esc(I18n.t("Choose a preset, then review every selected item."))}</p>
-          </div>
-          ${button(I18n.t("Care center"), "settings-care", {symbol:"arrow"})}
-        </div>
-        <div class="settings-row">
-          <div>
-            <h3>${esc(I18n.t("Weekly cleanup"))}</h3>
-            <p>${esc(I18n.t("Old cache and log files only. Moves to Trash with restore history."))}</p>
-          </div>
-          ${button(I18n.t("Review schedule"), "settings-care", {symbol:"arrow"})}
-        </div>
+        <div class="settings-section-head"><h2>${esc(I18n.t('Ghost allowlist'))}</h2><p>${esc(I18n.t('Dismissed Ghost Files stay off future Ghost scans. Remove an entry to reconsider it.'))}</p></div>
+        ${(S.settings?.ghost_allowlist || []).map(path => `<div class="settings-row"><p class="path" data-no-translate>${esc(path)}</p>${button(I18n.t('Remove from allowlist'), 'allowlist-remove', {data:{path},disabled:!!S.busy})}</div>`).join('') || `<p>${esc(I18n.t('No dismissed ghosts.'))}</p>`}
       </section>
 
       <section class="settings-section settings-about-section">
@@ -362,15 +345,13 @@ async function load() {
       bigIds = [];
       bigReady = false;
       A = { apps: [], ready: false };
-      closeDetail();
+      if (detailKind !== 'history') closeDetail();
     }
     if (!ready) {
       const [route, tab] = location.hash.slice(1).split('/');
       const initial = navs.some(n => n[0] === route) ? route : next.initial_view;
       if (navs.some(n => n[0] === initial)) view = initial;
-      if (view === 'care' && tab) CareUI.selectTab(tab);
-      const careTab = view === 'care' ? CareUI.tab() : '';
-      window.history.replaceState({mdcView:view, careTab}, '', location.pathname + '#' + view + (careTab ? '/' + careTab : ''));
+      window.history.replaceState({mdcView:view}, '', location.pathname + '#' + view + (view === 'clean' && tab === 'history' ? '/history' : ''));
     }
     if (!ready && next.settings) {
       mode = next.settings.mode;
@@ -391,7 +372,6 @@ async function load() {
     if (view === "apps" && !A.ready) loadApps();
     if (["optimize", "disks"].includes(view)) ToolkitUI.enter(view);
     if (view === "homebrew") HomebrewUI.enter();
-    if (view === "care") CareUI.enter();
     stateTimer = setTimeout(load, S.scanning || S.busy ? 1400 : 10000);
   } catch (e) {
     connectionError = e.message;
@@ -459,7 +439,7 @@ function chrome() {
     .filter(([v]) => v !== "ghosts" || S.features?.ghosts_level > 0)
     .map(
       ([v, name, symbol]) =>
-        `<button class="nav-button ${view === v ? "active" : ""}" data-action="navigate" data-view="${v}" title="${esc(I18n.t(name))}" aria-label="${esc(I18n.t(name))}" ${view === v ? 'aria-current="page"' : ""}>${icon(symbol)}<span class="nav-full">${esc(I18n.t(name))}</span><span class="nav-short">${esc(I18n.t({ clean: "Cleanup", apps: "Apps", big: "Large files", dups: "Duplicates", optimize: "Optimize", disks: "Disks", homebrew: "Homebrew", ghosts: "Ghosts", settings: "Settings", care: "Care" }[v]))}</span></button>`,
+        `<button class="nav-button ${view === v ? "active" : ""}" data-action="navigate" data-view="${v}" title="${esc(I18n.t(name))}" aria-label="${esc(I18n.t(name))}" ${view === v ? 'aria-current="page"' : ""}>${icon(symbol)}<span class="nav-full">${esc(I18n.t(name))}</span><span class="nav-short">${esc(I18n.t({ clean: "Cleanup", apps: "Apps", big: "Large files", dups: "Duplicates", optimize: "Optimize", disks: "Disks", homebrew: "Homebrew", ghosts: "Ghosts", settings: "Settings" }[v]))}</span></button>`,
     )
     .join("");
   $("modeSwitch").innerHTML = `<button class="rail-control mode-control ${mode === "dev" ? "enabled" : ""}" data-action="mode" data-mode="${mode === "dev" ? "normal" : "dev"}" role="switch" aria-checked="${mode === "dev"}" aria-label="${esc(I18n.t("Developer mode"))}" title="${esc(I18n.t("Developer mode"))}: ${mode === "dev" ? "on" : "off"}">${icon("code")}<span class="rail-label">${esc(I18n.t("Developer mode"))}</span><span class="mode-indicator" aria-hidden="true"></span></button>`;
@@ -470,7 +450,7 @@ function chrome() {
 }
 function updateActivityStatus() {
   const scanning = S.scanning || !!document.querySelector('#main .scan-indicator');
-  const working = S.busy || busy || ToolkitUI.isRunning() || CareUI.isRunning() || window.GhostUI?.isRunning();
+  const working = S.busy || busy || ToolkitUI.isRunning() || (HistoryUI.isRunning() || I18n.isRunning()) || window.GhostUI?.isRunning();
   $("status").className =
     "status" + (connectionError ? " offline" : scanning || working ? " working" : "");
   $("status").textContent = I18n.t(connectionError
@@ -484,7 +464,7 @@ function updateActivityStatus() {
         : "Scan complete");
 }
 function pagehead(title, subtitle) {
-  return `<div class="pagehead"><div><h1>${esc(I18n.t(title))}</h1><p>${esc(I18n.t(subtitle))}</p></div><div class="head-actions">${button(S.scanning ? I18n.t("Scanning") : I18n.t("Rescan"), "rescan", { symbol: "refresh", disabled: !ready || S.scanning || S.busy || busy || ToolkitUI.isRunning() || CareUI.isRunning() })}</div></div>`;
+  return `<div class="pagehead"><div><h1>${esc(I18n.t(title))}</h1><p>${esc(I18n.t(subtitle))}</p></div><div class="head-actions">${view === "clean" ? button(I18n.t("Cleanup history"), "history-open", {symbol:"file"}) : ""}${button(S.scanning ? I18n.t("Scanning") : I18n.t("Rescan"), "rescan", { symbol: "refresh", disabled: !ready || S.scanning || S.busy || busy || ToolkitUI.isRunning() || (HistoryUI.isRunning() || I18n.isRunning()) })}</div></div>`;
 }
 function banners() {
   return (
@@ -754,7 +734,7 @@ function duplicatesView() {
 }
 function preserveFocus(render) {
   // Keep unsaved form edits through periodic state refreshes.
-  const draftIds = ['careRules','careLanguages','careWeekday','careHour','languageSearch','languageSelect','translationLanguage','translationKey'];
+  const draftIds = ['languageSearch','languageSelect','translationLanguage','translationKey'];
   const drafts = new Map(draftIds.filter(id => $(id)).map(id => [id, $(id).value]));
   const mainTop = $("main")?.scrollTop;
   const active = document.activeElement,
@@ -801,7 +781,6 @@ function draw({ animate = false } = {}) {
       disks: ToolkitUI.diskView,
       homebrew: HomebrewUI.render,
       settings: settingsView,
-      care: CareUI.render,
       ghosts: () => window.GhostUI ? GhostUI.render() : empty("Opening Ghost Files…", "Loading the optional workspace."),
     }[view]() + relatedTools();
     drawSelection();
@@ -836,7 +815,7 @@ function draw({ animate = false } = {}) {
 function drawSelection() {
   const items = selectedItems(),
     el = $("selection");
-  el.hidden = !items.length || ["optimize", "disks", "homebrew", "ghosts", "settings", "care"].includes(view);
+  el.hidden = !items.length || ["optimize", "disks", "homebrew", "ghosts", "settings"].includes(view);
   if (!items.length) {
     el.innerHTML = "";
     return;
@@ -845,16 +824,15 @@ function drawSelection() {
 }
 function relatedTools() {
   const targets = {
-    clean:[['big','Large files'],['dups','Duplicates'],['care','Cleanup history','history'],['disks','Disks & volumes']],
-    apps:[['care','App slimming','slimming'],['care','Startup items','startup'],['ghosts','Ghost Files']],
-    big:[['dups','Duplicates'],['care','Large files map','overview'],['clean','Storage cleanup']],
-    dups:[['care','Similar media','media'],['big','Large files'],['care','Cleanup history','history']],
-    optimize:[['care','Startup items','startup'],['disks','Disks & volumes'],['homebrew','Homebrew']],
+    clean:[['big','Large files'],['dups','Duplicates'],['disks','Disks & volumes']],
+    apps:[['optimize','Optimize your Mac'],['ghosts','Ghost Files']],
+    big:[['dups','Duplicates'],['clean','Storage cleanup']],
+    dups:[['big','Large files'],['clean','Storage cleanup']],
+    optimize:[['apps','Applications'],['disks','Disks & volumes'],['homebrew','Homebrew']],
     disks:[['big','Large files'],['clean','Storage cleanup'],['optimize','Optimize your Mac']],
-    homebrew:[['apps','Applications'],['care','Startup items','startup'],['clean','Storage cleanup']],
-    care:[['clean','Storage cleanup'],['dups','Duplicates'],['apps','Applications'],['settings','Settings']],
-    ghosts:[['apps','Applications'],['care','Cleanup history','history'],['care','Ghost allowlist','rules']],
-    settings:[['care','Cleanup profiles','overview'],['care','Custom rules','rules'],['optimize','Optimize your Mac']],
+    homebrew:[['apps','Applications'],['optimize','Optimize your Mac'],['clean','Storage cleanup']],
+    ghosts:[['apps','Applications'],['clean','Storage cleanup'],['settings','Settings']],
+    settings:[['clean','Storage cleanup'],['optimize','Optimize your Mac']],
   }[view] || [];
   return `<nav class="related-tools" aria-label="${esc(I18n.t('Related tools'))}"><span>${esc(I18n.t('Related tools'))}</span>${targets.filter(([v]) => v !== 'ghosts' || S.features?.ghosts_level).map(([v,label,tab]) => `<a class="button link" href="#${v}${tab ? '/' + tab : ''}" data-action="related-tool" data-view="${v}" ${tab ? `data-tab="${tab}"` : ''}>${icon('arrow')}${esc(I18n.t(label))}</a>`).join('')}</nav>`;
 }
@@ -873,18 +851,15 @@ function navigate(v, options = {}) {
   minmb = options.minmb ?? saved?.minmb ?? S.settings?.min_mb ?? 10;
   focusId = saved?.focusId ?? null;
   visibleLimit = saved?.visibleLimit ?? 100;
-  if (v === 'care' && options.tab) CareUI.selectTab(options.tab);
   closeDetail();
   draw({ animate: true });
   window.scrollTo({ top: 0, behavior: "instant" });
   if ($("main")) { $("main").scrollTop = saved?.scroll || 0; $("main").focus({preventScroll:true}); }
   if (options.history !== false) {
-    const careTab = v === 'care' ? CareUI.tab() : '';
-    window.history.pushState({mdcView:v, careTab}, '', location.pathname + '#' + v + (careTab ? '/' + careTab : ''));
+    window.history.pushState({mdcView:v}, '', location.pathname + '#' + v);
   }
   if (["optimize", "disks"].includes(v)) ToolkitUI.enter(v);
   if (v === "homebrew") HomebrewUI.enter();
-  if (v === "care") CareUI.enter();
   if (["ghosts", "settings"].includes(v) && S.features?.ghosts_level) ensureGhostFeature().then(() => GhostUI.enter()).catch(e => toast(e.message, true));
   if (v === "apps" && !A.ready) loadApps();
   if (v === "big" && !S.scanning && !bigReady) loadBig();
@@ -1030,7 +1005,7 @@ function cleanupResult() {
     <div class="cleanup-result-heading">${icon(failed ? 'alert' : 'check')}<div><h2>${esc(I18n.t('Cleanup results'))}</h2><p>${esc(I18n.t('{completed} completed · {failed} failed', {completed, failed}))} · ${fmt(lastCleanup.processed_bytes ?? lastCleanup.freed)}</p></div>${button('', 'dismiss-cleanup-result', {style:'ghost icon-only',symbol:'x',aria:I18n.t('Dismiss results')})}</div>
     ${moved ? `<p>${esc(I18n.t('Moved files can be restored from Cleanup history. Trash still uses disk space.'))}</p>` : ''}
     <details ${failed ? 'open' : ''}><summary>${esc(I18n.t('View results'))}</summary><ul>${rows.map(r => `<li><div><strong data-no-translate>${esc(r.name)}</strong><span>${esc(I18n.t(r.ok === false ? r.message : r.message === 'included in selected parent' ? 'Included in selected folder' : outcomes[r.action] || r.message))}</span></div>${icon(r.ok === false ? 'alert' : r.ok ? 'check' : 'terminal')}</li>`).join('')}</ul></details>
-    ${moved ? `<a class="button link" href="#care/history" data-action="related-tool" data-view="care" data-tab="history">${esc(I18n.t('Cleanup history'))}${icon('arrow')}</a>` : ''}
+    ${moved ? `<a class="button link" href="#clean/history" data-action="history-open">${esc(I18n.t('Cleanup history'))}${icon('arrow')}</a>` : ''}
   </section>`;
 }
 function resultToast(r, permanent = false) {
@@ -1185,7 +1160,7 @@ async function cleanApp(m) {
   }
 }
 async function rescan() {
-  if (S.scanning || S.busy || busy || ToolkitUI.isRunning() || CareUI.isRunning()) return;
+  if (S.scanning || S.busy || busy || ToolkitUI.isRunning() || (HistoryUI.isRunning() || I18n.isRunning())) return;
   if (selected.size) {
     const answer = await ask({
       title: "Start a new scan?",
@@ -1227,12 +1202,16 @@ async function revealPath(path) {
   toast("Location opened in Finder.");
 }
 async function dispatch(action, el) {
-  if (action === "settings-care") return navigate("care");
   if (action === "related-tool") return navigate(el.dataset.view, {tab:el.dataset.tab});
   if (action === "feature-ghost-level") return setGhostLevel(Number(el.dataset.level));
   if (action.startsWith("ghost-")) return window.GhostUI?.dispatch(action, el);
   if (action === "quick-language" || action.startsWith("locale-")) return I18n.dispatch(action, el);
-  if (action.startsWith("care-")) return CareUI.dispatch(action, el);
+  if (action === 'history-open') return HistoryUI.open();
+  if (action === 'history-restore') return HistoryUI.restore(el.dataset.id);
+  if (action === 'allowlist-remove') {
+    await api('/api/settings/ghost-allowlist/remove', {path:el.dataset.path});
+    return load();
+  }
   if (action.startsWith("brew-")) return HomebrewUI.dispatch(action, el);
   if (action.startsWith("toolkit-")) return ToolkitUI.dispatch(action, el);
   const id = Number(el.dataset.id),
@@ -1436,7 +1415,7 @@ document.addEventListener("change", (e) => {
 Overlays.bind($("confirmDialog"), () => finishAsk(false));
 Overlays.bind($("detailDialog"), closeDetail);
 window.addEventListener('popstate', event => {
-  if (event.state?.mdcView) navigate(event.state.mdcView, {history:false, tab:event.state.careTab});
+  if (event.state?.mdcView) navigate(navs.some(n => n[0] === event.state.mdcView) ? event.state.mdcView : "clean", {history:false});
 });
 matchMedia("(max-width:1240px)").addEventListener("change", (e) => {
   if (!e.matches && detailKind === "file") closeDetail();
@@ -1492,12 +1471,13 @@ window.MDCNative = {
   metrics: async () => ({free: S.disk?.free, scanning:S.scanning, busy:!!S.busy || busy}),
   safeClean: async () => {
     if (!canSelect()) { toast('Wait for the scan or current operation to finish.',true); return; }
-    const result = await api('/api/care/profile',{profile:'minimal',scan_id:S.scan_id,revision:S.revision});
-    if(!result.ids.length) { toast('No eligible files in the minimal profile.'); return; }
-    busy=true;
-    try { resultToast(await api('/api/clean',{ids:result.ids,scan_id:S.scan_id,revision:S.revision,permanent:false})); await load(); }
-    catch(e) {toast(e.message,true);} finally {busy=false;draw();}
+    navigate('clean', {reset:true});
+    selectLevel('safe');
   }
 };
 
 I18n.init();
+if (location.hash === '#clean/history') {
+  const openHistory = () => ready ? HistoryUI.open() : setTimeout(openHistory, 100);
+  openHistory();
+}

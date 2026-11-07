@@ -27,6 +27,7 @@
 .loader-ear { fill:#6f7e86; }
 .loader-belly { fill:#f2eee4; }
 .loader-eyes,.loader-eye-light { fill:#fff; }
+.loader-blink { transform-origin:60px 59px; animation:loader-blink 8.6s ease-in-out infinite; }
 .loader-ink { fill:#273238; }
 .loader-whiskers { fill:none; stroke:#34434b; stroke-width:1.9; stroke-linecap:round; }
 .loader-belly-marks { fill:none; stroke:#6b7982; stroke-width:2.3; stroke-linecap:round; stroke-linejoin:round; }
@@ -51,17 +52,17 @@
 .brand-loader[data-feature="disks"] { --loader-accent:#8eb8dd; --orbit-duration:8s; }
 .brand-loader[data-feature="homebrew"] { --loader-accent:#d9bd88; --orbit-duration:9.6s; }
 .brand-loader[data-feature="ghosts"] { --loader-accent:#bdb0dc; --orbit-duration:11.2s; }
-.brand-loader[data-feature^="care"] { --loader-accent:#d5a7b5; --orbit-duration:9s; }
-.brand-loader[data-feature="care-media"] { --loader-accent:#a9bbd7; }
-.brand-loader[data-feature="care-startup"] { --loader-accent:#9cccb5; }
-.brand-loader[data-feature="care-slimming"] { --loader-accent:#c4b6de; }
 html[data-theme="light"] .brand-loader { --loader-accent:#3c735d; }
 html[data-theme="light"] .brand-loader[data-feature="apps"],html[data-theme="light"] .brand-loader[data-feature="big"],html[data-theme="light"] .brand-loader[data-feature="disks"] { --loader-accent:#466d9b; }
 html[data-theme="light"] .brand-loader[data-feature="dups"],html[data-theme="light"] .brand-loader[data-feature="ghosts"] { --loader-accent:#746394; }
 html[data-theme="light"] .brand-loader[data-feature="homebrew"] { --loader-accent:#8a6737; }
-html[data-theme="light"] .brand-loader[data-feature^="care"] { --loader-accent:#986176; }
 @keyframes loader-orbit { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
 @keyframes loader-breathe { 0%,100% { transform:translateY(0) scale(1); } 50% { transform:translateY(-1.1px) scale(1.018); } }
+/* A quick blink, then an occasional double blink; eyes stay open between them. */
+@keyframes loader-blink {
+  0%,36%,39%,76%,79%,81%,84%,100% { transform:scaleY(1); }
+  37.5%,77.5%,82.5% { transform:scaleY(.06); }
+}
 @keyframes loader-leaf { 0%,100% { transform:rotate(-5deg); } 50% { transform:rotate(6deg); } }
 @keyframes loader-shimmer { 0%,100% { opacity:.3; transform:scale(.8); } 50% { opacity:.85; transform:scale(1); } }
 @media(max-width:650px) {

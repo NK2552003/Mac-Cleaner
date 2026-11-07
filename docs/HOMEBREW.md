@@ -1,4 +1,4 @@
-# Homebrew management in Mac Deep Cleaner 3.0.0
+# Homebrew management in Mac Deep Cleaner 3.5.0
 
 This workspace adapts the dependency-explanation workflow described by [brew-why](https://github.com/NK2552003/brew-why) into the existing local dashboard and CLI. It is independently implemented using Homebrew JSON and built-in commands; no brew-why, Textual, or extra runtime package is installed.
 

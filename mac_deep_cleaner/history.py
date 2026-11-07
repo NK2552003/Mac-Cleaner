@@ -1,4 +1,4 @@
-"""Durable Trash journal, conflict-safe restore, and local disk samples."""
+"""Durable Trash journal and conflict-safe restore."""
 
 import fcntl
 import json
@@ -30,9 +30,6 @@ class History:
         db.execute("PRAGMA synchronous=FULL")
         db.execute(
             "CREATE TABLE IF NOT EXISTS moves (id TEXT PRIMARY KEY, original TEXT, trash TEXT, identity TEXT, created REAL, restored REAL, status TEXT)"
-        )
-        db.execute(
-            "CREATE TABLE IF NOT EXISTS samples (hour INTEGER PRIMARY KEY, time REAL, total INTEGER, used INTEGER, free INTEGER)"
         )
         try:
             with db:
@@ -149,19 +146,6 @@ class History:
             except OSError:
                 pass
         return {"ok": True, "path": str(target)}
-
-    def sample(self, disk):
-        now = time.time()
-        with self.connect() as db:
-            db.execute(
-                "INSERT OR REPLACE INTO samples VALUES (?,?,?,?,?)",
-                (int(now // 3600), now, disk.total, disk.used, disk.free),
-            )
-            db.execute("DELETE FROM samples WHERE time < ?", (now - 365 * 86400,))
-            return [
-                dict(r)
-                for r in db.execute("SELECT time,total,used,free FROM samples ORDER BY time")
-            ]
 
 
 def exclusive_rename(source, target):

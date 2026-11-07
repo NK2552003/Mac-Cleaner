@@ -53,7 +53,7 @@ The model can only make the deterministic verdict more cautious. Its text is san
 
 Ghosts are normal scanner items, assigned the current scan ID, revision, and filesystem fingerprint. **Banish to Trash** calls the existing `/api/clean` endpoint and shared `execute` validators. Stale revisions, changed identities, exclusions, protected items, and unsafe paths are rejected. Parent or app cleanup cannot bypass a ghost review. Generic Cleanup links these entries back to Ghost Files. Permanent deletion is disallowed for ghost items.
 
-The Ofrenda records only successful moves, with name, size, UTC date, and a farewell. Export it as `ofrenda.md` from the Ghosts screen; the native shell opens a Save dialog. Files still consume space while in Trash. Restore them in Care center → Cleanup history before emptying Trash if needed.
+The Ofrenda records only successful moves, with name, size, UTC date, and a farewell. Export it as `ofrenda.md` from the Ghosts screen; the native shell opens a Save dialog. Files still consume space while in Trash. Restore them in Storage Cleanup → Cleanup history before emptying Trash if needed.
 
 ## Turn it off or remove AI
 
@@ -111,6 +111,6 @@ The [system-file audit](ghost-system-audit.md) records a read-only before/after 
 
 References checked during implementation (2026-10-31): [pull API](https://docs.ollama.com/api/pull), [delete API](https://docs.ollama.com/api/delete), [structured output](https://docs.ollama.com/capabilities/structured-outputs), [Llama 1B](https://ollama.com/library/llama3.2:1b), [Llama 3B](https://ollama.com/library/llama3.2:3b), [Gemma 4B](https://ollama.com/library/gemma3:4b), [official macOS build layout](https://github.com/ollama/ollama/blob/main/scripts/build_darwin.sh), [signing-team reference](https://github.com/Installomator/Installomator/blob/main/fragments/labels/ollama.sh).
 
-## v3.0.0 evidence and dismissals
+## v3.5.0 evidence and dismissals
 
-Ghost cards show a heuristic evidence score and the ownership evidence behind it; scores are not probabilities. **Dismiss permanently** adds the location to a persistent allowlist and excludes it from cleanup. Manage exclusions in Care center → Custom rules → Ghost allowlist. The older “show resting ghosts” control only reveals dismissed cards in the current session; removal from the allowlist is a separate action.
+Ghost cards show a heuristic evidence score and the ownership evidence behind it; scores are not probabilities. **Dismiss permanently** adds the location to a persistent allowlist and excludes it from cleanup. Manage exclusions in Settings → Ghost allowlist. The older “show resting ghosts” control only reveals dismissed cards in the current session; removal from the allowlist is a separate action.

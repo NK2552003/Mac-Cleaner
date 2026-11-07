@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
   const errors=[], evidence=[];
   let checked=0;
   try {
-    const workspace=fs.readFileSync('/tmp/mdc-care-check/launch-url','utf8');
+    const workspace=fs.readFileSync('/tmp/mdc-workspace-check/launch-url','utf8');
     async function start(url=workspace){
       const context=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
       const page=await context.newPage();
@@ -32,27 +32,45 @@ const assert = require('node:assert/strict');
       const before=await page.evaluate(()=>{
         LoaderUI.sync();
         const animation=document.querySelector('#main .loader-orbit').getAnimations()[0];
-        return {start:animation.startTime,time:animation.currentTime,state:animation.playState};
+        const blink=document.querySelector('#main .loader-blink').getAnimations()[0];
+        return {start:animation.startTime,time:animation.currentTime,state:animation.playState,blinkStart:blink.startTime,blinkTime:blink.currentTime};
       });
       assert.equal(before.state,'running');
       await page.waitForTimeout(100);
       const after=await page.evaluate(()=>{
         draw();
         const animation=document.querySelector('#main .loader-orbit').getAnimations()[0];
-        return {start:animation.startTime,time:animation.currentTime};
+        const blink=document.querySelector('#main .loader-blink').getAnimations()[0];
+        return {start:animation.startTime,time:animation.currentTime,blinkStart:blink.startTime,blinkTime:blink.currentTime};
       });
       assert.equal(after.start,before.start,`${label} must retain its animation clock across redraws`);
       assert(after.time>before.time+50,`${label} animation must keep advancing`);
+      assert.equal(after.blinkStart,before.blinkStart,`${label} blinking must retain its clock across redraws`);
+      assert(after.blinkTime>before.blinkTime+50,`${label} blinking must keep advancing`);
+      const eyes=await indicator.locator('.loader-blink').evaluate(el=>{
+        const animation=el.getAnimations()[0];
+        animation.pause();
+        const sample=fraction=>{
+          animation.currentTime=animation.effect.getTiming().duration*fraction;
+          return new DOMMatrix(getComputedStyle(el).transform).d;
+        };
+        const result={open:sample(0),closed:sample(.375),reopened:sample(.5)};
+        animation.play();
+        return result;
+      });
+      assert(eyes.open>.99 && eyes.closed<.1 && eyes.reopened>.99,'Eyes must close briefly and reopen');
+      assert.equal(await indicator.locator('.loader-nose').evaluate(el=>getComputedStyle(el).transform),'none','Blinking must not squash the nose');
       assert.equal(await indicator.locator('.loader-orbit').evaluate(el=>getComputedStyle(el).animationTimingFunction),'linear');
       await page.emulateMedia({reducedMotion:'reduce'});
       assert.equal(await indicator.locator('.loader-orbit').evaluate(el=>el.getAnimations().length),0,'Reduced motion must stop decorative animation');
+      assert.equal(await indicator.locator('.loader-blink').evaluate(el=>el.getAnimations().length),0,'Reduced motion must stop blinking');
       for(const theme of ['dark','light']) for(const width of [1440,390,320]){
         await page.setViewportSize({width,height:900});
         await page.evaluate(theme=>applyTheme(theme),theme);
         assert(await indicator.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label} overflow at ${width}`);
         const box=await indicator.boundingBox();
         assert(box.width>100 && box.x>=0 && box.x+box.width<=width+1);
-        if(width===390) await page.screenshot({path:`/tmp/mdc-care-check/progress-${engine}-${label}-${theme}.png`});
+        if(width===390) await page.screenshot({path:`/tmp/mdc-workspace-check/progress-${engine}-${label}-${theme}.png`});
         checked++;
       }
       const result=await new AxeBuilder({page}).include('.scan-indicator').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
@@ -76,8 +94,7 @@ const assert = require('node:assert/strict');
       ['apps','/api/apps',null],['big','/api/biggest',null],
       ['optimize','/api/health','[data-action="toolkit-refresh"]'],
       ['disks','/api/disks','[data-action="toolkit-refresh"]'],
-      ['homebrew','/api/brew','[data-action="brew-refresh"]'],
-      ['care','/api/care','[data-action="care-refresh"]']]){
+      ['homebrew','/api/brew','[data-action="brew-refresh"]']]){
       const page=await start();
       let release;
       let gate=new Promise(resolve=>{release=resolve});
@@ -124,8 +141,8 @@ const assert = require('node:assert/strict');
     await page.evaluate(()=>GhostUI.enter(true));
     await page.waitForFunction(()=>!document.querySelector('#main .scan-indicator'));
     await page.close();
-    fs.writeFileSync(`/tmp/mdc-care-check/progress-${engine}-report.json`,JSON.stringify(evidence,null,2));
+    fs.writeFileSync(`/tmp/mdc-workspace-check/progress-${engine}-report.json`,JSON.stringify(evidence,null,2));
     assert.deepEqual(errors,[]);
-    console.log(`Progress (${engine}) passed: ${checked} theme/window checks across loading, report refreshes, Ghost percentage/cancel controls, single-loader placement, uninterrupted animation clocks, reduced motion, completion and error states.`);
+    console.log(`Progress (${engine}) passed: ${checked} theme/window checks across loading, report refreshes, Ghost percentage/cancel controls, single-loader placement, uninterrupted orbit/blink clocks, eyes closing/reopening, reduced motion, completion and error states.`);
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

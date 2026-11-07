@@ -32,7 +32,7 @@ ensure_venv() {
 do_venv() {
     ensure_venv
     "$BUILD_PYTHON" -m pip install --quiet --upgrade pip setuptools wheel build
-    "$BUILD_PYTHON" -m pip install --quiet -e '.[dev,media]'
+    "$BUILD_PYTHON" -m pip install --quiet -e '.[dev]'
     printf 'Development environment ready: source .venv/bin/activate\n'
 }
 
@@ -50,8 +50,8 @@ do_build() {
 
 do_app() {
     ensure_venv
-    if ! "$BUILD_PYTHON" -c 'import PIL, PyInstaller' >/dev/null 2>&1; then
-        "$BUILD_PYTHON" -m pip install --quiet pyinstaller '.[media]'
+    if ! "$BUILD_PYTHON" -c 'import PyInstaller' >/dev/null 2>&1; then
+        "$BUILD_PYTHON" -m pip install --quiet pyinstaller
     fi
     "$BUILD_PYTHON" "$SCRIPT_DIR/build_mac.py" "$@"
 }

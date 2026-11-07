@@ -112,13 +112,6 @@ def test_inspector_model_uses_language_and_rejects_incomplete_json(monkeypatch):
     assert ghost.path not in json.dumps(requests)
 
 
-def test_export_report_uses_selected_language():
-    from mac_deep_cleaner.care import export_html
-    report = export_html([], SimpleNamespace(free=1, total=2), locale='ar')
-    assert 'lang="ar" dir="rtl"' in report
-    assert localization.translate('Name', 'ar') in report
-
-
 def test_runtime_report_messages_match_catalog_templates(monkeypatch):
     monkeypatch.setattr(localization, 'load_pack', lambda locale: {'messages': {
         'Download untouched for {days} days.': 'Téléchargement inutilisé depuis {days} jours.'}})

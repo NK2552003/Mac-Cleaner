@@ -10,10 +10,6 @@ const LoaderUI = (() => {
     disks: ['Disks & volumes', 'nav_disks'],
     homebrew: ['Homebrew', 'nav_homebrew'],
     ghosts: ['Ghost Files', 'ghost'],
-    care: ['Care center', 'nav_care'],
-    'care-media': ['Similar media', 'photo'],
-    'care-startup': ['Startup items', 'apps'],
-    'care-slimming': ['App slimming', 'file'],
     settings: ['Settings', 'nav_settings'],
   };
   function visual(symbol) {
@@ -34,9 +30,12 @@ const LoaderUI = (() => {
         <path class="loader-ear" d="M42 43c-1-7-1-15 1-19 3 5 4 11 4 18m26 0c0-7 1-13 4-18 2 4 2 12 1 19"/>
         <path class="loader-fur" d="M27 73c0-23 13-34 33-34s33 11 33 34c0 22-12 30-33 30S27 95 27 73Z"/>
         <ellipse class="loader-belly" cx="60" cy="81" rx="24" ry="21"/>
-        <g class="loader-eyes"><ellipse cx="46" cy="59" rx="5.2" ry="6"/><ellipse cx="74" cy="59" rx="5.2" ry="6"/></g>
-        <g class="loader-ink"><circle cx="47" cy="59" r="2.6"/><circle cx="73" cy="59" r="2.6"/><ellipse cx="60" cy="59" rx="3.2" ry="1.8"/></g>
-        <g class="loader-eye-light"><circle cx="47.8" cy="58" r=".8"/><circle cx="73.8" cy="58" r=".8"/></g>
+        <g class="loader-motion loader-blink">
+          <g class="loader-eyes"><ellipse cx="46" cy="59" rx="5.2" ry="6"/><ellipse cx="74" cy="59" rx="5.2" ry="6"/></g>
+          <g class="loader-ink"><circle cx="47" cy="59" r="2.6"/><circle cx="73" cy="59" r="2.6"/></g>
+          <g class="loader-eye-light"><circle cx="47.8" cy="58" r=".8"/><circle cx="73.8" cy="58" r=".8"/></g>
+        </g>
+        <ellipse class="loader-ink loader-nose" cx="60" cy="59" rx="3.2" ry="1.8"/>
         <g class="loader-whiskers"><path d="m22 63 12 1m-13 4 13-1m52-3 12-1m-12 4 13 1"/></g>
         <g class="loader-belly-marks"><path d="m47 76 3-3 3 3m4-3 3-3 3 3m4 3 3-3 3 3m-31 8 3-3 3 3m4-1 3-3 3 3m4 0 3-3 3 3m4 1 3-3 3 3"/></g>
         <g class="loader-motion loader-leaf"><path class="loader-leaf-fill" d="M59 39c-13-15 0-25 14-16-1 10-7 14-14 16Z"/><path class="loader-leaf-vein" d="M56 43c6-5 5-12 11-20"/></g>

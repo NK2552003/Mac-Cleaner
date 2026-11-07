@@ -33,10 +33,18 @@ jobs:
           cache: pip
 
       - name: Install dev dependencies
-        run: pip install --upgrade pip && pip install ruff
+        run: pip install --upgrade pip && pip install ruff packaging
+
+      - name: Reject version downgrades against the base branch
+        if: github.event_name == 'pull_request'
+        env:
+          MDC_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$MDC_BASE_SHA"
+          python scripts/version_guard.py --base-ref "$MDC_BASE_SHA"
 
       - name: Check Python errors and unused definitions
-        run: ruff check --select E9,F mac_deep_cleaner tests
+        run: ruff check --select E9,F mac_deep_cleaner tests scripts/version_guard.py
 
   test:
     name: Test / Python ${{ matrix.python-version }} / ${{ matrix.os }}
@@ -101,7 +109,7 @@ jobs:
             /tmp/mdc-ghost-check/cleanup-history.md
             /tmp/ghost-fixture.log
 
-  care-ui:
+  workspace-ui:
     name: Workspace and localization browser flows
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -118,7 +126,7 @@ jobs:
           npm install --prefix /tmp/mdc-ui-check playwright@1.64.1 @axe-core/playwright@4.14.0
           /tmp/mdc-ui-check/node_modules/.bin/playwright install --with-deps chromium
       - name: Run isolated workspace and localization flows
-        run: NODE_PATH=/tmp/mdc-ui-check/node_modules python tests/run_browser_checks.py workspace deletion toolkit homebrew care localization accessibility progress
+        run: NODE_PATH=/tmp/mdc-ui-check/node_modules python tests/run_browser_checks.py workspace deletion toolkit homebrew support localization accessibility progress
       - name: Verify loader animation in WebKit
         run: |
           /tmp/mdc-ui-check/node_modules/.bin/playwright install --with-deps webkit
@@ -126,18 +134,17 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: care-center-browser-evidence
+          name: workspace-browser-evidence
           path: |
-            /tmp/mdc-care-check/*.png
-            /tmp/mdc-care-check/report.html
-            /tmp/mdc-care-check/accessibility-report.json
-            /tmp/mdc-care-check/progress-*-report.json
+            /tmp/mdc-workspace-check/*.png
+            /tmp/mdc-workspace-check/accessibility-report.json
+            /tmp/mdc-workspace-check/progress-*-report.json
             /tmp/mdc-*-fixture.log
             /tmp/mdc-ui-check/*.png
 
   build-check:
     name: Build Distribution Check
-    needs: [test, ghost-ui, care-ui]
+    needs: [test, ghost-ui, workspace-ui]
     runs-on: macos-latest
     timeout-minutes: 25
     steps:
@@ -164,7 +171,7 @@ jobs:
 
       - name: Build macOS standalone application bundle (.app)
         run: |
-          pip install -e ".[media]"
+          pip install -e .
           python scripts/build_mac.py
           cd dist
           zip -r -y "Mac-Deep-Cleaner-macOS.zip" "Mac Deep Cleaner.app"
@@ -208,8 +215,10 @@ jobs:
       - name: Compare versions
         id: compare
         run: |
+          python -m pip install packaging
           python - <<'EOF'
           import json, runpy, urllib.request
+          from scripts.version_guard import is_new_release
 
           local = runpy.run_path("mac_deep_cleaner/__init__.py")["__version__"]
           print(f"Local version : {local}")
@@ -233,7 +242,7 @@ jobs:
 
           import os
           out = os.environ["GITHUB_OUTPUT"]
-          publish = "false" if local in released_versions else "true"
+          publish = "true" if is_new_release(local, pypi, released_versions) else "false"
           with open(out, "a") as f:
               f.write(f"should_publish={publish}\n")
               f.write(f"local_version={local}\n")
@@ -241,7 +250,7 @@ jobs:
           if publish == "true":
               print(f"✅  New version detected ({pypi} → {local}). Will publish.")
           else:
-              print(f"⏭  Version {local} already on PyPI. Skipping publish.")
+              print(f"⏭  Version {local} already exists or is not newer than PyPI {pypi}. Skipping publish.")
           EOF
 
   publish:

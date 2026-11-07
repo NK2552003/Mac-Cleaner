@@ -685,7 +685,7 @@ window.GhostUI = (() => {
         title:"A final farewell?",
         confirm:"Banish to Trash",
         danger:g.final_verdict !== "likely_safe",
-        body:`<div class="review-total"><strong>${esc(g.name_guess)}</strong><b>${fmt(g.size_bytes)}</b></div><p class="ghost-path">${esc(g.path)}</p><p>${esc((g.confidence_score ? I18n.t("Evidence score {score}/100.", {score: g.confidence_score}) + " " + I18n.t(g.evidence) + " " : "") + I18n.t(g.reason))}</p><p>Move this reviewed leftover to the Trash. Restore it in Care center → Cleanup history until you empty the Trash.</p>`
+        body:`<div class="review-total"><strong>${esc(g.name_guess)}</strong><b>${fmt(g.size_bytes)}</b></div><p class="ghost-path">${esc(g.path)}</p><p>${esc((g.confidence_score ? I18n.t("Evidence score {score}/100.", {score: g.confidence_score}) + " " + I18n.t(g.evidence) + " " : "") + I18n.t(g.reason))}</p><p>${esc(I18n.t('Moved files can be restored from Cleanup history. Trash still uses disk space.'))}</p>`
       });
       if (!answer.confirmed) return;
       busy = true; updateCards();

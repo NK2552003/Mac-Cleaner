@@ -126,10 +126,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         menu.addItem(.separator())
         let open = menu.addItem(withTitle: "Open Mac Deep Cleaner", action: #selector(showWorkspace), keyEquivalent: "")
         open.target = self
-        cleanMenuItem = menu.addItem(withTitle: "Safe clean (minimal profile → Trash)", action: #selector(menuSafeClean), keyEquivalent: "")
+        cleanMenuItem = menu.addItem(withTitle: "Select safe items", action: #selector(menuSafeClean), keyEquivalent: "")
         cleanMenuItem?.target = self
         cleanMenuItem?.isEnabled = false
-        let history = menu.addItem(withTitle: "Cleanup history and tools", action: #selector(showCare), keyEquivalent: "")
+        let history = menu.addItem(withTitle: "Cleanup history", action: #selector(showHistory), keyEquivalent: "")
         history.target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Mac Deep Cleaner", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
@@ -165,9 +165,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         refreshStatus()
     }
 
-    @objc private func showCare() {
+    @objc private func showHistory() {
         showWorkspace()
-        webView.evaluateJavaScript("typeof navigate === 'function' && navigate('care')", completionHandler: nil)
+        webView.evaluateJavaScript("typeof HistoryUI !== 'undefined' && HistoryUI.open()", completionHandler: nil)
     }
 
     @objc private func menuSafeClean() {
@@ -354,7 +354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard opened, !terminating else { return .terminateNow }
-        webView.evaluateJavaScript("typeof busy !== 'undefined' && (busy || Boolean(S.busy) || (typeof ToolkitUI !== 'undefined' && ToolkitUI.isRunning()) || Boolean(window.GhostUI?.isRunning()) || (typeof CareUI !== 'undefined' && CareUI.isRunning()))") { value, _ in
+        webView.evaluateJavaScript("typeof busy !== 'undefined' && (busy || Boolean(S.busy) || (typeof ToolkitUI !== 'undefined' && ToolkitUI.isRunning()) || Boolean(window.GhostUI?.isRunning()) || (typeof HistoryUI !== 'undefined' && HistoryUI.isRunning()) || (typeof I18n !== 'undefined' && I18n.isRunning()))") { value, _ in
             if (value as? Bool) == true {
                 let alert = NSAlert()
                 alert.messageText = self.localized("An operation is still running")

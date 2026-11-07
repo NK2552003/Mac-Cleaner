@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
     const page = await browser.newPage({viewport: {width: 1200, height: 900}, reducedMotion: 'reduce'});
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto(fs.readFileSync('/tmp/mdc-care-check/launch-url', 'utf8'));
+    await page.goto(fs.readFileSync('/tmp/mdc-workspace-check/launch-url', 'utf8'));
     await page.waitForFunction(() => typeof I18n !== 'undefined' && typeof S !== 'undefined' && S !== null);
     const directory = path.join(__dirname, '../mac_deep_cleaner/web/locales');
     const locales = fs.readdirSync(directory).filter(name => name.endsWith('.json')).map(name => name.slice(0, -5));

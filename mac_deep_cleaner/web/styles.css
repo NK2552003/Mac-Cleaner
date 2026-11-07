@@ -2422,15 +2422,10 @@ dialog.is-closing::backdrop { animation: backdrop-out .18s ease-in both; }
 .related-tools .button { white-space:normal; text-align:start; }
 .disk-drive-actions { border-top:1px solid var(--line); margin-top:20px; padding-top:20px; }
 .disk-drive-actions p { color:var(--muted); font-size:12px; margin-top:6px; overflow-wrap:anywhere; }
-.disk-heading > div, .disk-browser-heading, .health-heading > div, .care-row-main, .care-row-info { min-width:0; }
+.disk-heading > div, .disk-browser-heading, .health-heading > div { min-width:0; }
 .disk-heading { flex-wrap:wrap; }
 .volume-map > span { flex-shrink:0; }
 .browsers-grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr)); }
-.media-pair { display:flex; align-items:flex-start; gap:24px; padding:20px 0; border-bottom:1px solid var(--line); }
-.media-pair > div:first-child { display:flex; flex-direction:column; color:var(--muted); min-width:70px; }
-.media-pair strong { font-size:24px; color:var(--text); }
-.media-pair-files { flex:1; min-width:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
-.media-pair .path { font-size:12px; overflow-wrap:anywhere; }
 main:focus { outline:none; }
 input[type=file] { width:100%; min-width:0; max-width:100%; }
 .brew-service-row > div:last-child, .head-actions { display:flex; flex-wrap:wrap; gap:8px; }
@@ -2442,9 +2437,6 @@ input[type=file] { width:100%; min-width:0; max-width:100%; }
 [dir=rtl] .volume-legend i { left:auto; right:0; }
 @media(max-width:650px) {
   .related-tools { gap:8px 12px; }
-  .media-pair { gap:12px; }
-  .media-pair-files { grid-template-columns:1fr; gap:12px; }
-  .care-schedule-inline { flex-wrap:wrap; }
   .pagehead, .health-heading { flex-wrap:wrap; gap:16px; }
   .disk-heading > strong { margin-inline-start:0; }
 }

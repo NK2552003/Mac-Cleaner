@@ -18,13 +18,13 @@
 
 ---
 
-**Mac Deep Cleaner v3.0.0** combines storage analysis, reviewed cleanup, system diagnostics, maintenance, Homebrew package management, and external-disk management in a local dashboard, native macOS app, and command-line tools. File cleanup uses Trash by default; disk formatting and selected maintenance commands are permanent and require a separate review.
+**Mac Deep Cleaner v3.5.0** combines storage analysis, reviewed cleanup, system diagnostics, maintenance, Homebrew package management, and external-disk management in a local dashboard, native macOS app, and command-line tools. File cleanup uses Trash by default; disk formatting and selected maintenance commands are permanent and require a separate review.
 
-Version 3.0.0 adds **Care center**: opt-in weekly cleanup, durable Trash restore, cleanup profiles, a large-file treemap, disk trends, similar-media review, startup/browser tools, app-copy slimming, HTML reports, and custom JSON rules. The native app has a menu bar widget. Settings supports 194 language choices, 42 complete bundled language packs, optional cloud translation of interface text, and offline language-pack import/export. Languages without a complete installed pack fall back to English.
+Version 3.5.0 keeps each feature in its own workspace and removes Care Center. Storage Cleanup provides durable Trash history and restore; Settings provides Ghost exclusions and language-pack jobs. The mascot loader has subtle eye blinks and continuous motion. The native menu bar opens safe-item selection for review. Settings supports 194 language choices, 42 bundled language packs, optional cloud translation of interface text, and offline language-pack import/export.
 
 Current development builds include persistent cleanup results, labeled desktop navigation, scan-permission notices, and separate typed confirmation for emptying Trash. App cache cleanup preserves WebKit and HTTP storage containing local app data. See the [quality audit and verification matrix](docs/quality-audit.md) for the tested behavior and platform limits.
 
-See the [v3.0.0 feature guide, limits, and setup](docs/v3.0.0.md).
+See the [v3.5.0 feature guide, limits, and setup](docs/v3.5.0.md).
 
 ```bash
 # Three convenient commands, same powerful tool

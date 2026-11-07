@@ -39,17 +39,15 @@ def fixture(name, marker, *args):
 
 
 def main():
-    checks = sys.argv[1:] or ['workspace', 'deletion', 'toolkit', 'homebrew', 'care', 'ghosts', 'localization', 'accessibility', 'progress']
-    allowed = {'workspace', 'deletion', 'toolkit', 'homebrew', 'care', 'ghosts', 'localization', 'accessibility', 'progress'}
+    checks = sys.argv[1:] or ['workspace', 'deletion', 'toolkit', 'homebrew', 'support', 'ghosts', 'localization', 'accessibility', 'progress']
+    allowed = {'workspace', 'deletion', 'toolkit', 'homebrew', 'support', 'ghosts', 'localization', 'accessibility', 'progress'}
     for check in checks:
         if check not in allowed:
             raise SystemExit(f'Unknown check: {check}')
         with contextlib.ExitStack() as stack:
             if check != 'ghosts':
                 args = ['--deletion'] if check == 'deletion' else []
-                url = stack.enter_context(fixture('workspace', '/tmp/mdc-care-check/launch-url', *args))
-                if check == 'care':
-                    Path('/tmp/mdc-care-check/launch-url').write_text(url + '#care')
+                url = stack.enter_context(fixture('workspace', '/tmp/mdc-workspace-check/launch-url', *args))
                 if check in {'toolkit', 'homebrew'}:
                     marker = Path('/tmp/mdc-ui-check/launch-url')
                     marker.parent.mkdir(exist_ok=True)

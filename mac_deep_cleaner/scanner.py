@@ -107,8 +107,6 @@ class Scanner:
         self.say("checking Gradle / NDK pins from your real projects")
         self.parse_gradle(walk["gradle"])
         self.scan_specs()
-        from .profiles import scan_rules
-        scan_rules(self)
         self.say("analysing project artifacts")
         self.scan_artifacts(walk["artifacts"])
         self.say("finding large & old files")

@@ -44,7 +44,7 @@ class CleanerService:
         self.closed = False
         self.toolkit = Toolkit(self.operation, self._ready_to_change)
         self._ghosts = None
-        self._care = None
+        self._language_jobs = None
 
     def _ready_to_change(self):
         with self.lock:
@@ -76,8 +76,6 @@ class CleanerService:
     def close(self):
         self.closed = True
         self.toolkit.closed = True
-        if self._care:
-            self._care.cancelled.set()
         if self._ghosts:
             self._ghosts.close()
         if self.scanner:
@@ -210,16 +208,16 @@ class CleanerService:
         finally:
             self.operation.release()
 
-    def care(self):
+    def language_jobs(self):
         with self.lock:
-            if self._care is None:
-                from .care import Care
-                self._care = Care(self)
-            return self._care
+            if self._language_jobs is None:
+                from .language_jobs import LanguageJobs
+                self._language_jobs = LanguageJobs(self)
+            return self._language_jobs
 
     def post(self, route, body):
-        if route.startswith("/api/care/"):
-            return self.care().post(route, body)
+        if route == '/api/i18n/generate':
+            return self.language_jobs().generate(body)
         if route == '/api/ghosts/config':
             return self.ghost_config(body)
         if route.startswith('/api/ghosts/'):
@@ -248,11 +246,36 @@ class CleanerService:
                 subprocess.run(['/usr/bin/open', target_url], check=False)
                 return {'ok': True}
             raise APIError(400, 'Invalid URL.')
-        if route not in ('/api/rescan', '/api/pin', '/api/clean', '/api/app/clean', '/api/settings'):
+        if route not in ('/api/rescan', '/api/pin', '/api/clean', '/api/app/clean', '/api/settings', '/api/history/restore', '/api/i18n/import', '/api/settings/ghost-allowlist/remove'):
             raise APIError(404, 'Unknown operation.')
         if not self.operation.acquire(blocking=False):
             raise APIError(409, 'Another operation is running. Wait for it to finish.')
         try:
+            if route in ('/api/history/restore', '/api/i18n/import', '/api/settings/ghost-allowlist/remove'):
+                if not self._ready_to_change():
+                    raise APIError(409, 'Wait for scans to finish.')
+                if route == '/api/history/restore':
+                    from .history import History
+                    if not isinstance(body.get('id'), str):
+                        raise APIError(400, 'Choose a history entry.')
+                    result = History().restore(body['id'])
+                    with self.lock:
+                        self.revision += 1
+                    return result
+                if route == '/api/i18n/import':
+                    from .localization import save_pack
+                    return save_pack(body)
+                path = body.get('path')
+                with self.lock:
+                    if not isinstance(path, str) or path not in self.settings.get('ghost_allowlist', []):
+                        raise APIError(400, 'Choose a current ghost.')
+                    updated = {**self.settings, 'ghost_allowlist': [p for p in self.settings['ghost_allowlist'] if p != path]}
+                    if not save_settings(updated):
+                        raise APIError(500, 'Could not save the allowlist.')
+                    self.settings = updated
+                    if self.scanner and path not in updated.get('pinned', []):
+                        self.scanner.pinned.discard(path)
+                return {'ok': True}
             if route == '/api/rescan':
                 self.start_scan()
                 return {'scan_id': self.scan_id}
@@ -372,9 +395,6 @@ class CleanerService:
                     app.parts[:] = [p for p in app.parts if not removed(p.path)]
                 self.analyzer.apps[:] = [a for a in self.analyzer.apps if not removed(a.path)]
             self.revision += 1
-        if self._care:
-            with self._care.lock:
-                self._care.media = None
         warning = self._ghosts.removed(done) if self._ghosts else ''
         return {'freed': freed, 'processed_bytes': freed, 'results': results,
                 'root': roots, 'warning': warning, 'fails': [(i.name, message) for i, message in failures], 'log': logs}

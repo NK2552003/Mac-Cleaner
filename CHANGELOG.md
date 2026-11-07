@@ -2,29 +2,63 @@
 
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
-## v3.0.0 (2026-11-07)
+## v3.5.0 (Unreleased)
 
 ### Added
 
-- Logo-matched SVG loading artwork with feature-specific symbols, colors, and motion, shared across all workspaces. Animation timing survives polling and redraws, with Reduce Motion support and measured progress where available.
-- Related-tool links connect cleanup, applications, large files, duplicates, optimization, disks, Homebrew, Ghost Files, Care, and Settings. Browser back/forward and direct view/Care-tab links preserve navigation context.
-- Similar media is available in Care with similarity scores and Finder links for both originals; results remain review-only.
-- Complete offline translations for all 42 bundled languages: 2,163 source messages and 90,846 locale entries, including the new workflows. Translation maintenance includes resumable Google Cloud batches and protected-token validation.
-- An isolated browser regression runner covers all workspaces with fresh temporary fixtures, including 144 theme/language/window combinations and every Care tab.
+- Logo-matched SVG loading artwork with feature-specific symbols, colors, and motion, shared across all workspaces. Animation timing survives polling and redraws, with subtle eye blinks, Reduce Motion support, and measured progress where available.
+- Related-tool links connect cleanup, applications, large files, duplicates, optimization, disks, Homebrew, Ghost Files, and Settings. Browser back/forward and direct view/Care-tab links preserve navigation context.
+- Complete offline translations for all 42 bundled languages: 1,990 source messages and 83,580 locale entries, including the new workflows. Translation maintenance includes resumable Google Cloud batches and protected-token validation.
+- An isolated browser regression runner covers all workspaces with fresh temporary fixtures, including 128 theme/language/window combinations.
 - Persistent cleanup results show successes, failures, and restore access without a stack of overlapping notifications. Desktop navigation shows labels by default and remembers the user's preference.
-- Real filesystem deletion/restore browser checks and WCAG accessibility audits cover cleanup, app removal, dialogs, Care forms, and both themes. Home-folder permission gaps are visible with a Privacy settings shortcut.
-- Care center with minimal/developer/designer cleanup profiles, proportional large-file treemap, accessible data lists, local disk-history chart, and standalone HTML reports printable to PDF.
+- Real filesystem deletion/restore browser checks and WCAG accessibility audits cover cleanup, app removal, dialogs, cleanup history, and both themes. Home-folder permission gaps are visible with a Privacy settings shortcut.
 - Durable SQLite Trash journal, recovery of interrupted journal updates, conflict-safe one-click/CLI restore, and cross-process cleanup/restore locking.
-- Opt-in weekly launchd cleanup for stale regular cache/log files, bounded by file count and bytes, with notifications and CLI preview/status/disable controls.
 - Native menu bar free space, memory pressure, and one-click minimal cleanup; the window can close while the app stays in the menu bar.
-- Review-only image dHash and three-frame video similarity with optional Pillow/ffmpeg dependencies and bounded work.
-- User LaunchAgent explanations and reviewed enable/disable, browser extension inventory/management, and extra Chrome/Arc, Ruby gem, and Go cache coverage.
-- Reviewed language-resource and universal-binary slimming into separate ad-hoc signed app copies in Downloads.
-- Restricted, declarative JSON cache rules with validation, dashboard editing, and CLI installation.
 - Persistent Ghost allowlist and heuristic ownership evidence scores/explanations.
 - Localization framework with 194 provider locale choices, 42 complete offline language packs, import/export, optional consented Google Cloud generation of shipped UI strings, English fallback, and RTL layouts. Coverage is shown in Settings.
 - Responsive/keyboard-accessible new views, reduced-motion handling, and native menu localization through loaded packs.
 - **Ghost Files (experimental):** Opt-in discovery of orphaned application leftovers across 8 Library roots with conservative ownership rules, exclusions for known system services, developer tools, and shared components, and optional local Ollama narration (`llama3.2:1b`, `llama3.2:3b`, `gemma3:4b`). Off by default, with lazy backend imports and browser assets.
+- **Modern Local Dashboard**: Complete redesign featuring a local web-based interface with dark-minimal styling, shared SVG mascot loading artwork, and instant category filters.
+- Shared high-resolution branding from `assets/app_icon.png` across the dashboard, browser favicon, and generated native app icon.
+
+### Fixed
+
+- Storage Cleanup displays one loader inside its overview card. Removed duplicate scan banners, old progress tracks, and skeleton placeholders; retained cancellation and clear completion/error states.
+- Ghost Files excludes macOS service folders (including Animoji, CloudDocs, SESStorage, and IntelligenceFlow), Shortcuts' legacy Workflow groups, shared crash-reporting/runtime caches, and loose support files without an app identity. App-group claims from installed apps and normalized group/team identifiers now protect shared owners. Unreadable subtrees are skipped with a permission warning instead of becoming empty ghosts. System exclusions cannot be unlocked or removed through stale Ghost results.
+- Safe bulk selection no longer includes Trash emptying, command execution, or cloud eviction. Emptying Trash requires a separate selection and explicit permanent-deletion confirmation.
+- App cache cleanup preserves WebKit and HTTP storage, which can contain local documents, sessions, and other persistent data.
+- Dry-run and selection totals avoid counting nested files twice. Excluded child paths also protect containing folders in scanner/CLI results; exclusions remove affected file-map entries immediately.
+- Interrupted restores remain retryable when the original Trash entry is intact. A final journal-write failure after a successful move no longer reports that move as a deletion failure. Restored entries no longer display a false location conflict.
+- Completed cleanup invalidates cached health/disk reports. Changed-file failures remain visible in the results panel; zero-byte removals are reported as successful operations.
+- Improved badge, heat-legend, and selected-language contrast; fixed minor Python static-analysis errors across the project.
+- Disks now shows usable physical-backed volumes and the startup volume by default, hiding EFI, recovery, VM, Preboot, Update, duplicate APFS layers, and mounted disk images. Small user volumes remain visible; filtering uses topology and roles rather than size.
+- Recover the startup snapshot when omitted from `diskutil list`, show startup storage usage across its shared APFS container, and retain physical-drive/APFS creation actions alongside the selected user volume. System records are available in Developer mode.
+- Writable APFS disk images cannot acquire physical-drive mutation permissions. Hidden records still participate in disk identity and safety checks.
+- Preserve each workspace's filters, list position, and focus, plus unsaved language inputs across navigation.
+- Prevent overlapping confirmations and late Homebrew inspector responses after navigation. Completed maintenance/disk jobs invalidate stale reports.
+- Replace inverted light-mode rendering with explicit colors, improve cleanup-panel contrast, fix narrow browser grids/file inputs and Ghost search spacing. Keyboard dropdowns skip disabled options and track restored values; dialogs close stale menus and translate immediately.
+- Maintenance jobs publish completion after releasing the operation lock, avoiding immediate follow-up action failures.
+- Conda cache findings now require caution because environments can link into those caches.
+- Duplicate revalidation uses streaming SHA-256 on all supported Python versions, including Python 3.9.
+- CLI cleanup summaries say “processed” instead of implying Trash moves immediately free space.
+- All scanning and loading states use the shared mascot loader, including refreshes of existing reports, and Ghost analysis. Chromium and WebKit checks verify continuous animation, a single workspace loader, responsive placement, and accessibility.
+- Build tooling respects the selected Python interpreter, preserves unrelated distribution artifacts, and uses the existing native builder for app and installer targets. Source archives exclude Finder metadata and bytecode.
+- Package metadata, the CLI, the native bundle, reports, and the Settings version badge derive their version from one runtime constant. CI rejects branch version downgrades and only publishes versions newer than the current PyPI release.
+
+### Changed
+
+- Removed Care Center, its sidebar/settings links, routes, CLI group, scheduling, profiles, custom rules, media comparison, app slimming, and duplicate inventory screens. Existing Trash history remains available in Storage Cleanup; language jobs and Ghost allowlist management live in Settings. No user history or settings are erased.
+- The native menu selects safe items in Storage Cleanup for review. New source and native builds no longer need the removed media extra.
+
+- Consolidated the pending feature and quality work into **3.5.0**, including all formerly Unreleased notes. Current documentation and Homebrew source references use 3.5.0.
+- Ordinary Trash moves use journaled atomic renames. Restore is provided by Cleanup history rather than Finder Put Back metadata; cross-volume moves fail safely.
+- Track source code, tests, documentation, workflows, source artwork, and complete locale packs. Ignore generated apps/packages, environments, caches, editor metadata, local credentials, and verification output; remove tracked Finder metadata and duplicate generated icons.
+
+## v3.2.0 (2026-10-31)
+
+### Added
+
+- **Ghost Files (experimental):** Opt-in discovery of orphaned application leftovers across 8 Library roots with conservative ownership rules, 0% false positives for developer and CLI tools, and optional local Ollama narration (`llama3.2:1b`, `llama3.2:3b`, `gemma3:4b`). Off by default, with lazy backend imports and browser assets.
 - **Ghost Inspector & Live Web Context:** Slide-out drawer with real macOS app icons, directory file explorer with size breakdowns, web/GitHub search links (DuckDuckGo, GitHub, Google), and AI-assisted leftover summaries.
 - **Consent-Driven AI Lifecycle:** Explicit per-step installation/start/model consent, hardware and disk checks, cancelable background jobs, fictional-ghost self-test, and graceful offline fallback.
 - **Cleanup History (Ofrenda):** Sticky history panel recording reviewed Trash farewells, with Markdown export (`cleanup-history.md`).
@@ -43,71 +77,53 @@ All notable changes to **mac-deep-cleaner** will be documented in this file.
 - App-native `mac-cleaner brew dashboard|overview|explain|heaviest|reverse-tree|audit|stats|tidy` commands, management subcommands, and the `--homebrew` dashboard shortcut.
 - Fixture tests for graph cycles, shared/cask dependencies, aliases/taps, service protection, stale plans, command compatibility, and responsive Homebrew workflows.
 - Isolated backend safety/transport tests and a browser fixture covering setup through removal at six viewport sizes.
-- **Modern Local Dashboard**: Complete redesign featuring a local web-based interface with dark-minimal styling, shared SVG mascot loading artwork, and instant category filters.
-- **Native macOS Desktop Shell**: Bundled Swift window chrome with custom window controls (`desktop/window_chrome.swift`), seamless full-screen handling, and matching sRGB dark background.
-- Shared high-resolution branding from `assets/app_icon.png` across the dashboard, browser favicon, and generated native app icon.
-- **Flexible Entry Points**: Seamless execution via `mac-deep-cleaner`, `mac-cleaner`, or `mdc` aliases across both CLI, web dashboard, and terminal UI modes.
-- **Enhanced Overlay & Drawer Animations**: Smooth left-to-right drawer slide animations and scrollbar-hidden overlays for reviewing cleanup details.
-- **Interactive Terminal UI**: Optional Rich and Questionary terminal workflows (`mac-cleaner --terminal`).
 
 ### Fixed
-
-- Storage Cleanup displays one loader inside its overview card. Removed duplicate scan banners, old progress tracks, and skeleton placeholders; retained cancellation and clear completion/error states.
-- Care scheduling uses aligned day and time dropdowns without redundant visible Day/Hour labels. Localized time values, accessible control names, and unsaved selections are preserved.
-- Ghost Files excludes macOS service folders (including Animoji, CloudDocs, SESStorage, and IntelligenceFlow), Shortcuts' legacy Workflow groups, shared crash-reporting/runtime caches, and loose support files without an app identity. App-group claims from installed apps and normalized group/team identifiers now protect shared owners. Unreadable subtrees are skipped with a permission warning instead of becoming empty ghosts. System exclusions cannot be unlocked or removed through stale Ghost results.
-- Safe bulk selection no longer includes Trash emptying, command execution, or cloud eviction. Emptying Trash requires a separate selection and explicit permanent-deletion confirmation.
-- App cache cleanup preserves WebKit and HTTP storage, which can contain local documents, sessions, and other persistent data.
-- Dry-run and selection totals avoid counting nested files twice. Excluded child paths also protect containing folders in scanner/CLI results; exclusions remove affected file-map entries immediately.
-- Interrupted restores remain retryable when the original Trash entry is intact. A final journal-write failure after a successful move no longer reports that move as a deletion failure. Restored entries no longer display a false location conflict.
-- App slimming retains legacy language names and regional/script variants of requested languages. Malformed schedule definitions fail safely, disappearing scheduled candidates are skipped, and schedule lock files reject symbolic links.
-- Completed cleanup invalidates cached health/disk reports and stale similar-media candidates. Changed-file failures remain visible in the results panel; zero-byte removals are reported as successful operations.
-- Improved badge, heat-legend, and selected-language contrast; fixed minor Python static-analysis errors across the project.
-- Disks now shows usable physical-backed volumes and the startup volume by default, hiding EFI, recovery, VM, Preboot, Update, duplicate APFS layers, and mounted disk images. Small user volumes remain visible; filtering uses topology and roles rather than size.
-- Recover the startup snapshot when omitted from `diskutil list`, show startup storage usage across its shared APFS container, and retain physical-drive/APFS creation actions alongside the selected user volume. System records are available in Developer mode.
-- Writable APFS disk images cannot acquire physical-drive mutation permissions. Hidden records still participate in disk identity and safety checks.
-- Preserve each workspace's filters, list position, and focus, plus unsaved Care rule, schedule, and language inputs across navigation. Cleanup profiles reset stale filters so selected results are visible.
-- Fix Finder actions in Care, schedule field restoration/validation, duplicate Care submissions, overlapping confirmations, and late Homebrew inspector responses after navigation. Completed maintenance/disk jobs invalidate stale reports.
-- Replace inverted light-mode rendering with explicit colors, improve cleanup-panel contrast, wrap Care tabs and tables, and fix narrow browser grids/file inputs and Ghost search spacing. Keyboard dropdowns skip disabled options and track restored values; dialogs close stale menus and translate immediately.
-- Maintenance jobs publish completion after releasing the operation lock, avoiding immediate follow-up action failures.
-- Preserve unsaved Care/settings form input during periodic dashboard refreshes.
-- Conda cache findings now require caution because environments can link into those caches.
-- Duplicate revalidation uses streaming SHA-256 on all supported Python versions, including Python 3.9.
-- CLI cleanup summaries say “processed” instead of implying Trash moves immediately free space.
 - Disk management hides recovery, boot, VM, internal APFS containers, system-data volumes, and low-level partition records by default. An explicit system-volumes toggle supports advanced inspection without bypassing protection.
 - Replaced the nested disk browser/panel layout with a flat device selector and details on one scrolling page; verified narrow and short windows.
 - Moved Homebrew controls out of the Optimize tool list while preserving the existing `--tool brew-*` aliases.
 - Disabled automatic Homebrew dependency cleanup, install cleanup, and dependent upgrades for reviewed commands to limit unintended follow-on changes.
 - Clearly distinguish available updates from vulnerability scans and Caskroom measurements from full application footprints.
-- Added the missing top inset in browser mode while preserving native window and fullscreen spacing.
-- Unified the dashboard, favicon, README, and generated macOS icon around `assets/app_icon.png`; removed redundant branding images.
-- Included shared assets in Python distributions and standalone macOS builds.
-- All scanning and loading states use the shared mascot loader, including refreshes of existing reports, Care tasks, and Ghost analysis. Chromium and WebKit checks verify continuous animation, a single workspace loader, responsive placement, and accessibility.
-- Build tooling respects the selected Python interpreter, preserves unrelated distribution artifacts, and uses the existing native builder for app and installer targets. Source archives exclude Finder metadata and bytecode.
-- Package metadata, the CLI, the native bundle, reports, and the Settings version badge derive their version from one runtime constant. CI skips versions already present on PyPI, even when a newer version also exists.
 
 ### Changed
-
-- Consolidated the pending feature and quality work into **3.0.0**, including all formerly Unreleased notes. Current documentation and Homebrew source references use 3.0.0.
-- Ordinary Trash moves use journaled atomic renames. Restore is provided by Cleanup history rather than Finder Put Back metadata; cross-volume moves fail safely.
-- Native builds require and bundle the media extra. Scheduling, cloud translation, and app slimming remain explicit opt-in operations.
-- Added isolated filesystem, rule/profile, schedule, media, localization, HTTP authorization, and browser regression coverage. Real launchd notifications, paid translation requests, and third-party slimmed-app compatibility remain manual acceptance checks.
 - All dashboard mutations now require a per-session request header (`X-MDC-Token`) and exact Origin in addition to existing cookie and Host checks.
 - Ghost items share scanner IDs, revisions, filesystem fingerprints, exclusions, and the existing Trash executor. Parent cleanup, app cleanup, and permanent deletion cannot bypass Ghost review.
 - Native shell supports reviewed local download Save dialogs, including Ofrenda, JSON reports, and Brewfiles.
+- Version 3.2.0 across runtime, CLI, package metadata, native bundle, build script, Homebrew formula reference, and current documentation.
 - Cleanup documentation now distinguishes Trash-based file removal from permanent disk/maintenance operations.
 - Native quit protection now includes maintenance jobs and retains the window when quitting is blocked.
 - Legacy `scan` / `dashboard` normalization applies only to the first argument, preserving option values with those names.
-- CLI and native bundle versions now follow the package version constant.
-- Refactored core engine into modern `mac_deep_cleaner` module with zero mandatory third-party runtime dependencies.
-- Standardized Trash moves by default with multi-step review and verification.
-- Track source code, tests, documentation, workflows, source artwork, and complete locale packs. Ignore generated apps/packages, environments, caches, editor metadata, local credentials, and verification output; remove tracked Finder metadata and duplicate generated icons.
 
 ### Safety boundaries
-
 - Disk changes are restricted to identified writable external devices; startup/home, internal, detected backup, system-role, virtual, RAID, and multi-store devices are protected.
 - Repairs, encryption, in-place partition resizing, initialization of unidentified blank media, and advanced disk operations open Apple Disk Utility.
 - Hardware erase/partition tests require a disposable drive and are not part of automated verification.
 - The actual fresh-account Ollama download/install/model self-test and native Save-dialog/Finder interaction require supported macOS acceptance testing; mocked/browser fixture checks do not establish those results.
+
+## v3.0.5 (2026-10-30)
+
+### Fixed
+- Added the missing top inset in browser mode while preserving native window and fullscreen spacing.
+- Unified the dashboard, favicon, README, and generated macOS icon around `assets/app_icon.png`; removed redundant branding images.
+- Included shared assets in Python distributions and standalone macOS builds.
+
+### Changed
+- Updated package, CLI, native bundle, build documentation, and Homebrew source URL to version 3.0.5.
+- CLI and native bundle versions now follow the package version constant.
+
+## v3.0.0 (2026-10-30)
+
+### Added
+- **Modern Local Dashboard**: Complete redesign featuring a local web-based interface with dark-minimal styling, real-time scanning radar animation, and instant category filters.
+- **Native macOS Desktop Shell**: Bundled Swift window chrome with custom window controls (`desktop/window_chrome.swift`), seamless full-screen handling, and matching sRGB dark background.
+- **Dark Minimal Totoro Mascot & Branding**: High-resolution dark minimal mascot icon (`assets/icon.png`, `desktop/AppIcon.icns`, and `web/mascot.png`).
+- **Flexible Entry Points**: Seamless execution via `mac-deep-cleaner`, `mac-cleaner`, or `mdc` aliases across both CLI, web dashboard, and terminal UI modes.
+- **Enhanced Overlay & Drawer Animations**: Smooth left-to-right drawer slide animations and scrollbar-hidden overlays for reviewing cleanup details.
+- **Interactive Terminal UI**: Optional Rich and Questionary terminal workflows (`mac-cleaner --terminal`).
+
+### Changed
+- Refactored core engine into modern `mac_deep_cleaner` module with zero mandatory third-party runtime dependencies.
+- Standardized Trash moves by default with multi-step review and verification.
 
 ## v2.5.0 (2026-10-16)
 
@@ -186,7 +202,7 @@ All notable changes to **mac-deep-cleaner** will be documented in this file.
 -Added the documentations for the command references and architecture
 
 
-### Changed 
+### Changed
 - CLI wiring for new feature commands
 - Added reporting utilities
 - Updated Readme for new features

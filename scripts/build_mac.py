@@ -18,10 +18,6 @@ parser.add_argument('--output', type=Path, default=root / 'dist')
 parser.add_argument('--work', type=Path, default=root / 'build')
 parser.add_argument('--identity', default='-', help='Developer ID Application identity; default is ad-hoc signing')
 args = parser.parse_args()
-try:
-    import PIL  # noqa: F401 - bundle image similarity support in the standalone app
-except ImportError:
-    parser.error('Install desktop build dependencies first: python -m pip install ".[media]" pyinstaller')
 if sys.platform != 'darwin':
     parser.error('Build on macOS.')
 args.output = args.output.resolve()
@@ -71,7 +67,6 @@ info = {'CFBundleName' : 'Mac Deep Cleaner', 'CFBundleDisplayName': 'Mac Deep Cl
         'CFBundleIdentifier': 'com.macdeepcleaner.desktop', 'CFBundleExecutable': 'mac-deep-cleaner',
         'CFBundleIconFile': 'AppIcon', 'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': app_version, 'CFBundleVersion': app_version,
         'LSMinimumSystemVersion': minimum_version, 'NSHighResolutionCapable': True,
-        'NSAppleEventsUsageDescription': 'Mac Deep Cleaner sends local notifications after scheduled cleanup.',
         'NSDocumentsFolderUsageDescription': 'Analyze storage and review cleanup in your Documents folder.',
         'NSDownloadsFolderUsageDescription': 'Analyze downloaded files and review cleanup.',
         'NSDesktopFolderUsageDescription': 'Analyze files on your Desktop and review cleanup.',

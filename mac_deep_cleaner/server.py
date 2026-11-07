@@ -21,9 +21,9 @@ if not BRANDING.is_dir():
     # Source checkout; wheels and frozen builds ship assets beside this module.
     BRANDING = Path(__file__).resolve().parent.parent / 'assets'
 ASSETS = {'/assets/loaders.js': ('loaders.js', 'text/javascript; charset=utf-8'),
+          '/assets/history.js': ('history.js', 'text/javascript; charset=utf-8'),
           '/assets/loaders.css': ('loaders.css', 'text/css; charset=utf-8'),
-          '/assets/care.js': ('care.js', 'text/javascript; charset=utf-8'),
-          '/assets/care.css': ('care.css', 'text/css; charset=utf-8'),
+          '/assets/settings.css': ('settings.css', 'text/css; charset=utf-8'),
           '/assets/i18n.js': ('i18n.js', 'text/javascript; charset=utf-8'),
           '/': ('index.html', 'text/html; charset=utf-8'),
           '/assets/overlays.js': ('overlays.js', 'text/javascript; charset=utf-8'),
@@ -163,14 +163,11 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == '/api/i18n/catalog':
                 from .localization import catalog
                 return self._send(200, {'locale': 'en', 'messages': {s: s for s in catalog()}})
-            if url.path == '/api/care':
-                return self._send(200, service.care().report())
-            if url.path == '/api/care/report':
-                from .care import export_html
-                import shutil
-                with service.lock, service.scanner.lock:
-                    report = export_html(service.scanner.items, shutil.disk_usage(Path.home()), query.get('paths') == ['1'], locale=service.settings.get('language', 'en'))
-                return self._send(200, report, 'text/html; charset=utf-8', {'Content-Disposition': 'attachment; filename=mac-cleaner-report.html'})
+            if url.path == '/api/history':
+                from .history import History
+                return self._send(200, {'history': History().records()})
+            if url.path == '/api/i18n/job':
+                return self._send(200, service.language_jobs().report())
             if url.path == '/api/ghosts/config':
                 return self._send(200, service.ghost_config())
             if url.path == '/api/ghosts/icon':

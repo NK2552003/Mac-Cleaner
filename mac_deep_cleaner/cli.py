@@ -142,9 +142,9 @@ def run_toolkit_cli(args):
 
 
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] == 'care':
-        from .care_cli import main as care_main
-        return care_main(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] in ('history', 'restore'):
+        from .history_cli import main as history_main
+        return history_main(sys.argv[1], sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == 'ghosts':
         from .ghost_cli import main as ghost_main
         return ghost_main(sys.argv[2:])
