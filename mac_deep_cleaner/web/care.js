@@ -141,6 +141,7 @@ const CareUI = (() => {
 
   function overview() {
     const schedule = report.schedule;
+    const timeLabel = new Intl.DateTimeFormat(I18n.locale(), {hour:'2-digit', minute:'2-digit', hourCycle:'h23', timeZone:'UTC'});
     return `
       <div class="care-overview-minimal">
         <section class="care-minimal-row">
@@ -168,14 +169,16 @@ const CareUI = (() => {
             <p>${text('Old cache and log files only. Moves to Trash with restore history.')}</p>
           </div>
           <div class="care-schedule-inline">
-            <label class="schedule-field">${text('Day')}
+            <div class="schedule-field">
               <select id="careWeekday" aria-label="${text('Day')}" ${schedule.enabled ? 'disabled' : ''}>
                 ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((d, i) => `<option value="${i}" ${i === (schedule.calendar?.Weekday ?? 0) ? 'selected' : ''}>${text(d)}</option>`).join('')}
               </select>
-            </label>
-            <label class="schedule-field">${text('Hour')}
-              <input id="careHour" type="number" min="0" max="23" step="1" value="${schedule.calendar?.Hour ?? 10}" aria-label="${text('Hour')}" ${schedule.enabled ? 'disabled' : ''}>
-            </label>
+            </div>
+            <div class="schedule-field">
+              <select id="careHour" aria-label="${text('Hour')}" ${schedule.enabled ? 'disabled' : ''}>
+                ${Array.from({length:24}, (_, hour) => `<option value="${hour}" ${hour === (schedule.calendar?.Hour ?? 10) ? 'selected' : ''}>${esc(timeLabel.format(new Date(Date.UTC(2020, 0, 1, hour))))}</option>`).join('')}
+              </select>
+            </div>
             ${action(schedule.enabled ? 'Disable schedule' : 'Review schedule', 'schedule', {}, !schedule.supported)}
           </div>
         </section>
@@ -338,7 +341,7 @@ const CareUI = (() => {
         </div>
       </div>
       ${error ? `<div class="error-banner" role="alert">${icon('alert')}<span>${esc(error)}</span></div>` : ''}
-      ${report?.job && !report.job.done ? scanIndicator(report.job.message) : fetching ? scanIndicator('Loading local care tools…') : ''}
+      ${report?.job && !report.job.done ? scanIndicator(report.job.message, {feature:['media','startup','slimming'].includes(tab) ? 'care-'+tab : 'care'}) : fetching ? scanIndicator('Loading local care tools…') : ''}
       ${report ? ({overview, history, media, startup, browsers, slimming, rules}[tab]()) : ''}
     </div>`;
   }

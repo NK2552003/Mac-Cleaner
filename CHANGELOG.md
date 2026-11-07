@@ -6,6 +6,7 @@ All notable changes to **mac-deep-cleaner** will be documented in this file.
 
 ### Added
 
+- Logo-matched SVG loading artwork with feature-specific symbols, colors, and motion, shared across all workspaces. Animation timing survives polling and redraws, with Reduce Motion support and measured progress where available.
 - Related-tool links connect cleanup, applications, large files, duplicates, optimization, disks, Homebrew, Ghost Files, Care, and Settings. Browser back/forward and direct view/Care-tab links preserve navigation context.
 - Similar media is available in Care with similarity scores and Finder links for both originals; results remain review-only.
 - Complete offline translations for all 42 bundled languages: 2,163 source messages and 90,846 locale entries, including the new workflows. Translation maintenance includes resumable Google Cloud batches and protected-token validation.
@@ -42,7 +43,7 @@ All notable changes to **mac-deep-cleaner** will be documented in this file.
 - App-native `mac-cleaner brew dashboard|overview|explain|heaviest|reverse-tree|audit|stats|tidy` commands, management subcommands, and the `--homebrew` dashboard shortcut.
 - Fixture tests for graph cycles, shared/cask dependencies, aliases/taps, service protection, stale plans, command compatibility, and responsive Homebrew workflows.
 - Isolated backend safety/transport tests and a browser fixture covering setup through removal at six viewport sizes.
-- **Modern Local Dashboard**: Complete redesign featuring a local web-based interface with dark-minimal styling, real-time scanning radar animation, and instant category filters.
+- **Modern Local Dashboard**: Complete redesign featuring a local web-based interface with dark-minimal styling, shared SVG mascot loading artwork, and instant category filters.
 - **Native macOS Desktop Shell**: Bundled Swift window chrome with custom window controls (`desktop/window_chrome.swift`), seamless full-screen handling, and matching sRGB dark background.
 - Shared high-resolution branding from `assets/app_icon.png` across the dashboard, browser favicon, and generated native app icon.
 - **Flexible Entry Points**: Seamless execution via `mac-deep-cleaner`, `mac-cleaner`, or `mdc` aliases across both CLI, web dashboard, and terminal UI modes.
@@ -51,6 +52,8 @@ All notable changes to **mac-deep-cleaner** will be documented in this file.
 
 ### Fixed
 
+- Storage Cleanup displays one loader inside its overview card. Removed duplicate scan banners, old progress tracks, and skeleton placeholders; retained cancellation and clear completion/error states.
+- Care scheduling uses aligned day and time dropdowns without redundant visible Day/Hour labels. Localized time values, accessible control names, and unsaved selections are preserved.
 - Ghost Files excludes macOS service folders (including Animoji, CloudDocs, SESStorage, and IntelligenceFlow), Shortcuts' legacy Workflow groups, shared crash-reporting/runtime caches, and loose support files without an app identity. App-group claims from installed apps and normalized group/team identifiers now protect shared owners. Unreadable subtrees are skipped with a permission warning instead of becoming empty ghosts. System exclusions cannot be unlocked or removed through stale Ghost results.
 - Safe bulk selection no longer includes Trash emptying, command execution, or cloud eviction. Emptying Trash requires a separate selection and explicit permanent-deletion confirmation.
 - App cache cleanup preserves WebKit and HTTP storage, which can contain local documents, sessions, and other persistent data.
@@ -78,7 +81,7 @@ All notable changes to **mac-deep-cleaner** will be documented in this file.
 - Added the missing top inset in browser mode while preserving native window and fullscreen spacing.
 - Unified the dashboard, favicon, README, and generated macOS icon around `assets/app_icon.png`; removed redundant branding images.
 - Included shared assets in Python distributions and standalone macOS builds.
-- All scanning and loading states now share Storage Cleanup’s progress indicator, including refreshes of existing reports, Care tasks, and Ghost analysis. Cancel controls and measured progress remain available.
+- All scanning and loading states use the shared mascot loader, including refreshes of existing reports, Care tasks, and Ghost analysis. Chromium and WebKit checks verify continuous animation, a single workspace loader, responsive placement, and accessibility.
 - Build tooling respects the selected Python interpreter, preserves unrelated distribution artifacts, and uses the existing native builder for app and installer targets. Source archives exclude Finder metadata and bytecode.
 - Package metadata, the CLI, the native bundle, reports, and the Settings version badge derive their version from one runtime constant. CI skips versions already present on PyPI, even when a newer version also exists.
 

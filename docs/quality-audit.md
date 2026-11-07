@@ -12,18 +12,30 @@ browser flow also passes. The results below describe the preceding full UI audit
 ## 3.0.0 release verification
 
 - The full Python suite passes 377 tests and all nine browser flows pass.
-- A shared Storage Cleanup progress component is used throughout the workspaces,
-  including active-report refreshes, Care jobs, and Ghost scans/analysis. The header
-  reflects current activity instead of reporting a completed scan while loading.
-- Progress verification covers 78 feature/theme/window combinations, completion,
-  failed requests, measured percentages, cancel controls, and 13 accessibility checks.
+- One shared SVG mascot loader matches the source icon, with feature-specific
+  colors, symbols, and orbit timing. Storage Cleanup uses one loader inside its
+  overview card; duplicate banners, old progress tracks, and skeletons are removed.
+  Active-report refreshes, Care jobs, and Ghost scans/analysis use the same component.
+  The header reflects current activity without adding an animated indicator.
+- Progress verification passes in both Chromium and WebKit: 78 feature/theme/window
+  combinations and 13 accessibility checks per engine. Checks cover completion,
+  failed requests, measured percentages, cancellation, single-loader placement,
+  preserved animation start times across redraws, and Reduce Motion.
+- Care scheduling displays aligned day/time dropdowns without redundant visible
+  labels. Tests verify accessible control names, localized time values, and draft
+  persistence across navigation and polling.
+- The subsequent read-only Ghost recheck found no candidates and retained warnings
+  about unreadable installed apps and Application Support. This is not proof that
+  inaccessible folders have no leftovers. Ghost system exclusions, review, cancel,
+  and Trash/history flows pass with disposable fixtures; no host files were cleaned.
 - Runtime, UI, report, package, and native bundle versions derive from one constant.
   The pending feature notes are consolidated into the 3.0.0 changelog section.
 - `.gitignore` excludes generated output and local credentials; source artwork and
   complete locale packs remain tracked. Finder metadata and duplicate icons are
   removed from the index and excluded from source distributions.
 - The existing build scripts produce the versioned wheel/source archive and native
-  macOS app. Package contents are checked for all 42 locales and the source icon.
+  macOS app and installer. Package contents are checked for all 42 locales, the
+  source icon, and both shared loader assets.
 
 ## Verified results
 
@@ -88,10 +100,12 @@ tests. Automated coverage cannot establish those outcomes.
 .venv/bin/python -m pytest -q
 .venv/bin/ruff check --select E9,F mac_deep_cleaner tests
 npm install --prefix /tmp/mdc-ui-check playwright@1.64.1 @axe-core/playwright@4.14.0
-/tmp/mdc-ui-check/node_modules/.bin/playwright install chromium
+/tmp/mdc-ui-check/node_modules/.bin/playwright install chromium webkit
 NODE_PATH=/tmp/mdc-ui-check/node_modules .venv/bin/python tests/run_browser_checks.py
+MDC_TEST_BROWSER=webkit NODE_PATH=/tmp/mdc-ui-check/node_modules .venv/bin/python tests/run_browser_checks.py progress
 python3 scripts/complete_locales.py --check
-.venv/bin/python scripts/build_mac.py --output dist/quality-review --work /tmp/mdc-professional-bundle-build
+bash scripts/build.sh pkg
+bash scripts/build.sh build
 ```
 
 The browser runner creates a fresh fixture for each flow and stops it afterward.

@@ -79,7 +79,7 @@ window.GhostUI = (() => {
   function progress(job, kind) {
     if (!job || (job.done && !job.error && !job.cancelled)) return "";
     if (job.done) return `<div class="error-banner" role="status">${icon('alert')}<span>${esc(job.error || job.msg)}</span></div>`;
-    return scanIndicator(job.msg, {percent:job.pct, actions:button(I18n.t('Cancel'), 'ghost-cancel', {data:{kind}})});
+    return scanIndicator(job.msg, {feature:'ghosts',key:`ghosts:${kind}:${report?.scan_id || 'initial'}`,percent:job.pct, actions:button(I18n.t('Cancel'), 'ghost-cancel', {data:{kind}})});
   }
 
   function renderProgressHtml() {
@@ -181,6 +181,7 @@ window.GhostUI = (() => {
     const progWrap = document.getElementById("ghostProgressWrap");
     if (progWrap) {
       progWrap.innerHTML = renderProgressHtml();
+      LoaderUI.sync(progWrap);
       updateActivityStatus();
     }
 
@@ -401,6 +402,7 @@ window.GhostUI = (() => {
     `;
 
     Overlays.open($("detailDialog"));
+    LoaderUI.sync($("detailDialog"));
 
     try {
       const data = await api(`/api/ghosts/explain?id=${id}${forceRefresh ? "&refresh=1" : ""}`);
@@ -528,6 +530,7 @@ window.GhostUI = (() => {
       setupPolling = !result.done;
       if ($("ghostSetupProgress")) {
         $("ghostSetupProgress").innerHTML = progress(result,"setup") + (result.sample ? `<blockquote>${esc(result.sample)}</blockquote><p>Self-test passed. Your local storyteller is ready.</p>` : "") + (result.done && !result.error && !result.cancelled ? '<p>Completed.</p>' : "");
+        LoaderUI.sync($("ghostSetupProgress"));
         $("detailDialog").querySelectorAll('[data-action="ghost-run-setup"], [data-action="ghost-no-ai"], #ghostModel, #ghostModelControl').forEach(e => e.disabled = setupPolling);
       }
       if (setupPolling) setupTimer = setTimeout(pollSetup, 700);

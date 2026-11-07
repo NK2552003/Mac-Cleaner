@@ -119,6 +119,10 @@ jobs:
           /tmp/mdc-ui-check/node_modules/.bin/playwright install --with-deps chromium
       - name: Run isolated workspace and localization flows
         run: NODE_PATH=/tmp/mdc-ui-check/node_modules python tests/run_browser_checks.py workspace deletion toolkit homebrew care localization accessibility progress
+      - name: Verify loader animation in WebKit
+        run: |
+          /tmp/mdc-ui-check/node_modules/.bin/playwright install --with-deps webkit
+          MDC_TEST_BROWSER=webkit NODE_PATH=/tmp/mdc-ui-check/node_modules python tests/run_browser_checks.py progress
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -127,7 +131,7 @@ jobs:
             /tmp/mdc-care-check/*.png
             /tmp/mdc-care-check/report.html
             /tmp/mdc-care-check/accessibility-report.json
-            /tmp/mdc-care-check/progress-report.json
+            /tmp/mdc-care-check/progress-*-report.json
             /tmp/mdc-*-fixture.log
             /tmp/mdc-ui-check/*.png
 

@@ -1,10 +1,12 @@
 /* Hold real fixture responses to verify shared loading indicators and completion. */
-const {chromium} = require('playwright');
+const {chromium,webkit} = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
 (async()=>{
-  const browser=await chromium.launch({headless:true});
+  const engine=process.env.MDC_TEST_BROWSER || 'chromium';
+  assert(['chromium','webkit'].includes(engine));
+  const browser=await ({chromium,webkit}[engine]).launch({headless:true});
   const errors=[], evidence=[];
   let checked=0;
   try {
@@ -22,16 +24,35 @@ const assert = require('node:assert/strict');
       await indicator.waitFor();
       assert.notEqual(await page.locator('#status').innerText(),'Scan complete',`${label} must update the shared activity status`);
       assert.equal(await indicator.getAttribute('role'),'status');
-      assert.equal(await indicator.locator('.scan-indicator-row > .i').count(),1);
-      assert.equal(await indicator.locator('.scan-track > i').count(),1);
-      assert.equal(await page.locator('.ghost-spinner,.ghost-progress progress,.scan-pill').count(),0);
+      assert.equal(await page.locator('#main .brand-loader').count(),1,`${label} must have one loader`);
+      assert.equal(await indicator.locator('svg.loader-visual').count(),1);
+      assert.equal(await indicator.getAttribute('data-feature'),label.replace('-refresh',''));
+      assert.equal(await page.locator('.scan-track,.scan-banner,.ghost-spinner,.ghost-progress progress,.scan-pill,.skeleton').count(),0);
+      await page.emulateMedia({reducedMotion:'no-preference'});
+      const before=await page.evaluate(()=>{
+        LoaderUI.sync();
+        const animation=document.querySelector('#main .loader-orbit').getAnimations()[0];
+        return {start:animation.startTime,time:animation.currentTime,state:animation.playState};
+      });
+      assert.equal(before.state,'running');
+      await page.waitForTimeout(100);
+      const after=await page.evaluate(()=>{
+        draw();
+        const animation=document.querySelector('#main .loader-orbit').getAnimations()[0];
+        return {start:animation.startTime,time:animation.currentTime};
+      });
+      assert.equal(after.start,before.start,`${label} must retain its animation clock across redraws`);
+      assert(after.time>before.time+50,`${label} animation must keep advancing`);
+      assert.equal(await indicator.locator('.loader-orbit').evaluate(el=>getComputedStyle(el).animationTimingFunction),'linear');
+      await page.emulateMedia({reducedMotion:'reduce'});
+      assert.equal(await indicator.locator('.loader-orbit').evaluate(el=>el.getAnimations().length),0,'Reduced motion must stop decorative animation');
       for(const theme of ['dark','light']) for(const width of [1440,390,320]){
         await page.setViewportSize({width,height:900});
         await page.evaluate(theme=>applyTheme(theme),theme);
         assert(await indicator.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label} overflow at ${width}`);
         const box=await indicator.boundingBox();
         assert(box.width>100 && box.x>=0 && box.x+box.width<=width+1);
-        if(width===390) await page.screenshot({path:`/tmp/mdc-care-check/progress-${label}-${theme}.png`});
+        if(width===390) await page.screenshot({path:`/tmp/mdc-care-check/progress-${engine}-${label}-${theme}.png`});
         checked++;
       }
       const result=await new AxeBuilder({page}).include('.scan-indicator').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
@@ -42,6 +63,11 @@ const assert = require('node:assert/strict');
       const page=await start();
       await page.evaluate(view=>{S.scanning=true;S.progress='Scanning in progress';navigate(view);},view);
       await inspect(page,view);
+      if(view==='clean'){
+        assert.equal(await page.locator('.overview .brand-loader').count(),1,'Storage loader belongs inside its overview card');
+        await page.evaluate(()=>{S.items=[];draw();});
+        assert.equal(await page.locator('#main .brand-loader').count(),1,'An empty scan must not add a second loader');
+      }
       await page.evaluate(()=>{S.scanning=false;draw();});
       assert.equal(await page.locator('#main .scan-indicator').count(),0);
       await page.close();
@@ -93,13 +119,13 @@ const assert = require('node:assert/strict');
     await inspect(page,'ghosts');
     assert.equal(await page.locator('.scan-indicator [data-action="ghost-cancel"]').count(),1);
     assert.match(await page.locator('.scan-indicator').innerText(),/42%/);
-    assert.equal(await page.locator('.scan-track i').first().evaluate(el=>el.style.width),'42%');
+    assert.equal(await page.locator('.loader-value').innerText(),'42%');
     await page.unroute('**/api/ghosts/state');
     await page.evaluate(()=>GhostUI.enter(true));
     await page.waitForFunction(()=>!document.querySelector('#main .scan-indicator'));
     await page.close();
-    fs.writeFileSync('/tmp/mdc-care-check/progress-report.json',JSON.stringify(evidence,null,2));
+    fs.writeFileSync(`/tmp/mdc-care-check/progress-${engine}-report.json`,JSON.stringify(evidence,null,2));
     assert.deepEqual(errors,[]);
-    console.log(`Progress passed: ${checked} theme/window checks across loading, report refreshes, Ghost percentage/cancel controls, completion and error states.`);
+    console.log(`Progress (${engine}) passed: ${checked} theme/window checks across loading, report refreshes, Ghost percentage/cancel controls, single-loader placement, uninterrupted animation clocks, reduced motion, completion and error states.`);
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

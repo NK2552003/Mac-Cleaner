@@ -1085,3 +1085,9 @@ textarea:focus-visible {
 .heatmap-legend .heat-1 { background:#036d99; }
 [data-theme=light] .badge { color:#225f8c; background:#e2f0fa; border-color:#a9cbe3; }
 [data-theme=light] .badge.rtl-badge { color:#7a4b06; background:#fff1d8; border-color:#dec497; }
+
+/* Self-describing day/time controls share one baseline with their action. */
+.care-schedule-inline .schedule-field { min-width:0; }
+.care-schedule-inline #careWeekdayControl { min-width:132px; }
+.care-schedule-inline #careHourControl { min-width:100px; }
+.care-schedule-inline > .button { min-height:40px; }

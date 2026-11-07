@@ -20,7 +20,9 @@ BRANDING = Path(__file__).with_name('assets')
 if not BRANDING.is_dir():
     # Source checkout; wheels and frozen builds ship assets beside this module.
     BRANDING = Path(__file__).resolve().parent.parent / 'assets'
-ASSETS = {'/assets/care.js': ('care.js', 'text/javascript; charset=utf-8'),
+ASSETS = {'/assets/loaders.js': ('loaders.js', 'text/javascript; charset=utf-8'),
+          '/assets/loaders.css': ('loaders.css', 'text/css; charset=utf-8'),
+          '/assets/care.js': ('care.js', 'text/javascript; charset=utf-8'),
           '/assets/care.css': ('care.css', 'text/css; charset=utf-8'),
           '/assets/i18n.js': ('i18n.js', 'text/javascript; charset=utf-8'),
           '/': ('index.html', 'text/html; charset=utf-8'),
