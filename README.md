@@ -20,9 +20,9 @@
 
 **Mac Deep Cleaner v3.5.0** combines storage analysis, reviewed cleanup, system diagnostics, maintenance, Homebrew package management, and external-disk management in a local dashboard, native macOS app, and command-line tools. File cleanup uses Trash by default; disk formatting and selected maintenance commands are permanent and require a separate review.
 
-Version 3.5.0 keeps each feature in its own workspace and removes Care Center. Storage Cleanup provides durable Trash history and restore; Settings provides Ghost exclusions and language-pack jobs. The mascot loader has subtle eye blinks and continuous motion. The native menu bar opens safe-item selection for review. Settings supports 194 language choices, 42 bundled language packs, optional cloud translation of interface text, and offline language-pack import/export.
+Version 3.5.0 keeps each feature in its own workspace and removes Care Center. Storage Cleanup provides durable Trash history and restore; Settings provides Ghost exclusions and language-pack jobs. The mascot loader has subtle eye blinks and continuous motion. The native menu bar provides one-click safe cache/log cleanup, update checks, and Cleanup history. Settings provides 42 bundled offline language packs and language-pack import/export. Cloud translation APIs are not used.
 
-Current development builds include persistent cleanup results, labeled desktop navigation, scan-permission notices, and separate typed confirmation for emptying Trash. App cache cleanup preserves WebKit and HTTP storage containing local app data. See the [quality audit and verification matrix](docs/quality-audit.md) for the tested behavior and platform limits.
+Current development builds add opt-in scheduled safe cleanup, GitHub release checks, native notifications, and menu-bar-only operation after closing the window. See [automation and menu bar behavior](docs/automation.md). They also include persistent cleanup results, labeled desktop navigation, scan-permission notices, and separate typed confirmation for emptying Trash. App cache cleanup preserves WebKit and HTTP storage containing local app data. See the [quality audit and verification matrix](docs/quality-audit.md) for the tested behavior and platform limits.
 
 See the [v3.5.0 feature guide, limits, and setup](docs/v3.5.0.md).
 
@@ -39,7 +39,7 @@ mdc                 # Fast CLI shorthand
 
 | **Safety First** | **Modern UI & Desktop App** | **Deep Local Analysis** |
 | :--- | :--- | :--- |
-| Never deletes without review | Responsive dashboard with dark-minimal aesthetic | Intelligent application footprints & leftovers |
+| Reviewed cleanup; opt-in safe automation | Responsive dashboard with dark-minimal aesthetic | Intelligent application footprints & leftovers |
 | Trash history and conflict-safe restore | Integrated macOS native window chrome & full-screen | Dev toolchains, Docker, caches, logs, Xcode |
 | Protected & macOS-managed path guards | Optional Rich & Questionary interactive terminal UI | Duplicate file detection with content hashing |
 | Validated scan generations & revisions | No app telemetry; Homebrew can fetch metadata | Fast multi-threaded local scanning |

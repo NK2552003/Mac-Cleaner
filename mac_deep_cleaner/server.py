@@ -20,7 +20,8 @@ BRANDING = Path(__file__).with_name('assets')
 if not BRANDING.is_dir():
     # Source checkout; wheels and frozen builds ship assets beside this module.
     BRANDING = Path(__file__).resolve().parent.parent / 'assets'
-ASSETS = {'/assets/loaders.js': ('loaders.js', 'text/javascript; charset=utf-8'),
+ASSETS = {'/assets/automation.js': ('automation.js', 'text/javascript; charset=utf-8'),
+          '/assets/loaders.js': ('loaders.js', 'text/javascript; charset=utf-8'),
           '/assets/history.js': ('history.js', 'text/javascript; charset=utf-8'),
           '/assets/loaders.css': ('loaders.css', 'text/css; charset=utf-8'),
           '/assets/settings.css': ('settings.css', 'text/css; charset=utf-8'),
@@ -166,8 +167,8 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == '/api/history':
                 from .history import History
                 return self._send(200, {'history': History().records()})
-            if url.path == '/api/i18n/job':
-                return self._send(200, service.language_jobs().report())
+            if url.path == '/api/background':
+                return self._send(200, service.background_status())
             if url.path == '/api/ghosts/config':
                 return self._send(200, service.ghost_config())
             if url.path == '/api/ghosts/icon':
@@ -269,6 +270,7 @@ def create_server(args, settings, service=None):
 
 def serve(args, settings, on_ready=None):
     server = create_server(args, settings)
+    server.service.automation.start_scheduler()
     stopped = threading.Event()
     def shutdown(*_args):
         if not stopped.is_set():

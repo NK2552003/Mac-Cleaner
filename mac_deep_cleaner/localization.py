@@ -1,28 +1,15 @@
-"""Offline language packs and opt-in translation of shipped UI strings only.
+"""Offline interface language packs. No translation network requests."""
 
-Google Cloud Translation Basic REST reference:
-https://docs.cloud.google.com/translate/docs/reference/rest/v2/translate
-No filename, scan result, command output, or document content is sent.
-"""
-
-import hashlib
-import html
 import json
-import os
 import re
-import threading
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
 
 from .errors import APIError
 from .feature_config import atomic_json
 
 WEB = Path(__file__).with_name("web")
-# Google NMT language codes; region/script variants remain distinct. Custom packs
-# can use other BCP-47 tags, including languages unavailable from the provider.
-LANGUAGES = """ab ace ach af sq alz am ar hy as awa ay az ban bm ba eu btx bts bbc be bem bn bew bho bik bs br bg bua yue ca ceb ny zh-CN zh-TW cv co crh hr cs da din dv doi dov nl dz en eo et ee fj fil fi fr fr-FR fr-CA fy ff gaa gl lg ka de el gn gu ht cnh ha haw he hil hi hmn hu hrx is ig ilo id ga it ja jv kn pam kk km cgg rw ktu gom ko kri ku ckb ky lo ltg la lv lij li ln lt lmo luo lb mk mai mak mg ms ms-Arab ml mt mi mr chm mni-Mtei min lus mn my nr new ne nso no nus oc or om pag pap ps fa pl pt pt-PT pt-BR pa pa-Arab qu rom ro rn ru sm sg sa gd sr st crs shn sn scn szl sd si sk sl so es su sw ss sv tg ta tt te tet th ti ts tn tr tk ak uk ur ug uz vi cy xh yi yo yua zu""".split()  # noqa: SIM905 - compact registry maintained against provider language list
+# BCP-47 language choices; region/script variants remain distinct.
+LANGUAGES = """ab ace ach af sq alz am ar hy as awa ay az ban bm ba eu btx bts bbc be bem bn bew bho bik bs br bg bua yue ca ceb ny zh-CN zh-TW cv co crh hr cs da din dv doi dov nl dz en eo et ee fj fil fi fr fr-FR fr-CA fy ff gaa gl lg ka de el gn gu ht cnh ha haw he hil hi hmn hu hrx is ig ilo id ga it ja jv kn pam kk km cgg rw ktu gom ko kri ku ckb ky lo ltg la lv lij li ln lt lmo luo lb mk mai mak mg ms ms-Arab ml mt mi mr chm mni-Mtei min lus mn my nr new ne nso no nus oc or om pag pap ps fa pl pt pt-PT pt-BR pa pa-Arab qu rom ro rn ru sm sg sa gd sr st crs shn sn scn szl sd si sk sl so es su sw ss sv tg ta tt te tet th ti ts tn tr tk ak uk ur ug uz vi cy xh yi yo yua zu""".split()  # noqa: SIM905 - compact language registry
 RTL = {"ar", "he", "fa", "ur", "ps", "sd", "ug", "yi", "dv", "ckb"}
 
 
@@ -176,81 +163,5 @@ def metadata():
         "installed": sorted(installed),
         "messages": len(strings),
         "characters": sum(map(len, strings)),
-        "provider": "Google Cloud Translation Basic",
-        "key_available": bool(os.environ.get("MDC_TRANSLATE_API_KEY")),
-        "notice": "Cloud generation is optional and may incur Google Cloud charges. Only shipped interface text is sent. Generated packs are cached locally; unprovided translations fall back to English.",
+        "provider": "offline",
     }
-
-
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise APIError(502, "The translation provider redirected the request; it was blocked.")
-
-
-GENERATE_LOCK = threading.Lock()
-
-
-def generate(locale, api_key="", progress=lambda text: None, confirmed=False):
-    if confirmed is not True:
-        raise APIError(
-            400, "Confirm sending the shipped interface strings to Google Cloud Translation."
-        )
-    locale = locale_code(locale)
-    if locale not in LANGUAGES or locale == "en":
-        raise APIError(400, "Choose a supported target language, or import a custom language pack.")
-    key = api_key or os.environ.get("MDC_TRANSLATE_API_KEY", "")
-    if not isinstance(key, str) or not 10 <= len(key) <= 250 or any(c.isspace() for c in key):
-        raise APIError(400, "Provide a Google Cloud Translation API key. It is not saved.")
-    if not GENERATE_LOCK.acquire(blocking=False):
-        raise APIError(409, "Another language pack is being generated.")
-    try:
-        strings = catalog()
-        translated = dict(load_pack(locale)["messages"])
-        missing = [s for s in strings if s not in translated or translated[s] == s]
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-        # Small batches bound provider payloads; successful batches survive failures.
-        batches, current, size = [], [], 0
-        for source in missing:
-            if current and (len(current) >= 64 or size + len(source) > 4000):
-                batches.append(current)
-                current, size = [], 0
-            current.append(source)
-            size += len(source)
-        if current:
-            batches.append(current)
-        for number, batch in enumerate(batches):
-            progress(f"Translating interface batch {number + 1}/{len(batches)}…")
-            data = urllib.parse.urlencode(
-                {"key": key, "q": batch, "target": locale, "source": "en", "format": "text"},
-                doseq=True,
-            ).encode()
-            request = urllib.request.Request(
-                "https://translation.googleapis.com/language/translate/v2",
-                data=data,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                method="POST",
-            )
-            try:
-                with opener.open(request, timeout=30) as response:
-                    payload = response.read(2_000_001)
-                if len(payload) > 2_000_000:
-                    raise ValueError("Response too large")
-                values = json.loads(payload)["data"]["translations"]
-                if len(values) != len(batch):
-                    raise ValueError("Incomplete translations")
-                for source, value in zip(batch, values):
-                    translated[source] = html.unescape(value["translatedText"])
-                save_pack({"locale": locale, "messages": translated})
-            except (OSError, ValueError, KeyError, TypeError):
-                raise APIError(
-                    502,
-                    "Translation failed. Check the API key, enabled API, billing/quota, and network. Completed batches were saved; retry to resume.",
-                ) from None
-        return {
-            "message": "Language pack saved locally.",
-            "locale": locale,
-            "translated": len(translated),
-            "source_hash": hashlib.sha256("\n".join(strings).encode()).hexdigest(),
-        }
-    finally:
-        GENERATE_LOCK.release()

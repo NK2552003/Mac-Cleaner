@@ -1,6 +1,7 @@
 """Isolated browser fixture. No host cleanup, launchd, or external translation calls."""
 
 import contextlib
+import signal
 import sys
 import tempfile
 import time
@@ -68,9 +69,14 @@ with (
     artifacts = Path("/tmp/mdc-workspace-check")
     artifacts.mkdir(exist_ok=True)
     (artifacts / "launch-url").write_text(server.url)
-    print("Workspace fixture ready", flush=True)
+    print(f"Mac Deep Cleaner: {server.url}", flush=True)
+    def stop_fixture(*_args):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, stop_fixture)
     try:
         server.serve_forever()
+    except KeyboardInterrupt:
+        pass
     finally:
         server.server_close()
         service.close()

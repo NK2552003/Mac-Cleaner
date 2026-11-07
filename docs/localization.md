@@ -1,78 +1,30 @@
 # Localization maintenance
 
-The application ships 42 non-English locale files and an English source catalog.
-All 42 packs cover all **2,163 messages** (90,846 locale entries), completed on
-2026-11-07 with Google Cloud Translation and targeted terminology corrections.
-The coverage audit reports **zero missing entries and zero damaged protected
-tokens**. Product names, acronyms and terms shared between languages can legitimately
-match English; these are listed separately for review. Machine translation and
-automated validation do not constitute a native-speaker review of every message.
+The application includes 42 non-English packs and an English catalog of **1,990 messages** (83,580 bundled locale entries). All new automation, notification, and update messages were translated with AI during development, without a cloud translation API. Existing translations are retained. Complete coverage and protected-token checks pass; these checks are not a native-speaker review.
 
-## Audit and complete packs
+## Audit and update packs offline
 
 ```sh
-NODE_PATH=/tmp/mdc-i18n/node_modules node scripts/extract_messages.cjs
+NODE_PATH=/path/to/node_modules node scripts/extract_messages.cjs
 python3 scripts/complete_locales.py --check --report /tmp/mdc-localization-audit.json
+python3 scripts/complete_locales.py --merge /path/to/ai-authored-fr.json
 ```
 
-The extractor requires `acorn`. It collects static source messages and templates
-from JavaScript, Python and native menu labels. Code identifiers, SQL, selectors,
-and standalone commands are excluded. Runtime filenames, paths and scan results
-are never part of translation requests. After removing source messages, use
-`--prune-stale` to remove their retired keys from packs without networking.
+The extractor uses `acorn` and reads static JavaScript, Python, and native menu messages. Runtime filenames, paths, scan results, and documents are never included. To add translations, give the missing static messages to the AI author and save the result as a JSON pack with `locale` and `messages`. Merge each pack, then run the audit. Merging rejects unknown messages, wrong locale tags, HTML, altered placeholders, product names, quantities, and typed confirmation phrases before replacing the existing pack. Retired messages are pruned during a successful merge. Writes are atomic.
 
-To fill missing translations, use the hidden terminal prompt (or configure
-`MDC_TRANSLATE_API_KEY` in the process environment):
-
-```sh
-python3 scripts/complete_locales.py --generate --key-prompt --workers 3
-python3 scripts/complete_locales.py --check
-```
-
-This explicitly uses Google Cloud Translation and may incur provider charges.
-The key is sent only to Google in an API-key header and is not saved. Placeholders,
-product names, quantities and `I UNDERSTAND` are protected during translation;
-the response is converted back to plain text and validated before saving.
-Successful batches are saved atomically. Transient quota/network errors use bounded
-backoff; credential errors stop the run with a specific diagnostic. Rerun the same
-command to resume. `--retry-unchanged` asks Google to reconsider unchanged entries;
-`--retranslate 'exact source message'` refreshes a particular entry. Existing entries
-with damaged protected tokens are automatically repaired on the next generation.
-`enrich_locales.py` forwards to this tool instead of padding packs with English text.
-
-If Google reports `API_KEY_SERVICE_BLOCKED`, allow **Cloud Translation API**
-(`translate.googleapis.com`) in that key's API restrictions in Google Cloud Console.
-If it reports `SERVICE_DISABLED`, enable the API in the project. Keep credentials
-out of source files, command-line arguments, and Git.
+No translation API, API key, or network generation is supported by the application or maintenance tool. The Settings language controls load bundled packs, import validated offline JSON, and export the current pack or English template. Unavailable translations fall back to English. Product names and shared technical terms may legitimately match English; the audit lists unchanged entries separately.
 
 ## Runtime behavior
 
-Language activation loads the pack before saving the selection, then updates the
-UI, native menus and AI language together. Switches are serialized. Text nodes
-and accessibility attributes retain their English source so switching back to
-English restores them. Catalog templates preserve named or numbered placeholders.
-Numbers, relative dates and timestamps use the selected locale.
+Activation loads the selected pack before saving the choice, then updates the UI, native menus, and local Ghost AI language together. Switches are serialized. Source text is retained for switching back to English. Dates and numbers follow the selected locale. Both local Ghost AI requests and their caches include the language.
 
-Both local AI requests receive the selected language. Narration and inspector
-caches include the language. Opening the Ghost inspector only examines local
-files; its web-search links require an explicit click. Recommendations retain the
-scanner's verdict, including a previous AI veto. Private names, paths, commands
-and typed confirmation phrases are preserved.
+Private filenames, paths, command output, and typed safety phrases remain unchanged. User packs are stored under `~/Library/Application Support/Mac Deep Cleaner/locales`.
 
 ## Verification
 
 ```sh
 .venv/bin/python -m pytest -q
-swift build
+NODE_PATH=/path/to/node_modules .venv/bin/python tests/run_browser_checks.py support workspace localization
 ```
 
-`NODE_PATH=/path/to/node_modules python3 tests/run_browser_checks.py` runs all
-nine Playwright flows against fresh isolated fixture servers and stops each server
-after its check. It includes workspace, deletion, Toolkit, Homebrew, Care, Ghost Files,
-localization, and accessibility checks. Install `playwright` and `@axe-core/playwright`
-in that Node module directory. Pass one or more flow names to run a subset.
-The Python regressions enforce complete catalog coverage and intact protected text
-for every bundled locale. The localization browser flow checks all 42 selections, persistence, direction,
-interpolation, repeated language changes, failed pack loading and the cardless
-Ghost inspector at desktop and mobile widths. Run each browser flow against fresh
-fixtures so a prior scan or settings change cannot affect the next flow.
+The Python regressions check all bundled packs, protected text, and offline merge rejection. Browser checks exercise language switching, import/export, RTL layout, saved settings, update links, and actual safe cleanup using disposable fixtures. The fixtures never clean host files.

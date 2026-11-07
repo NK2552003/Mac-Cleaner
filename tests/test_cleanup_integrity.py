@@ -303,15 +303,10 @@ def test_language_import_is_independent_of_care(home, service):
     assert not service.operation.locked()
 
 
-def test_language_job_failure_releases_operation_lock(service, monkeypatch):
-    from mac_deep_cleaner import localization
-    def fail(*args):
-        raise OSError('fixture provider failure')
-    monkeypatch.setattr(localization, 'generate', fail)
-    service.post('/api/i18n/generate', {'locale':'fr', 'confirmed':True})
-    service.language_jobs().thread.join(3)
-    job = service.language_jobs().report()
-    assert job['done'] and job['error'] == 'fixture provider failure'
+def test_cloud_translation_route_is_removed(service):
+    with pytest.raises(APIError) as error:
+        service.post('/api/i18n/generate', {'locale':'fr', 'confirmed':True})
+    assert error.value.status == 404
     assert not service.operation.locked()
 
 

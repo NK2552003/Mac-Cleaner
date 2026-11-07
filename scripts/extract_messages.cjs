@@ -3,6 +3,7 @@ const fs = require('fs'), path = require('path'), acorn = require('acorn');
 const {execFileSync} = require('node:child_process');
 const root=path.join(__dirname,'../mac_deep_cleaner/web'), messages=new Set();
 function add(text) {
+  if(['Accept', 'User-Agent'].includes(text) || /^var\(--[\w-]+\)$/.test(text)) return;
   if(text.startsWith('ghosts:{')) return; // Animation identity, not UI text.
   text=text.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').trim();
   // Commands and SQL are implementation data, never translated display prose.
@@ -31,6 +32,7 @@ function extract(value) {
 }
 function visit(node) {
   if(!node||typeof node!=='object')return;
+  if(node.type==='Property' && (node.key.name || node.key.value)==='style') return;
   if(node.type==='VariableDeclarator'&&['translations','quickList'].includes(node.id?.name))return;
   if(node.type==='Literal'&&typeof node.value==='string')extract(node.value);
   if(node.type==='TemplateLiteral') {
@@ -83,7 +85,7 @@ for(const value of JSON.parse(execFileSync('python3',['-c',python],{cwd:path.joi
 for(const value of [
   'Risk','Explanation','Path','Storage review',
   'Edit','Window','Normal','Warning','Critical','Free space: {size}','Memory pressure: {state}',
-  'Keep running','An operation is still running','Wait for the current operation to finish before quitting.',
+  'Disabled in System Settings','Keep running','An operation is still running','Wait for the current operation to finish before quitting.',
   'Application Support','Caches','Preferences','Containers','Group Containers','Saved State','Logs','HTTPStorages',
   'moved','formula','cask','started','stopped','Indexing enabled.',
   '{size} combined footprint','Evidence score {score}/100.','Analysis source: {source}',
@@ -119,9 +121,9 @@ for(const value of [
   'Start Ollama automatically when needed, after setup consent',
   'Stop Ollama when I quit, only if Mac Deep Cleaner started it',
   'Turning Ghost Files off keeps installed AI components. Removal only offers components created by Mac Deep Cleaner.',
-  'Generate a language pack with Google Cloud Translation','Import or share an offline language pack',
+  'Import or share an offline language pack',
   'Import language pack','Export current pack','Download English template',
-  'Google Cloud Translation API key (never saved)','Generate selected language','Storage & Maintenance',
+  'Storage & Maintenance',
   'About Mac Deep Cleaner','All scanning, analysis, and maintenance runs locally on your Mac.',
   'Disk Used','Original location occupied','macOS Native','No recorded cleanup yet.','Cleaned items will appear here for one-click restore.',
   'No dismissed ghosts.','extension records','No readable profile found','Review slim copy','Additional languages to keep',
