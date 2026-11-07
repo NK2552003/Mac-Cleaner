@@ -3,6 +3,35 @@ const {chromium,webkit} = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
+
+// Runs in the page. A wall-clock delay does not guarantee a WebKit render tick.
+function animationSnapshot({wait = false, after = null} = {}) {
+  const sample = selector => {
+    const animation = document.querySelector(selector)?.getAnimations()[0];
+    return animation ? {start:animation.startTime, time:animation.currentTime,
+      state:animation.playState, pending:animation.pending} : null;
+  };
+  const result = {timeline:document.timeline.currentTime, visibility:document.visibilityState,
+    orbit:sample('#main .loader-orbit'), blink:sample('#main .loader-blink')};
+  if (wait) for (const name of ['orbit', 'blink']) {
+    const animation = result[name];
+    if (!animation || animation.pending || animation.state !== 'running'
+        || !Number.isFinite(animation.start) || !Number.isFinite(animation.time)) return false;
+    if (after && animation.time <= after[name].time + 50) return false;
+  }
+  return result;
+}
+
+async function waitForAnimations(page, label, after = null) {
+  try {
+    const handle = await page.waitForFunction(animationSnapshot, {wait:true, after}, {timeout:5000});
+    try { return await handle.jsonValue(); } finally { await handle.dispose(); }
+  } catch (error) {
+    const current = await page.evaluate(animationSnapshot);
+    throw new Error(`${label}: loader animations did not ${after ? 'advance' : 'start'} within 5s; ${JSON.stringify({before:after, current})}`, {cause:error});
+  }
+}
+
 (async()=>{
   const engine=process.env.MDC_TEST_BROWSER || 'chromium';
   assert(['chromium','webkit'].includes(engine));
@@ -29,24 +58,14 @@ const assert = require('node:assert/strict');
       assert.equal(await indicator.getAttribute('data-feature'),label.replace('-refresh',''));
       assert.equal(await page.locator('.scan-track,.scan-banner,.ghost-spinner,.ghost-progress progress,.scan-pill,.skeleton').count(),0);
       await page.emulateMedia({reducedMotion:'no-preference'});
-      const before=await page.evaluate(()=>{
-        LoaderUI.sync();
-        const animation=document.querySelector('#main .loader-orbit').getAnimations()[0];
-        const blink=document.querySelector('#main .loader-blink').getAnimations()[0];
-        return {start:animation.startTime,time:animation.currentTime,state:animation.playState,blinkStart:blink.startTime,blinkTime:blink.currentTime};
-      });
-      assert.equal(before.state,'running');
-      await page.waitForTimeout(100);
-      const after=await page.evaluate(()=>{
-        draw();
-        const animation=document.querySelector('#main .loader-orbit').getAnimations()[0];
-        const blink=document.querySelector('#main .loader-blink').getAnimations()[0];
-        return {start:animation.startTime,time:animation.currentTime,blinkStart:blink.startTime,blinkTime:blink.currentTime};
-      });
-      assert.equal(after.start,before.start,`${label} must retain its animation clock across redraws`);
-      assert(after.time>before.time+50,`${label} animation must keep advancing`);
-      assert.equal(after.blinkStart,before.blinkStart,`${label} blinking must retain its clock across redraws`);
-      assert(after.blinkTime>before.blinkTime+50,`${label} blinking must keep advancing`);
+      await page.evaluate(()=>LoaderUI.sync());
+      const before=await waitForAnimations(page,`${engine}/${label}`);
+      await page.evaluate(()=>draw());
+      // Wait for ready animations and observable progress after DOM replacement.
+      // A frozen/paused animation still fails within the bounded timeout.
+      const after=await waitForAnimations(page,`${engine}/${label}`,before);
+      assert.equal(after.orbit.start,before.orbit.start,`${label} must retain its animation clock across redraws`);
+      assert.equal(after.blink.start,before.blink.start,`${label} blinking must retain its clock across redraws`);
       const eyes=await indicator.locator('.loader-blink').evaluate(el=>{
         const animation=el.getAnimations()[0];
         animation.pause();
@@ -63,9 +82,11 @@ const assert = require('node:assert/strict');
       assert.equal(await indicator.locator('.loader-orbit').evaluate(el=>getComputedStyle(el).animationTimingFunction),'linear');
       if(label==='clean') {
         // Observe a real blink under repeated polling, then compare rendered frames.
+        const blinkDuration=await indicator.locator('.loader-blink').evaluate(el=>el.getAnimations()[0].effect.getTiming().duration);
+        // Inspection may start after the first blink; allow a whole cycle.
         await page.evaluate(()=>{ draw(); window.blinkRedraw=setInterval(()=>draw(),140); });
         try {
-          await page.waitForFunction(()=>Number(getComputedStyle(document.querySelector('.loader-eyelids')).opacity)>.9, null, {timeout:1800});
+          await page.waitForFunction(()=>Number(getComputedStyle(document.querySelector('.loader-eyelids')).opacity)>.9, null, {timeout:blinkDuration+2000});
         } finally { await page.evaluate(()=>clearInterval(window.blinkRedraw)); }
         const avatar=indicator.locator('.loader-visual');
         await avatar.evaluate(el=>el.getAnimations({subtree:true}).forEach(a=>{a.pause();a.currentTime=0;}));
