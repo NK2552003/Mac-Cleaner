@@ -152,9 +152,9 @@ def test_notifications_are_opt_in_and_bounded(service):
     assert len(events) == 20 and events[-1]['id'] == 25
 
 
-@pytest.mark.parametrize('tag,available', [('v3.5.1',True),('v3.10.0',True),('3.5.0',False),('v3.4.9',False)])
+@pytest.mark.parametrize('tag,available', [('v3.6.1',True),('v3.10.0',True),('3.6.0',False),('v3.5.0',False)])
 def test_github_version_comparison_and_canonical_release_link(monkeypatch, tag, available):
-    monkeypatch.setattr(updates, '__version__', '3.5.0')
+    monkeypatch.setattr(updates, '__version__', '3.6.0')
     payload = {'tag_name':tag,'html_url':'https://attacker.invalid', 'draft':False, 'prerelease':False}
     opener = Mock()
     opener.open.return_value = io.BytesIO(json.dumps(payload).encode())

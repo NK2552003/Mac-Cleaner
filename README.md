@@ -18,7 +18,7 @@
 
 ---
 
-**Mac Deep Cleaner v3.5.0** combines storage analysis, reviewed cleanup, system diagnostics, maintenance, Homebrew package management, and external-disk management in a local dashboard, native macOS app, and command-line tools. File cleanup uses Trash by default; disk formatting and selected maintenance commands are permanent and require a separate review.
+**Mac Deep Cleaner v3.6.0** combines storage analysis, reviewed cleanup, system diagnostics, maintenance, Homebrew package management, and external-disk management in a local dashboard, native macOS app, and command-line tools. File cleanup uses Trash by default; disk formatting and selected maintenance commands are permanent and require a separate review.
 
 Version 3.5.0 keeps each feature in its own workspace and removes Care Center. Storage Cleanup provides durable Trash history and restore; Settings provides Ghost exclusions and language-pack jobs. The mascot loader has subtle eye blinks and continuous motion. The native menu bar provides one-click safe cache/log cleanup, update checks, and Cleanup history. Settings provides 42 bundled offline language packs and language-pack import/export. Cloud translation APIs are not used.
 

@@ -1,4 +1,4 @@
-# Automation, updates, and the menu bar (Unreleased)
+# Automation, updates, and the menu bar (v3.6.0)
 
 This work is staged for the next release. It does not publish a release or install a scheduled release job.
 

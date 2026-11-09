@@ -2,9 +2,7 @@
 
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
-## Unreleased
-
-Planned for next week's release; no release has been published by this change.
+## v3.6.0
 
 ### Added
 
@@ -28,7 +26,7 @@ Planned for next week's release; no release has been published by this change.
 - Added AI-authored translations for the new features to all 42 bundled language packs. The 1,990-message catalog has complete coverage with protected tokens intact.
 - Translation maintenance now merges validated offline AI-authored JSON packs and audits coverage without a cloud API.
 
-## v3.5.0 (Unreleased)
+## v3.5.0 (2026-11-07)
 
 ### Added
 

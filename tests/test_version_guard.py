@@ -8,7 +8,7 @@ def test_rejects_the_reported_branch_downgrade():
         check_base('3.0.0', '3.2.0')
 
 
-@pytest.mark.parametrize('candidate,base', [('3.5.0', '3.2.0'), ('3.2.0', '3.2.0'),
+@pytest.mark.parametrize('candidate,base', [('3.6.0', '3.5.0'), ('3.5.0', '3.2.0'), ('3.2.0', '3.2.0'),
                                           ('3.10.0', '3.9.0')])
 def test_allows_unchanged_or_newer_branch_versions(candidate, base):
     check_base(candidate, base)

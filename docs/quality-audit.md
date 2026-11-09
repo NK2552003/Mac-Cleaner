@@ -1,6 +1,6 @@
 # Quality audit — 2026-11-07
 
-The current 3.5.0 pass removes Care Center, preserves shared cleanup recovery and language functionality, fixes the Ghost Sort border and visible mascot blinks, centers empty states, and repairs fullscreen close/reopen handling. Version 3.5.0 remains unreleased and above main/PyPI 3.2.0. This report describes tested behavior, not a guarantee that every macOS configuration is defect-free.
+The current 3.5.0 pass removes Care Center, preserves shared cleanup recovery and language functionality, fixes the Ghost Sort border and visible mascot blinks, centers empty states, and repairs fullscreen close/reopen handling. Version 3.5.0 was published above main/PyPI 3.2.0, and 3.6.0 prepares the subsequent automation release. This report describes tested behavior, not a guarantee that every macOS configuration is defect-free.
 
 ## Pending automation verification
 
