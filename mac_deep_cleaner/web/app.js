@@ -5,6 +5,7 @@ P.monitor =
   '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>';
 P.sidebar = '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>';
 let theme = "dark";
+/** Apply the chosen theme to the dashboard and native window. */
 function applyTheme(next) {
   theme = next === "light" ? "light" : "dark";
   document.documentElement.dataset.theme = theme;
@@ -228,6 +229,7 @@ async function setGhostLevel(level) {
   await load();
   draw();
 }
+/** Render workspace settings, offline languages, and background controls. */
 function settingsView() {
   const level = S.features?.ghosts_level || 0;
   return `<div class="pagehead"><div><h1>${esc(I18n.t("Settings"))}</h1><p>${esc(I18n.t("Choose what runs on your Mac."))}</p></div></div>${banners()}
@@ -604,6 +606,7 @@ function bigView() {
 function appIcon(a) {
   return `<span class="app-icon"><span aria-hidden="true">${esc((a.name.match(/[A-Za-z0-9]/) || ["?"])[0].toUpperCase())}</span><img src="/api/icon?id=${a.id}&generation=${encodeURIComponent(A.apps_id || S.scan_id || "")}" alt="" loading="lazy" decoding="async"></span>`;
 }
+/** Render the filtered application inventory and theme-aware storage breakdown. */
 function appsView() {
   if (!A.ready && !A.apps.length && !appsError) return pagehead('Applications', 'Your apps, their data, and the space they leave behind.') + banners() + empty('Analyzing applications', 'Measuring disk footprints and caches for all installed apps.', 'apps', '', {scanning:true,percent:A.total ? A.progress*100/A.total : null});
   let apps = A.apps.filter(
@@ -735,6 +738,7 @@ function duplicatesView() {
     }`
   );
 }
+/** Redraw while preserving form drafts, scroll position, and keyboard focus. */
 function preserveFocus(render) {
   // Keep unsaved form edits through periodic state refreshes.
   const draftIds = ['languageSearch','languageSelect','automationHours','automationInterval'];
@@ -918,6 +922,7 @@ function showApp(id) {
   renderAppDrawer();
   Overlays.open($("detailDialog"));
 }
+/** Render app storage details and guarded removal actions. */
 function renderAppDrawer() {
   const a = A.apps.find((a) => a.id === openAppId);
   if (!a) return closeDetail();
@@ -1204,6 +1209,7 @@ async function revealPath(path) {
     );
   toast("Location opened in Finder.");
 }
+/** Route dashboard actions to their workspace or authenticated service operation. */
 async function dispatch(action, el) {
   if (action === "related-tool") return navigate(el.dataset.view, {tab:el.dataset.tab});
   if (action === "feature-ghost-level") return setGhostLevel(Number(el.dataset.level));

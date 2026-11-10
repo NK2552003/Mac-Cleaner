@@ -31,10 +31,10 @@ const assert=require('node:assert/strict');
     assert(await page.evaluate(()=>S.settings.automation_next_run > Date.now()/1000));
     await page.locator('[data-action="background-toggle"][data-setting="automation_enabled"]').click();
     await page.waitForFunction(()=>!S.settings.automation_enabled);
-    let checks=0, updateState=null;
+    let checks=0, updateState=null, backgroundOverride=null;
     await page.route('**/api/background',async route=>{
       const response=await route.fetch();const body=await response.json();
-      return route.fulfill({json:updateState?{...body,updates:updateState}:body});
+      return route.fulfill({json:{...body,...(updateState?{updates:updateState}:{}),...backgroundOverride}});
     });
     await page.route('**/api/updates/check',route=>{checks++;updateState={checking:false,checked_at:Date.now()/1000,available:true,latest:'v9.0.0',url:'https://github.com/NK2552003/Mac-Cleaner/releases/tag/v9.0.0'};return route.fulfill({json:updateState});});
     await page.locator('[data-action="background-update"]').click();
@@ -79,7 +79,30 @@ const assert=require('node:assert/strict');
     await page.locator('.history-row').first().waitFor();
     await page.setViewportSize({width:390,height:844});
     await page.screenshot({path:'/tmp/mdc-workspace-check/history-mobile.png'});
+    await page.keyboard.press('Escape');
+    // Browser delivery survives reload; disabled notifications retain pending events.
+    await page.evaluate(()=>{delete window.webkit;});
+    backgroundOverride={event_session:'notification-fixture',events:[{id:1,title:'Cleanup',message:'Retained fixture event'}],
+      automation:{running:false,last_run:0,error:'',result:{processed_bytes:4096,fails:[['<img src=x onerror=alert(1)>','Permission <denied>']]}}};
+    await page.evaluate(()=>navigate('settings'));
+    await page.evaluate(()=>BackgroundUI.poll());
+    assert.equal(await page.locator('#toasts .toast').filter({hasText:'Retained fixture event'}).count(),1);
+    assert.match(await page.locator('.error-banner').innerText(),/<img src=x onerror=alert\(1\)>: Permission <denied>/);
+    assert.equal(await page.locator('.error-banner img').count(),0);
+    await page.reload();
+    await page.waitForFunction(()=>typeof ready!=='undefined'&&ready);
+    await page.evaluate(()=>BackgroundUI.poll());
+    assert.equal(await page.locator('#toasts').getByText('Cleanup: Retained fixture event',{exact:true}).count(),0);
+    await page.evaluate(async()=>{await api('/api/settings',{notifications:false});await load();});
+    backgroundOverride.events.push({id:2,title:'Cleanup',message:'Pending fixture event'});
+    await page.evaluate(()=>BackgroundUI.poll());
+    assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('mdc-delivered-event')).id),1);
+    await page.evaluate(async()=>{await api('/api/settings',{notifications:true});await load();await BackgroundUI.poll();});
+    assert.equal(await page.locator('#toasts .toast').filter({hasText:'Pending fixture event'}).count(),1);
+    backgroundOverride={...backgroundOverride,event_session:'restarted-fixture',events:[{id:1,title:'Cleanup',message:'New service event'}]};
+    await page.evaluate(()=>BackgroundUI.poll());
+    assert.equal(await page.locator('#toasts .toast').filter({hasText:'New service event'}).count(),1);
     assert.deepEqual(errors,[]);
-    console.log('Support passed: offline language import, saved interval and schedule toggle, GitHub release link, actual safe Trash cleanup, native notification permission/test/completion bridge, no cloud controls.');
+    console.log('Support passed: offline language import, saved schedule, GitHub release link, safe Trash cleanup, native notifications, escaped cleanup failures, notification reload/restart/pending delivery.');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exit(1)});

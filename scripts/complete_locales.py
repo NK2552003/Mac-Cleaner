@@ -27,17 +27,20 @@ TOKENS = re.compile(
 
 
 def protected_tokens_intact(source, translated):
+    """Check that placeholders, product names, and numbers survive translation."""
     return all(translated.count(token) >= count for token, count in Counter(TOKENS.findall(source)).items())
 
 
 def usable_messages(document, catalog):
+    """Keep current translations, allowing reviewed invariant source strings."""
     return {source: value for source, value in document['messages'].items()
             if source in catalog and (source in INVARIANT or source != value
                                       or document.get('source') in ('google-machine-translation', 'bundled-ai-reviewed'))}
 
 
 def merge(path, additions, catalog):
-    document = json.loads(path.read_text())
+    """Validate an offline pack and atomically replace its UTF-8 target catalog."""
+    document = json.loads(path.read_text(encoding='utf-8'))
     if additions['locale'] != path.stem:
         raise ValueError('Locale mismatch')
     validate_pack(additions)
@@ -48,11 +51,12 @@ def merge(path, additions, catalog):
     document['source'] = 'bundled-ai-reviewed'
     validate_pack(document)
     temporary = path.with_suffix('.json.tmp')
-    temporary.write_text(json.dumps(document, ensure_ascii=False, indent=2) + '\n')
+    temporary.write_text(json.dumps(document, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     temporary.replace(path)
 
 
 def audit(paths, catalog):
+    """Report missing, stale, untranslated, or token-damaged entries in offline packs."""
     report = {}
     for path in paths:
         data = json.loads(path.read_text(encoding='utf-8'))
@@ -71,22 +75,23 @@ def audit(paths, catalog):
 
 
 def main():
+    """Merge an optional offline pack, audit selected locales, and enforce check mode."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
     parser.add_argument('--locales', nargs='+')
     parser.add_argument('--merge', type=Path, help='Merge an AI-authored JSON language pack')
     parser.add_argument('--report', type=Path)
     args = parser.parse_args()
-    catalog = json.loads((ROOT / 'messages.json').read_text())
+    catalog = json.loads((ROOT / 'messages.json').read_text(encoding='utf-8'))
     if args.merge:
-        additions = validate_pack(json.loads(args.merge.read_text()))
+        additions = validate_pack(json.loads(args.merge.read_text(encoding='utf-8')))
         merge(ROOT / 'locales' / (additions['locale'] + '.json'), additions, catalog)
     paths = sorted((ROOT / 'locales').glob('*.json'))
     if args.locales:
         paths = [p for p in paths if p.stem in args.locales]
     report = audit(paths, catalog)
     if args.report:
-        args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
+        args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     if args.check and any(r['missing'] or r['damaged_tokens'] or r['stale'] for r in report.values()):
         raise SystemExit('Language packs need attention; see the audit report')
 

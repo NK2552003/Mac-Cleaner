@@ -33,7 +33,12 @@ HOOK = r'''
                 precondition(NSApp.activationPolicy() == .regular)
                 let file = ProcessInfo.processInfo.environment["MDC_NATIVE_RESULT"]!
                 try! "PASS: native light chrome, real window close, accessory Dock policy, status item retained, reopen regular policy\n".write(toFile:file, atomically:true, encoding:.utf8)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { NSApp.terminate(nil) }
+                // Break the page API so termination must use the direct engine check.
+                self.window.orderOut(nil)
+                self.webView.evaluateJavaScript("api = undefined") { _, error in
+                    precondition(error == nil)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { NSApp.terminate(nil) }
+                }
             }
         }
     }
@@ -41,6 +46,7 @@ HOOK = r'''
 
 
 def main():
+    """Build and run a temporary signed native shell against disposable fixtures."""
     if sys.platform != 'darwin':
         raise SystemExit('Requires an unlocked macOS desktop.')
     with tempfile.TemporaryDirectory(prefix='mdc-native-acceptance-') as directory:
@@ -51,6 +57,10 @@ def main():
         (contents / 'MacOS').mkdir(parents=True)
         (resources / 'engine').mkdir(parents=True)
         source = (ROOT / 'desktop/main.swift').read_text()
+        source = source.replace('        guard opened,', '        fputs("QUIT requested\\n", stderr)\n        guard opened,')
+        source = source.replace('            switch result {', '            fputs("QUIT JavaScript result: \\(result)\\n", stderr)\n            switch result {')
+        source = source.replace('        guard process?.isRunning == true', '        fputs("QUIT engine fallback\\n", stderr)\n        guard process?.isRunning == true')
+        source = source.replace('            let approved =', '            print("Quit recovery response:", (response as? HTTPURLResponse)?.statusCode ?? 0, error?.localizedDescription ?? "none")\n            let approved =')
         source = source.replace('    func applicationWillTerminate(', HOOK + '\n    func applicationWillTerminate(', 1)
         main_swift = work / 'main.swift'
         main_swift.write_text(source)
@@ -66,7 +76,7 @@ def main():
                         str(ROOT / 'desktop/window_presentation.swift'),'-o',str(contents / 'MacOS/mac-deep-cleaner')],check=True)
         subprocess.run(['codesign','--force','--deep','--sign','-',str(app)],check=True,capture_output=True)
         result = work / 'result.txt'
-        process = subprocess.Popen([str(contents / 'MacOS/mac-deep-cleaner')], env={**os.environ,'MDC_NATIVE_RESULT':str(result)})
+        process = subprocess.Popen([str(contents / 'MacOS/mac-deep-cleaner')], env={**os.environ,'MDC_NATIVE_RESULT':str(result),'NSUnbufferedIO':'YES'})
         try:
             process.wait(timeout=40)
             if process.returncode or not result.exists():

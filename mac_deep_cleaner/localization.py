@@ -149,6 +149,7 @@ def save_pack(document):
 
 
 def metadata():
+    """Describe installed offline packs and the shipped source-message catalog."""
     from .settings import load_settings
 
     installed = (

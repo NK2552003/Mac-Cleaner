@@ -464,23 +464,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard opened, !terminating else { return .terminateNow }
         webView.callAsyncJavaScript("if (typeof busy !== 'undefined' && (busy || ToolkitUI.isRunning() || Boolean(window.GhostUI?.isRunning()) || HistoryUI.isRunning() || I18n.isRunning())) return true; return !(await api('/api/prepare-quit', {})).can_quit;", arguments: [:], in: nil, in: .page) { result in
-            let safeToQuit: Bool
             switch result {
-            case .success(let value): safeToQuit = (value as? Bool) == false
-            case .failure: safeToQuit = self.process?.isRunning != true
-            }
-            if !safeToQuit {
-                let alert = NSAlert()
-                alert.messageText = self.localized("An operation is still running")
-                alert.informativeText = self.localized("Wait for the current operation to finish before quitting.")
-                alert.addButton(withTitle: self.localized("Keep running"))
-                alert.runModal()
-                sender.reply(toApplicationShouldTerminate: false)
-            } else {
-                sender.reply(toApplicationShouldTerminate: true)
+            case .success(let value): self.finishQuitCheck(sender, safe: (value as? Bool) == false)
+            case .failure:
+                self.checkEngineCanQuit { safe in self.finishQuitCheck(sender, safe: safe) }
             }
         }
         return .terminateLater
+    }
+
+    /// Recover from a failed web view using the engine's authenticated operation guard.
+    private func checkEngineCanQuit(completion: @escaping (Bool) -> Void) {
+        guard process?.isRunning == true else { completion(true); return }
+        guard let launchURL = origin, let port = launchURL.port,
+              let token = URLComponents(url: launchURL, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "t" })?.value,
+              let endpoint = URL(string: "http://127.0.0.1:\(port)/api/prepare-quit") else {
+            completion(false)
+            return
+        }
+        var request = URLRequest(url: endpoint, timeoutInterval: 5)
+        request.httpMethod = "POST"
+        request.httpBody = Data("{}".utf8)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("http://127.0.0.1:\(port)", forHTTPHeaderField: "Origin")
+        request.setValue(token, forHTTPHeaderField: "X-MDC-Token")
+        request.setValue("mdc_\(port)=\(token)", forHTTPHeaderField: "Cookie")
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            let payload = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let approved = error == nil && (response as? HTTPURLResponse)?.statusCode == 200 && payload?["can_quit"] as? Bool == true
+            DispatchQueue.main.async { completion(approved || self.process?.isRunning != true) }
+        }.resume()
+    }
+
+    /// Finish a quit request only after the engine confirms no operation is active.
+    private func finishQuitCheck(_ sender: NSApplication, safe: Bool) {
+        if !safe {
+            let alert = NSAlert()
+            alert.messageText = localized("An operation is still running")
+            alert.informativeText = localized("Wait for the current operation to finish before quitting.")
+            alert.addButton(withTitle: localized("Keep running"))
+            alert.runModal()
+        }
+        sender.reply(toApplicationShouldTerminate: safe)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

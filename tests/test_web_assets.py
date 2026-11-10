@@ -48,6 +48,7 @@ class WebAssetsTest(unittest.TestCase):
         self.assertIn(b'src="/assets/app_icon.png"', script)
 
     def test_assets_require_the_local_session(self):
+        """Deny dashboard and asset requests without the authenticated local session."""
         for path in ('/', '/assets/app_icon.png', '/favicon.ico', '/assets/styles.css', '/assets/history.js', '/assets/automation.js', '/assets/i18n.js', '/assets/settings.css', '/assets/loaders.js', '/assets/loaders.css'):
             with self.subTest(path=path):
                 self.assertEqual(self.get(path, authenticated=False)[0], 403)

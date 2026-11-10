@@ -130,6 +130,7 @@ class Handler(BaseHTTPRequestHandler):
         self.server.last_activity = time.monotonic()
 
     def do_GET(self):
+        """Serve authenticated dashboard assets and read-only service snapshots."""
         try:
             if not self._host_ok():
                 raise APIError(403, 'Invalid local host.')
@@ -269,6 +270,7 @@ def create_server(args, settings, service=None):
 
 
 def serve(args, settings, on_ready=None):
+    """Run the local dashboard and scheduler, closing resources on shutdown."""
     server = create_server(args, settings)
     server.service.automation.start_scheduler()
     stopped = threading.Event()

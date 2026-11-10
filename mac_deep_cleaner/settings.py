@@ -16,6 +16,7 @@ DEFAULT_SETTINGS.update(automation_enabled=False, automation_hours=168, automati
 
 
 def validated(value):
+    """Normalize persisted preferences, retaining safe defaults for invalid values."""
     result = {**DEFAULT_SETTINGS, "pinned": []}
     if not isinstance(value, dict):
         return result

@@ -175,6 +175,7 @@ def test_language_pack_rejects_code_traversal_and_unknown_private_data(home):
 
 
 def test_localization_is_offline(home, monkeypatch):
+    """Ensure locale metadata advertises offline packs without cloud credentials."""
     import urllib.request
     monkeypatch.setattr(urllib.request, 'urlopen', Mock(side_effect=AssertionError('Unexpected network')))
     assert localization.metadata()['provider'] == 'offline'

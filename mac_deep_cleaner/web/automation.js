@@ -1,12 +1,14 @@
 "use strict";
 const BackgroundUI = (() => {
   let state = {automation:{}, updates:{}}, polling = false, lastEvent = 0;
+  let eventSession = '';
   let permission = 'Unknown';
   const text = source => esc(I18n.t(source));
   const native = () => !!window.webkit?.messageHandlers?.notifications;
   const date = value => value ? new Date(value * 1000).toLocaleString(I18n.locale()) : I18n.t('Not recorded');
   const intervals = [1, 6, 12, 24, 48, 72, 168, 336, 720];
   const hoursLabel = hours => new Intl.NumberFormat(I18n.locale(), {style:'unit', unit:'hour', unitDisplay:'long'}).format(hours);
+  /** Render automation, notification, and update controls with escaped job failures. */
   function settings() {
     const prefs = S.settings || {}, job = state.automation, update = state.updates;
     const hours = formDrafts.get('automationHours') ?? prefs.automation_hours ?? 168;
@@ -35,6 +37,7 @@ const BackgroundUI = (() => {
       <p>${text('Last run')}: ${esc(date(job.last_run))} · ${text(job.running ? 'Running…' : (job.error || job.result?.fails?.length) ? 'Failed' : job.last_run ? 'Completed' : 'Not recorded')}</p></div>
       ${button(I18n.t('Clean up'), 'background-clean', {disabled:!!S.busy || S.scanning || job.running})}</div>
       ${job.error ? `<p class="error-banner" role="alert">${text(job.error)}</p>` : ''}
+      ${job.result?.fails?.length ? `<ul class="error-banner" role="alert">${job.result.fails.map(([name, message]) => `<li>${esc(name)}: ${text(message)}</li>`).join('')}</ul>` : ''}
       ${job.result ? `<p role="status">${esc(fmt(job.result.processed_bytes || 0))} ${text('processed.')} ${text('Moving files to Trash keeps them recoverable; space is freed when you empty it yourself.')}</p>${button(I18n.t('Cleanup history'), 'history-open')}` : ''}
     </section>
     <section class="settings-section"><div class="settings-section-head"><h2>${text('Notifications')}</h2>
@@ -53,6 +56,7 @@ const BackgroundUI = (() => {
     <a class="button" href="${esc(update.url || 'https://github.com/NK2552003/Mac-Cleaner/releases')}" target="_blank" rel="noopener noreferrer">${text('View release on GitHub')}</a>
     </section>`;
   }
+  /** Refresh background state and persist only delivered events for the current service. */
   async function poll() {
     if (polling) return;
     polling = true;
@@ -62,17 +66,29 @@ const BackgroundUI = (() => {
       const finished = next.automation.last_run && next.automation.last_run !== state.automation.last_run;
       state = next;
       if (finished) await load();
+      if (eventSession !== next.event_session) {
+        eventSession = next.event_session;
+        lastEvent = 0;
+        try {
+          const delivered = JSON.parse(sessionStorage.getItem('mdc-delivered-event'));
+          if (delivered?.session === eventSession && Number.isSafeInteger(delivered.id)) lastEvent = delivered.id;
+        } catch { /* In-memory deduplication still works when storage is unavailable. */ }
+      }
       for (const event of next.events || []) {
         if (event.id <= lastEvent) continue;
-        lastEvent = event.id;
+        if (!S.settings?.notifications) continue;
         const payload = {action:'deliver', id:String(event.id), title:I18n.t(event.title), body:I18n.t(event.message)};
-        if (native() && S.settings?.notifications) window.webkit.messageHandlers.notifications.postMessage(payload);
+        if (native()) window.webkit.messageHandlers.notifications.postMessage(payload);
         else toast(payload.title + ': ' + payload.body);
+        lastEvent = event.id;
+        try { sessionStorage.setItem('mdc-delivered-event', JSON.stringify({session:eventSession, id:lastEvent})); }
+        catch { /* Do not interrupt delivery if storage is unavailable. */ }
       }
       if (changed && view === 'settings') draw();
     } catch { /* The main connection banner handles server disconnections. */ }
     finally { polling = false; }
   }
+  /** Keep the interval preset and unsaved numeric value synchronized. */
   function changeInterval(value) {
     formDrafts.set('automationInterval', value);
     if (value !== 'custom') {
@@ -81,6 +97,7 @@ const BackgroundUI = (() => {
     }
     draw();
   }
+  /** Save the custom interval draft and update step-button bounds. */
   function syncInterval() {
     const input = $('automationHours');
     const hours = Number(input.value);
@@ -88,6 +105,7 @@ const BackgroundUI = (() => {
     document.querySelector('[data-step="-1"]').disabled = hours <= 1;
     document.querySelector('[data-step="1"]').disabled = hours >= 720;
   }
+  /** Handle background settings and cleanup actions through the local service. */
   async function dispatch(action, el) {
     if (action === 'background-step') {
       const input = $('automationHours');
@@ -115,6 +133,7 @@ const BackgroundUI = (() => {
     if (action === 'background-notification-settings') window.webkit.messageHandlers.notifications.postMessage({action:'settings'});
     await poll();
   }
+  /** Apply native notification permission state and optionally enable delivery. */
   async function authorization(status, enable) {
     const changed = permission !== status;
     permission = status;

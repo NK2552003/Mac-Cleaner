@@ -29,6 +29,7 @@ def public_record(value):
 
 class CleanerService:
     def __init__(self, args, settings, scanner_factory=Scanner, analyzer_factory=AppAnalyzer):
+        """Initialize validated settings, shared operation guards, and background services."""
         self.args, self.settings = args, validated(settings)
         self.scanner_factory, self.analyzer_factory = scanner_factory, analyzer_factory
         self.lock = threading.RLock()
@@ -47,12 +48,14 @@ class CleanerService:
         self._ghosts = None
         self.events = []
         self.event_id = 0
+        self.event_session = secrets.token_hex(16)
         from .automation import Automation
         from .updates import Updates
         self.automation = Automation(self)
         self.updates = Updates(self.notify)
 
     def notify(self, title, message):
+        """Queue an opt-in event, retaining only the twenty most recent events."""
         with self.lock:
             if self.settings.get('notifications'):
                 self.event_id += 1
@@ -60,9 +63,11 @@ class CleanerService:
                 self.events = self.events[-20:]
 
     def background_status(self):
+        """Return job snapshots and events scoped to this service instance."""
         with self.lock:
             events = list(self.events)
-        return {'automation': self.automation.report(), 'updates': self.updates.report(), 'events': events}
+        return {'automation': self.automation.report(), 'updates': self.updates.report(),
+                'events': events, 'event_session': self.event_session}
 
     def _ready_to_change(self):
         with self.lock:
@@ -92,6 +97,7 @@ class CleanerService:
             self.scan_thread.start()
 
     def close(self):
+        """Stop scheduling and close scanners and tools during application shutdown."""
         self.closed = True
         self.automation.stop.set()
         self.toolkit.closed = True
@@ -109,6 +115,7 @@ class CleanerService:
             raise APIError(409, 'The scan did not finish successfully. Rescan before cleaning.')
 
     def state(self):
+        """Snapshot scan results, settings, disk usage, and operation state for the UI."""
         with self.lock, self.scanner.lock:
             sc = self.scanner
             items = []
@@ -228,6 +235,7 @@ class CleanerService:
             self.operation.release()
 
     def post(self, route, body):
+        """Dispatch authenticated mutations and serialize cleanup, settings, and quit approval."""
         if self.closed and route != '/api/prepare-quit':
             raise APIError(503, 'Application is shutting down.')
         if route == '/api/prepare-quit':
@@ -235,6 +243,7 @@ class CleanerService:
                 return {'can_quit': False}
             try:
                 self.closed = True
+                self.toolkit.closed = True
                 self.automation.stop.set()
                 return {'can_quit': True}
             finally:
@@ -409,7 +418,8 @@ class CleanerService:
             raise APIError(409, 'The selection overlaps an excluded location.')
         return chosen
 
-    def _execute(self, chosen, permanent, body=None):
+    def _execute(self, chosen, permanent, body=None, candidate_check=None):
+        """Revalidate selected items, execute guarded cleanup, and publish results and history."""
         if self._ghosts:
             self._ghosts.check_selection(chosen, permanent, body or {})
         if any(i.path and any(self._under(i.path, pin) or self._under(pin, i.path) for pin in self.scanner.pinned) for i in chosen):
@@ -421,7 +431,8 @@ class CleanerService:
             results.append({'id': item.id, 'name': item.name, 'path': item.path,
                             'action': item.action, 'ok': ok, 'message': _message,
                             'size': item.size})
-        freed, roots, failures = execute(chosen, permanent=permanent, log=logs.append, tick=tick)
+        freed, roots, failures = execute(chosen, permanent=permanent, log=logs.append, tick=tick,
+                                        candidate_check=candidate_check)
         with self.lock, self.scanner.lock:
             def removed(path):
                 return any(self._under(path, p) for p in done if p.startswith('/'))

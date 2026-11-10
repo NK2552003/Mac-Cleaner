@@ -304,6 +304,7 @@ def test_language_import_is_independent_of_care(home, service):
 
 
 def test_cloud_translation_route_is_removed(service):
+    """Verify the retired cloud translation endpoint cannot start network work."""
     with pytest.raises(APIError) as error:
         service.post('/api/i18n/generate', {'locale':'fr', 'confirmed':True})
     assert error.value.status == 404

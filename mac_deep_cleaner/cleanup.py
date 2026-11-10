@@ -137,13 +137,14 @@ def validate_item(item, selected_paths=()):
     return ''
 
 
-def execute(items, permanent=False, dry_run=False, log=print, tick=None):
+def execute(items, permanent=False, dry_run=False, log=print, tick=None, candidate_check=None):
+    """Serialize cleanup and optionally recheck candidates at each move boundary."""
     from .history import mutation_lock
     with mutation_lock(HOME):
-        return _execute(items, permanent, dry_run, log, tick)
+        return _execute(items, permanent, dry_run, log, tick, candidate_check)
 
 
-def _execute(items, permanent=False, dry_run=False, log=print, tick=None):
+def _execute(items, permanent=False, dry_run=False, log=print, tick=None, candidate_check=None):
     """Return processed bytes, manual administrator commands, and failures.
 
     Processed bytes are estimates, not a promise of newly available disk space.
@@ -188,7 +189,10 @@ def _execute(items, permanent=False, dry_run=False, log=print, tick=None):
         elif item.action == 'empty':
             ok, message = empty_dir(item.path)
         else:
-            ok, message = hard_delete(item.path) if permanent else to_trash(item.path)
+            if candidate_check is not None and not candidate_check(item):
+                ok, message = False, 'The cache changed or is no longer safe for automatic cleanup.'
+            else:
+                ok, message = hard_delete(item.path) if permanent else to_trash(item.path)
         log(f'  {"ok" if ok else "FAIL"} {item.name}: {message}')
         if tick:
             tick(item, ok, message)

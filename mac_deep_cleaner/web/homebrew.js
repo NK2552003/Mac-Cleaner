@@ -15,6 +15,7 @@ const HomebrewUI = (() => {
     finally { loading = false; if (view === "homebrew") draw(); }
   }
   function enter() { if (!report && !loading) refresh(false); ToolkitUI.enter("homebrew"); }
+  /** Render one package with its installed versions, storage, and inspection action. */
   function row(p) {
     return `<div class="brew-package-row"><div class="brew-package-heading">${packageButton(p)}${button("Why installed?", "brew-inspect", {style:"link brew-why", data:{package:p.id}})}</div><div class="brew-package-summary"><p>${esc(p.description || p.kind)}</p><div class="brew-badges"><span>${esc(p.group)}</span>${p.pinned ? '<span class="brew-pin">Pinned</span>' : ""}${p.shared ? `<span>Shared by ${p.roots.length} roots</span>` : ""}${p.disabled ? '<span class="brew-warning">Disabled upstream</span>' : p.deprecated ? '<span class="brew-warning">Deprecated</span>' : ""}</div></div><div class="brew-version">${esc(p.versions.join(", "))}${p.outdated ? `<small>Update: ${esc(p.latest)}</small>` : ""}</div><div class="brew-size">${p.size === null ? "Unknown" : fmt(p.size)}<small>${esc(p.size_scope)}</small></div></div>`;
   }

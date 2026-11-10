@@ -20,9 +20,11 @@
 
 **Mac Deep Cleaner v3.6.0** combines storage analysis, reviewed cleanup, system diagnostics, maintenance, Homebrew package management, and external-disk management in a local dashboard, native macOS app, and command-line tools. File cleanup uses Trash by default; disk formatting and selected maintenance commands are permanent and require a separate review.
 
-Version 3.5.0 keeps each feature in its own workspace and removes Care Center. Storage Cleanup provides durable Trash history and restore; Settings provides Ghost exclusions and language-pack jobs. The mascot loader has subtle eye blinks and continuous motion. The native menu bar provides one-click safe cache/log cleanup, update checks, and Cleanup history. Settings provides 42 bundled offline language packs and language-pack import/export. Cloud translation APIs are not used.
+Version 3.5.0 keeps each feature in its own workspace and removes Care Center. Storage Cleanup provides durable Trash history and restore; Settings provides Ghost exclusions and language-pack jobs. The mascot loader has subtle eye blinks and continuous motion.
 
-Current development builds add opt-in scheduled safe cleanup, GitHub release checks, native notifications, and menu-bar-only operation after closing the window. See [automation and menu bar behavior](docs/automation.md). They also include persistent cleanup results, labeled desktop navigation, scan-permission notices, and separate typed confirmation for emptying Trash. App cache cleanup preserves WebKit and HTTP storage containing local app data. See the [quality audit and verification matrix](docs/quality-audit.md) for the tested behavior and platform limits.
+Version 3.6.0 adds opt-in scheduled safe cleanup, GitHub release checks, native notifications, and menu-bar-only operation after closing the window. The native menu bar provides one-click safe cache/log cleanup, update checks, and Cleanup history. Settings provides 42 bundled offline language packs and language-pack import/export. Cloud translation APIs are not used. See [automation and menu bar behavior](docs/automation.md).
+
+Current development builds also include persistent cleanup results, labeled desktop navigation, scan-permission notices, and separate typed confirmation for emptying Trash. App cache cleanup preserves WebKit and HTTP storage containing local app data. See the [quality audit and verification matrix](docs/quality-audit.md) for the tested behavior and platform limits.
 
 See the [v3.5.0 feature guide, limits, and setup](docs/v3.5.0.md).
 

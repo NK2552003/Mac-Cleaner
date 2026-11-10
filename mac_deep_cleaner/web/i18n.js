@@ -124,6 +124,7 @@ const I18n = (() => {
     observer?.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-label', 'title', 'placeholder'] });
   }
 
+  /** Render offline locale selection and language-pack import and export controls. */
   function settings() {
     const codes = [...new Set([...(metadata?.installed || ['en']), language])];
     const quickList = [
@@ -184,6 +185,7 @@ const I18n = (() => {
     </section>`;
   }
 
+  /** Handle language changes and offline pack transfers without cloud generation. */
   async function dispatch(action, el) {
     if (action === 'locale-import' && importing) return;
     if (action === 'quick-language') {

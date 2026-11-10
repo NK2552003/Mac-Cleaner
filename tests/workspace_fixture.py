@@ -20,6 +20,7 @@ from mac_deep_cleaner.toolkit import Toolkit
 
 
 def configure(service, root, stack):
+    """Populate a temporary dashboard with fake tools, apps, disks, and cleanup data."""
     stack.enter_context(patch('mac_deep_cleaner.automation.HOME', str(root)))
     service.args = SimpleNamespace(view='clean', large_mb=100, old_days=90, dup_min_mb=1)
     service.toolkit = Toolkit(service.operation, runner=FakeRunner())
@@ -69,6 +70,7 @@ def configure(service, root, stack):
     seed_items, seed_files = copy.deepcopy(service.scanner.items), list(service.scanner.walk_files)
 
     def scanner_factory(*args, **kwargs):
+        """Create repeatable scans from disposable fixture items without host discovery."""
         scanner = Scanner(quiet=True)
         scanner.items = copy.deepcopy(seed_items)
         scanner.walk_files = list(seed_files)
