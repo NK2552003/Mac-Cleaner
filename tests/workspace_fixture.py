@@ -1,5 +1,6 @@
 """Integrated fixture: every operation stays in temporary data or fake runners."""
 import copy
+import os
 import runpy
 import sys
 import time
@@ -19,6 +20,8 @@ from mac_deep_cleaner.toolkit import Toolkit
 
 
 def configure(service, root, stack):
+    """Populate a temporary dashboard with fake tools, apps, disks, and cleanup data."""
+    stack.enter_context(patch('mac_deep_cleaner.automation.HOME', str(root)))
     service.args = SimpleNamespace(view='clean', large_mb=100, old_days=90, dup_min_mb=1)
     service.toolkit = Toolkit(service.operation, runner=FakeRunner())
     service.toolkit.brew = manager(FakeBrewRunner())
@@ -58,9 +61,16 @@ def configure(service, root, stack):
     service.analyzer_factory = lambda scanner: SimpleNamespace(done=True, progress='Complete', total=1,
                                                                 error='', apps=[record], run=lambda:None)
     service.scanner.apps_ready.set()
+    idle = root / 'Library/Caches/org.example.idle'
+    idle.mkdir(parents=True)
+    (idle / 'data').write_text('disposable automation fixture')
+    for path in (idle / 'data', idle):
+        os.utime(path, (time.time() - 8 * 86400,) * 2)
+    service.scanner.add(name='Idle cache', path=str(idle), size=4096, category='App Caches', safety='safe')
     seed_items, seed_files = copy.deepcopy(service.scanner.items), list(service.scanner.walk_files)
 
     def scanner_factory(*args, **kwargs):
+        """Create repeatable scans from disposable fixture items without host discovery."""
         scanner = Scanner(quiet=True)
         scanner.items = copy.deepcopy(seed_items)
         scanner.walk_files = list(seed_files)
@@ -69,6 +79,9 @@ def configure(service, root, stack):
             scanner.progress = 'Complete'
             scanner.apps_ready.set()
         scanner.run = run
+        scanner.load_apps = lambda:None
+        scanner.scan_specs = lambda:None
+        scanner.scan_app_caches = lambda:None
         return scanner
     service.scanner_factory = scanner_factory
 

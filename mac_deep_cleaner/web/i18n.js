@@ -7,7 +7,7 @@ const I18n = (() => {
   } catch {}
 
   let pack = {}, metadata = null, failure = '', observer, pending = false;
-  let translating = false, importing = false, jobMessage = '', jobError = '', jobTimer;
+  let importing = false, jobError = '';
   const originals = new WeakMap();
 
   let templates = [], sources = new Map(), persistence = Promise.resolve();
@@ -124,6 +124,7 @@ const I18n = (() => {
     observer?.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-label', 'title', 'placeholder'] });
   }
 
+  /** Render offline locale selection and language-pack import and export controls. */
   function settings() {
     const codes = [...new Set([...(metadata?.installed || ['en']), language])];
     const quickList = [
@@ -140,14 +141,14 @@ const I18n = (() => {
     const currentTranslated = Object.entries(pack).filter(([source, value]) => source !== value).length;
 
     return `<section class="settings-section language-settings">
-      ${translating || importing ? scanIndicator(jobMessage || 'Working…', {feature:'settings',key:'translation'}) : ''}
+      ${importing ? scanIndicator('Working…', {feature:'settings',key:'translation'}) : ''}
       ${jobError ? `<div class="error-banner" role="alert">${esc(jobError)}</div>` : ''}
       <div class="settings-section-head">
         <div class="head-with-badge">
           <h2>${icon("file")} ${esc(t("Language / भाषा / Idioma"))}</h2>
           <span class="badge ${direction(language) === 'rtl' ? 'rtl-badge' : ''}">${direction(language).toUpperCase()}</span>
         </div>
-        <p>${codes.length} ${esc(t("installed languages. Bundled language packs work offline. Additional languages can be imported or generated."))}</p>
+        <p>${esc(t("Bundled language packs work offline. Import additional languages as JSON."))}</p>
       </div>
 
       <div class="quick-languages">
@@ -181,44 +182,19 @@ const I18n = (() => {
         </div>
       </details>
 
-      <details class="settings-accordion">
-        <summary>${esc(t("Generate a language pack with Google Cloud Translation"))}</summary>
-        <p>${esc(metadata?.notice || 'Only shipped interface text is sent, after confirmation. A Google Cloud API key is required; charges may apply.')}</p>
-        <p>${esc(t('Filenames, file contents, scan results, and command output stay on this Mac. Downloaded packs work offline. Review machine translations before relying on them; typed confirmation phrases stay in English.'))}</p>
-        <label for="translationLanguage">${esc(t("Language to generate"))}</label>
-        <select id="translationLanguage" aria-label="${esc(t("Language to generate"))}" data-native-select>
-          ${(metadata?.languages || codes).filter(code => code !== 'en').map(code => `<option value="${esc(code)}" ${code === language ? 'selected' : ''}>${esc(name(code))}</option>`).join('')}
-        </select>
-        <label for="translationKey" style="display:block;margin:10px 0 6px">${esc(t("Google Cloud Translation API key (never saved)"))}</label>
-        <input id="translationKey" type="password" autocomplete="off" spellcheck="false" placeholder="Or set MDC_TRANSLATE_API_KEY before launch" style="width:100%;max-width:380px;margin-bottom:12px">
-        <div>${button(t('Generate selected language'), 'locale-generate')}</div>
-        <p style="margin-top:8px"><small>${esc(t('{count} source messages · {characters} characters before cache exclusions.', {count:metadata?.messages || 0, characters:metadata?.characters || 0}))}</small></p>
-      </details>
     </section>`;
   }
 
+  /** Handle language changes and offline pack transfers without cloud generation. */
   async function dispatch(action, el) {
-    if (['locale-generate','locale-import'].includes(action) && (translating || importing)) return;
+    if (action === 'locale-import' && importing) return;
     if (action === 'quick-language') {
       const code = el?.dataset?.code;
       if (code) return activate(code);
       return;
     }
-    const code = (action === 'locale-generate' ? $('translationLanguage')?.value : $('languageSelect')?.value) || language;
+    const code = $('languageSelect')?.value || language;
     if (action === 'locale-apply') return activate(code);
-    if (action === 'locale-generate') {
-      const answer = await ask({
-        title: 'Generate language pack',
-        body: `<p>Send the shipped English interface catalog (${metadata?.characters || 0} characters before cache exclusions) to Google Cloud Translation for ${esc(name(code))}? Google Cloud charges may apply. The key is kept only for this request. No scan data is sent.</p>`,
-        confirm: 'Generate translation'
-      });
-      if (!answer.confirmed) return;
-      const key = $('translationKey').value;
-      $('translationKey').value = '';
-      await api('/api/i18n/generate', { locale: code, key, confirmed: true });
-      translating = true; jobError = '';
-      return pollJob();
-    }
     if (action === 'locale-import') {
       const file = $('languagePackFile').files[0];
       if (!file) throw new Error('Choose a JSON language pack.');
@@ -245,18 +221,6 @@ const I18n = (() => {
     if (locale) await activate(locale);
   }
 
-  async function pollJob() {
-    clearTimeout(jobTimer);
-    try {
-      const job = await api('/api/i18n/job');
-      translating = !job.done; jobMessage = job.message; jobError = job.error;
-      if (job.done && job.result?.locale) await refresh(job.result.locale);
-      if (view === 'settings') draw();
-      updateActivityStatus();
-    } catch (e) { jobError = e.message; }
-    if (translating) jobTimer = setTimeout(pollJob, 1200);
-  }
-
   async function init() {
     try { metadata = await api('/api/i18n'); } catch (e) { failure = e.message; }
     observer = new MutationObserver(() => {
@@ -270,7 +234,6 @@ const I18n = (() => {
     });
     try { await activate(metadata?.language || language, false); }
     catch (e) { failure = e.message; translateDOM(); }
-    await pollJob();
   }
 
   document.addEventListener('input', event => {
@@ -282,5 +245,5 @@ const I18n = (() => {
   });
 
   set(language);
-  return { t, set, activate, init, refresh, settings, dispatch, isRunning:() => translating || importing, locale: () => language, translateDOM };
+  return { t, set, activate, init, refresh, settings, dispatch, isRunning:() => importing, locale: () => language, translateDOM };
 })();

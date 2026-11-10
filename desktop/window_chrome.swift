@@ -22,7 +22,7 @@ final class WindowControl: NSButton {
     override func draw(_ dirtyRect: NSRect) {
         let color: NSColor
         if window?.isKeyWindow != true && !hovered {
-            color = NSColor(calibratedWhite: 0.31, alpha: 1)
+            color = NSColor(calibratedWhite: effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua ? 0.72 : 0.31, alpha: 1)
         } else {
             switch kind {
             case .close: color = NSColor(calibratedRed: 1, green: 0.38, blue: 0.36, alpha: 1)
@@ -87,7 +87,7 @@ final class WindowChrome: NSView {
     }
     override func draw(_ dirtyRect: NSRect) {
         if isLight {
-            NSColor(srgbRed: 0xda/255.0, green: 0xda/255.0, blue: 0xda/255.0, alpha: 1).setFill()
+            NSColor(srgbRed: 0xee/255.0, green: 0xf1/255.0, blue: 0xf5/255.0, alpha: 1).setFill()
         } else {
             NSColor(srgbRed: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0, alpha: 1).setFill()
         }
@@ -126,7 +126,7 @@ final class WorkspaceContentView: NSView {
     func updateTheme(isLight: Bool) {
         chrome.isLight = isLight
         let bg = isLight
-            ? CGColor(srgbRed: 0xda/255.0, green: 0xda/255.0, blue: 0xda/255.0, alpha: 1)
+            ? CGColor(srgbRed: 0xee/255.0, green: 0xf1/255.0, blue: 0xf5/255.0, alpha: 1)
             : CGColor(srgbRed: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0, alpha: 1)
         layer?.backgroundColor = bg
         layer?.borderColor = isLight
@@ -157,7 +157,7 @@ final class WorkspaceContentView: NSView {
             ? NSColor.black.withAlphaComponent(0.12).cgColor
             : NSColor.white.withAlphaComponent(0.13).cgColor
         let bg = chrome.isLight
-            ? CGColor(srgbRed: 0xda/255.0, green: 0xda/255.0, blue: 0xda/255.0, alpha: 1)
+            ? CGColor(srgbRed: 0xee/255.0, green: 0xf1/255.0, blue: 0xf5/255.0, alpha: 1)
             : CGColor(srgbRed: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0, alpha: 1)
         layer?.backgroundColor = bg
         needsLayout = true

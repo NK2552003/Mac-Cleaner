@@ -11,12 +11,24 @@ SETTINGS_DIR = os.path.join(HOME, "Library", "Application Support", "Mac Deep Cl
 SETTINGS_FILE = os.path.join(SETTINGS_DIR, "settings.json")
 LEGACY_SETTINGS_FILE = os.path.join(HOME, "Library", "Application Support", "Mac Cleaner", "settings.json")
 DEFAULT_SETTINGS = {"mode": "normal", "delete": "trash", "min_mb": 10, "pinned": [], "theme": "dark", "ghost_allowlist": [], "language": "en"}
+DEFAULT_SETTINGS.update(automation_enabled=False, automation_hours=168, automation_next_run=0,
+                        notifications=False, automatic_updates=False)
 
 
 def validated(value):
+    """Normalize persisted preferences, retaining safe defaults for invalid values."""
     result = {**DEFAULT_SETTINGS, "pinned": []}
     if not isinstance(value, dict):
         return result
+    for key in ('automation_enabled', 'notifications', 'automatic_updates'):
+        if type(value.get(key)) is bool:
+            result[key] = value[key]
+    hours = value.get('automation_hours')
+    if type(hours) is int and 1 <= hours <= 720:
+        result['automation_hours'] = hours
+    due = value.get('automation_next_run')
+    if type(due) in (int, float) and math.isfinite(due) and due >= 0:
+        result['automation_next_run'] = due
     if value.get("mode") in ("normal", "dev"):
         result["mode"] = value["mode"]
     if value.get("delete") in ("trash", "rm"):

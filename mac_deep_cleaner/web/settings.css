@@ -346,3 +346,15 @@ textarea:focus-visible {
 @media(max-width:500px) { .history-row { align-items:flex-start; flex-direction:column; } }
 
 .language-actions { display:flex; flex-wrap:wrap; gap:10px; }
+
+/* Presets use the shared app dropdown; exact hours use a themed stepper. */
+.interval-picker { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:10px; min-width:0; }
+.interval-picker > .dropdown { width:170px; max-width:100%; }
+.interval-stepper { display:flex; align-items:stretch; min-height:40px; border:1px solid var(--line); border-radius:9px; background:var(--panel); overflow:hidden; }
+.interval-stepper > button { display:grid; place-items:center; width:34px; border:0; background:transparent; color:var(--text); font-size:18px; }
+.interval-stepper > button:hover:not(:disabled) { background:var(--hover); }
+.interval-stepper > button:focus-visible { outline:2px solid var(--accent); outline-offset:-3px; }
+#automationHours { width:62px; min-width:0; border:0; border-inline:1px solid var(--line); border-radius:0; padding:8px 4px; text-align:center; font:inherit; font-variant-numeric:tabular-nums; background:transparent; color:var(--text); appearance:textfield; -moz-appearance:textfield; }
+#automationHours::-webkit-inner-spin-button, #automationHours::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+#automationHours:focus-visible { outline:2px solid var(--accent); outline-offset:-3px; }
+@media(max-width:768px) { .interval-picker { justify-content:flex-start; max-width:100%; } }

@@ -2,7 +2,31 @@
 
 All notable changes to **mac-deep-cleaner** will be documented in this file.
 
-## v3.5.0 (Unreleased)
+## v3.6.0
+
+### Added
+
+- Working GitHub release checks in Settings, the app menu, and the menu bar, with numeric version comparison, release/download links, optional daily checks, and visible network/rate-limit errors.
+- Opt-in automatic safe cleanup at a saved interval of 1–720 hours, with next-run and completion status. Runs continue with the window closed while the app stays in the menu bar; quitting pauses automation.
+- One-click safe cleanup in the menu bar and Settings. Fresh scans restrict it to safe caches/logs unchanged for seven days, preserving running-app matches, exclusions, protected data, Trash history, and restore.
+- Native cleanup/update notifications with permission status, a test notification, System Settings access, and click-through to the workspace.
+
+### Fixed
+
+- Homebrew’s “Why installed?” action aligns to the far right of the row on the package name’s first line. Application storage bars and legends follow light/dark themes in cards and details.
+- Cleanup intervals use the app’s custom dropdown with presets and a themed stepper for exact hours, including keyboard control and saved drafts.
+- Closing the window removes the app's Dock presence and keeps its menu bar item. Reopening restores normal activation, including fullscreen close/reopen transitions.
+- The light-mode window-control strip and window background match the app's light theme; inactive traffic-light controls also follow the appearance.
+- Quit preparation checks the backend operation lock and prevents a scheduled cleanup from starting during termination.
+- The native application menu displays the app name instead of the generic NSMenuItem label.
+
+### Changed
+
+- Removed cloud translation generation, API-key controls, and translation network requests. Offline language import/export remains available.
+- Added AI-authored translations for the new features to all 42 bundled language packs. The 1,990-message catalog has complete coverage with protected tokens intact.
+- Translation maintenance now merges validated offline AI-authored JSON packs and audits coverage without a cloud API.
+
+## v3.5.0 (2026-11-07)
 
 ### Added
 

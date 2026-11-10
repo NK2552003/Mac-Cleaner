@@ -5,11 +5,12 @@ P.monitor =
   '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>';
 P.sidebar = '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>';
 let theme = "dark";
+/** Apply the chosen theme to the dashboard and native window. */
 function applyTheme(next) {
   theme = next === "light" ? "light" : "dark";
   document.documentElement.dataset.theme = theme;
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = theme === "light" ? "#dadada" : "#252525";
+  if (meta) meta.content = theme === "light" ? "#eef1f5" : "#252525";
   try {
     window.webkit?.messageHandlers?.themeChange?.postMessage(theme);
   } catch {}
@@ -168,7 +169,7 @@ const canSelect = () =>
   ready && !S.scanning && !S.error && !S.busy && !busy && !connectionError && !ToolkitUI.isRunning() && !(HistoryUI.isRunning() || I18n.isRunning());
 const viewStates = new Map();
 const formDrafts = new Map();
-const draftFields = new Set(['translationLanguage']);
+const draftFields = new Set(['automationHours','automationInterval']);
 const selectedItems = () =>
   S.items.filter((i) => eligible(i) && selected.has(i.id));
 function totals() {
@@ -228,6 +229,7 @@ async function setGhostLevel(level) {
   await load();
   draw();
 }
+/** Render workspace settings, offline languages, and background controls. */
 function settingsView() {
   const level = S.features?.ghosts_level || 0;
   return `<div class="pagehead"><div><h1>${esc(I18n.t("Settings"))}</h1><p>${esc(I18n.t("Choose what runs on your Mac."))}</p></div></div>${banners()}
@@ -253,6 +255,7 @@ function settingsView() {
         </div>
       </section>
 
+      ${BackgroundUI.settings()}
       ${I18n.settings()}
 
       <section class="settings-section">
@@ -603,6 +606,7 @@ function bigView() {
 function appIcon(a) {
   return `<span class="app-icon"><span aria-hidden="true">${esc((a.name.match(/[A-Za-z0-9]/) || ["?"])[0].toUpperCase())}</span><img src="/api/icon?id=${a.id}&generation=${encodeURIComponent(A.apps_id || S.scan_id || "")}" alt="" loading="lazy" decoding="async"></span>`;
 }
+/** Render the filtered application inventory and theme-aware storage breakdown. */
 function appsView() {
   if (!A.ready && !A.apps.length && !appsError) return pagehead('Applications', 'Your apps, their data, and the space they leave behind.') + banners() + empty('Analyzing applications', 'Measuring disk footprints and caches for all installed apps.', 'apps', '', {scanning:true,percent:A.total ? A.progress*100/A.total : null});
   let apps = A.apps.filter(
@@ -654,18 +658,18 @@ function appsView() {
               (a) =>
                 `<button class="app-card" data-action="app" data-id="${a.id}"><div class="app-card-top">${appIcon(a)}<div><h3 data-no-translate>${esc(a.name)}</h3><small>${a.running ? "Running now" : esc(a.category || a.source || "Application")}</small></div></div><div class="app-card-bottom"><b class="num">${fmt(a.total)}</b><span>${ago(a.last_used)}</span></div>${bar(
                   [
-                    [(a.size / mx) * 100, "#f0f0f0"],
-                    [(a.cache_size / mx) * 100, "#8ccbb2"],
+                    [(a.size / mx) * 100, "var(--accent)"],
+                    [(a.cache_size / mx) * 100, "var(--safe)"],
                     [
                       (Math.max(0, a.data_size - a.cache_size) / mx) * 100,
-                      "#9c9c9c",
+                      "var(--muted)",
                     ],
                   ],
                 )}</button>`,
             )
             .join(
               "",
-            )}</div><div class="app-legend"><span><i class="dot" style="color:var(--accent)"></i>Application</span><span><i class="dot safe"></i>Caches</span><span><i class="dot" style="color:#9c9c9c"></i>Other stored data</span></div>`
+            )}</div><div class="app-legend"><span><i class="dot" style="color:var(--accent)"></i>Application</span><span><i class="dot safe"></i>Caches</span><span><i class="dot" style="color:var(--muted)"></i>Other stored data</span></div>`
         : empty(
             A.ready
               ? "No matching applications"
@@ -734,9 +738,10 @@ function duplicatesView() {
     }`
   );
 }
+/** Redraw while preserving form drafts, scroll position, and keyboard focus. */
 function preserveFocus(render) {
   // Keep unsaved form edits through periodic state refreshes.
-  const draftIds = ['languageSearch','languageSelect','translationLanguage','translationKey'];
+  const draftIds = ['languageSearch','languageSelect','automationHours','automationInterval'];
   const drafts = new Map(draftIds.filter(id => $(id)).map(id => [id, $(id).value]));
   const mainTop = $("main")?.scrollTop;
   const active = document.activeElement,
@@ -917,6 +922,7 @@ function showApp(id) {
   renderAppDrawer();
   Overlays.open($("detailDialog"));
 }
+/** Render app storage details and guarded removal actions. */
 function renderAppDrawer() {
   const a = A.apps.find((a) => a.id === openAppId);
   if (!a) return closeDetail();
@@ -939,9 +945,9 @@ function renderAppDrawer() {
   $("detailDialog").innerHTML =
     `<div class="drawer-head">${appIcon(a)}<div><h2 data-no-translate>${esc(a.name)}</h2><small>${esc(a.version || "Version unavailable")} / ${esc(a.source || "Application")}${a.running ? " / Running now" : ""}</small></div>${button("", "close-detail", { style: "ghost icon-only", symbol: "x", aria: "Close application details" })}</div><div class="drawer-body"><div class="metrics">${metric("Total footprint", fmt(a.total), "App and stored data")}${metric("Caches", fmt(a.cache_size), "Can be regenerated")}${metric("Last opened", ago(a.last_used), a.running ? "Running now" : "")}</div>${bar(
       [
-        [(a.size / total) * 100, "#f0f0f0"],
-        [(a.cache_size / total) * 100, "#8ccbb2"],
-        [(Math.max(0, a.data_size - a.cache_size) / total) * 100, "#9c9c9c"],
+        [(a.size / total) * 100, "var(--accent)"],
+        [(a.cache_size / total) * 100, "var(--safe)"],
+        [(Math.max(0, a.data_size - a.cache_size) / total) * 100, "var(--muted)"],
       ],
     )}<p class="note path">${esc(a.path)}</p><div class="drawer-actions">${a.cache_size ? button("Clear caches", "app-clean", { style: "primary", symbol: "cache", data: { mode: "caches" }, disabled: busy || !A.ready || !canSelect() }) : ""}${a.removable ? button("Uninstall app", "app-clean", { style: "danger", symbol: "trash", data: { mode: "uninstall" }, disabled: busy || a.running || !A.ready || !canSelect() }) : ""}${button("Reveal in Finder", "reveal-app", { symbol: "folder" })}</div>${a.running ? '<p class="review-warning">Quit this app before uninstalling it or removing its application bundle.</p>' : ""}<div class="section-title"><h2>What this app stores</h2><span class="count">${parts.length}</span></div>${parts.length ? parts.map((p, index) => `<label class="part-row"><input type="checkbox" data-part="${index}" ${pickParts.has(p.path) ? "checked" : ""} ${busy || !A.ready || !canSelect() || (p.path === a.path && a.running) ? "disabled" : ""} aria-label="Select ${esc(p.label)}"><span>${esc(p.label)}<span class="tag">${esc(p.kind)}</span><small>${esc(p.path)}</small></span><b>${fmt(p.size)}</b></label>`).join("") : empty("No stored data found", "This app has no removable data in the scanned locations.", "folder")}<div class="drawer-footer">${button(`Remove selected parts${pickParts.size ? " (" + pickParts.size + ")" : ""}`, "app-clean", { symbol: "trash", data: { mode: "pick" }, disabled: !pickParts.size || busy || !A.ready || !canSelect() })}</div><p class="note">${icon("shield")}Application files go to the Trash. You’ll review the removal first.</p></div>`;
   $("detailDialog").scrollTop = scroll;
@@ -1203,10 +1209,12 @@ async function revealPath(path) {
     );
   toast("Location opened in Finder.");
 }
+/** Route dashboard actions to their workspace or authenticated service operation. */
 async function dispatch(action, el) {
   if (action === "related-tool") return navigate(el.dataset.view, {tab:el.dataset.tab});
   if (action === "feature-ghost-level") return setGhostLevel(Number(el.dataset.level));
   if (action.startsWith("ghost-")) return window.GhostUI?.dispatch(action, el);
+  if (action.startsWith("background-")) return BackgroundUI.dispatch(action, el);
   if (action === "quick-language" || action.startsWith("locale-")) return I18n.dispatch(action, el);
   if (action === 'history-open') return HistoryUI.open();
   if (action === 'history-restore') return HistoryUI.restore(el.dataset.id);
@@ -1380,6 +1388,7 @@ document.addEventListener("click", (e) => {
 document.addEventListener("input", (e) => {
   const el = e.target;
   if (draftFields.has(el.id)) formDrafts.set(el.id, el.value);
+  if (el.id === "automationHours") return BackgroundUI.syncInterval();
   if (el.id === "confirmPhrase") return updateConfirmation();
   if (["itemSearch", "duplicateSearch", "appSearch"].includes(el.id)) {
     if (e.isComposing) return;
@@ -1392,6 +1401,7 @@ document.addEventListener("input", (e) => {
 document.addEventListener("change", (e) => {
   const el = e.target;
   if (draftFields.has(el.id)) formDrafts.set(el.id, el.value);
+  if (el.id === "automationInterval") return BackgroundUI.changeInterval(el.value);
   if (el.dataset.select !== undefined) return toggle(Number(el.dataset.select));
   if (el.dataset.part !== undefined) {
     const a = A.apps.find((a) => a.id === openAppId);
@@ -1472,9 +1482,13 @@ load();
 window.MDCNative = {
   metrics: async () => ({free: S.disk?.free, scanning:S.scanning, busy:!!S.busy || busy}),
   safeClean: async () => {
-    if (!canSelect()) { toast('Wait for the scan or current operation to finish.',true); return; }
-    navigate('clean', {reset:true});
-    selectLevel('safe');
+    try { await BackgroundUI.dispatch('background-clean'); }
+    catch (e) { toast(e.message, true); }
+  },
+  checkUpdates: async () => {
+    navigate('settings');
+    try { await BackgroundUI.dispatch('background-update'); }
+    catch (e) { toast(e.message, true); }
   }
 };
 

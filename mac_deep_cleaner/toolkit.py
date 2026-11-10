@@ -59,6 +59,7 @@ class Toolkit:
         return {k: deepcopy(v) for k, v in plan.items() if k not in ('request', 'fingerprint')}
 
     def start(self, body):
+        """Consume a confirmed plan after acquiring the operation lock and checking shutdown."""
         with self.lock:
             token = body.get('token')
             plan = self.plans.get(token) if isinstance(token, str) else None
@@ -73,6 +74,8 @@ class Toolkit:
             if not self.operation.acquire(blocking=False):
                 raise APIError(409, 'Another operation is running. Wait for it to finish.')
             try:
+                if self.closed:
+                    raise APIError(503, 'Application is shutting down.')
                 if plan['changes'] and not self.ready_to_change():
                     raise APIError(409, 'Wait for storage and application scans to finish before making changes.')
             except Exception:

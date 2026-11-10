@@ -1,8 +1,10 @@
 """Isolated browser fixture. No host cleanup, launchd, or external translation calls."""
 
 import contextlib
+import signal
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -68,9 +70,18 @@ with (
     artifacts = Path("/tmp/mdc-workspace-check")
     artifacts.mkdir(exist_ok=True)
     (artifacts / "launch-url").write_text(server.url)
-    print("Workspace fixture ready", flush=True)
+    print(f"Mac Deep Cleaner: {server.url}", flush=True)
+    stop_requested = threading.Event()
+    def stop_fixture(*_args):
+        """Record termination without interrupting resource setup or teardown."""
+        stop_requested.set()
+    signal.signal(signal.SIGTERM, stop_fixture)
     try:
-        server.serve_forever()
+        server.timeout = 0.2
+        while not stop_requested.is_set():
+            server.handle_request()
+    except KeyboardInterrupt:
+        pass
     finally:
         server.server_close()
         service.close()

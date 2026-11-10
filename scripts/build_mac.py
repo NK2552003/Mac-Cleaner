@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Build an offline native macOS app using the current Python architecture."""
 import argparse
-import os
 from pathlib import Path
 import platform
 import re

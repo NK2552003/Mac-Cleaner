@@ -4,6 +4,7 @@ import secrets
 import shutil
 import subprocess
 import threading
+import time
 from dataclasses import asdict, replace
 
 from . import __version__
@@ -15,7 +16,7 @@ from .errors import APIError
 from .feature_config import read_config, update_config
 from .icons import application_icon
 from .scanner import Scanner
-from .settings import reveal, save_settings
+from .settings import reveal, save_settings, validated
 from .toolkit import Toolkit
 
 
@@ -28,7 +29,8 @@ def public_record(value):
 
 class CleanerService:
     def __init__(self, args, settings, scanner_factory=Scanner, analyzer_factory=AppAnalyzer):
-        self.args, self.settings = args, settings
+        """Initialize validated settings, shared operation guards, and background services."""
+        self.args, self.settings = args, validated(settings)
         self.scanner_factory, self.analyzer_factory = scanner_factory, analyzer_factory
         self.lock = threading.RLock()
         self.operation = threading.Lock()
@@ -44,7 +46,28 @@ class CleanerService:
         self.closed = False
         self.toolkit = Toolkit(self.operation, self._ready_to_change)
         self._ghosts = None
-        self._language_jobs = None
+        self.events = []
+        self.event_id = 0
+        self.event_session = secrets.token_hex(16)
+        from .automation import Automation
+        from .updates import Updates
+        self.automation = Automation(self)
+        self.updates = Updates(self.notify)
+
+    def notify(self, title, message):
+        """Queue an opt-in event, retaining only the twenty most recent events."""
+        with self.lock:
+            if self.settings.get('notifications'):
+                self.event_id += 1
+                self.events.append({'id': self.event_id, 'title': title, 'message': message})
+                self.events = self.events[-20:]
+
+    def background_status(self):
+        """Return job snapshots and events scoped to this service instance."""
+        with self.lock:
+            events = list(self.events)
+        return {'automation': self.automation.report(), 'updates': self.updates.report(),
+                'events': events, 'event_session': self.event_session}
 
     def _ready_to_change(self):
         with self.lock:
@@ -74,7 +97,9 @@ class CleanerService:
             self.scan_thread.start()
 
     def close(self):
+        """Stop scheduling and close scanners and tools during application shutdown."""
         self.closed = True
+        self.automation.stop.set()
         self.toolkit.closed = True
         if self._ghosts:
             self._ghosts.close()
@@ -90,6 +115,7 @@ class CleanerService:
             raise APIError(409, 'The scan did not finish successfully. Rescan before cleaning.')
 
     def state(self):
+        """Snapshot scan results, settings, disk usage, and operation state for the UI."""
         with self.lock, self.scanner.lock:
             sc = self.scanner
             items = []
@@ -103,7 +129,7 @@ class CleanerService:
                     'warnings': list(getattr(sc, 'warnings', [])),
                     'items': items, 'cats': CAT_NAMES, 'tools': TOOLCHAIN_NAMES, 'desc': CAT_DESC,
                     'scan_id': self.scan_id, 'revision': self.revision, 'busy': self.operation.locked(),
-                    'settings': {'mode': self.settings['mode'], 'min_mb': self.settings['min_mb'], 'theme': self.settings.get('theme', 'dark')},
+                    'settings': {key: value for key, value in self.settings.items() if key != 'pinned'},
                     'features': {'ghosts_level': read_config()['level']},
                     'disk': {'total': disk.total, 'used': disk.used, 'free': disk.free}}
 
@@ -208,16 +234,24 @@ class CleanerService:
         finally:
             self.operation.release()
 
-    def language_jobs(self):
-        with self.lock:
-            if self._language_jobs is None:
-                from .language_jobs import LanguageJobs
-                self._language_jobs = LanguageJobs(self)
-            return self._language_jobs
-
     def post(self, route, body):
-        if route == '/api/i18n/generate':
-            return self.language_jobs().generate(body)
+        """Dispatch authenticated mutations and serialize cleanup, settings, and quit approval."""
+        if self.closed and route != '/api/prepare-quit':
+            raise APIError(503, 'Application is shutting down.')
+        if route == '/api/prepare-quit':
+            if not self.operation.acquire(blocking=False):
+                return {'can_quit': False}
+            try:
+                self.closed = True
+                self.toolkit.closed = True
+                self.automation.stop.set()
+                return {'can_quit': True}
+            finally:
+                self.operation.release()
+        if route == '/api/updates/check':
+            return self.updates.start()
+        if route == '/api/automation/clean':
+            return self.automation.start()
         if route == '/api/ghosts/config':
             return self.ghost_config(body)
         if route.startswith('/api/ghosts/'):
@@ -251,6 +285,8 @@ class CleanerService:
         if not self.operation.acquire(blocking=False):
             raise APIError(409, 'Another operation is running. Wait for it to finish.')
         try:
+            if self.closed:
+                raise APIError(503, 'Application is shutting down.')
             if route in ('/api/history/restore', '/api/i18n/import', '/api/settings/ghost-allowlist/remove'):
                 if not self._ready_to_change():
                     raise APIError(409, 'Wait for scans to finish.')
@@ -280,7 +316,16 @@ class CleanerService:
                 self.start_scan()
                 return {'scan_id': self.scan_id}
             if route == '/api/settings':
-                if 'language' in body:
+                if set(body) <= {'automation_enabled', 'automation_hours', 'notifications', 'automatic_updates'} and body:
+                    for key in ('automation_enabled', 'notifications', 'automatic_updates'):
+                        if key in body and type(body[key]) is not bool:
+                            raise APIError(400, 'Use true or false.')
+                    if 'automation_hours' in body and (type(body['automation_hours']) is not int or not 1 <= body['automation_hours'] <= 720):
+                        raise APIError(400, 'Choose an interval from 1 to 720 hours.')
+                    updated = {**self.settings, **body}
+                    if 'automation_enabled' in body or 'automation_hours' in body:
+                        updated['automation_next_run'] = time.time() + updated['automation_hours'] * 3600 if updated['automation_enabled'] else 0
+                elif 'language' in body:
                     from .localization import locale_code
                     updated = {**self.settings, 'language': locale_code(body['language'])}
                 elif 'theme' in body:
@@ -293,7 +338,8 @@ class CleanerService:
                     raise APIError(400, 'Unknown workspace mode.')
                 if not save_settings(updated):
                     raise APIError(500, 'Could not save workspace settings.')
-                self.settings = updated
+                with self.lock:
+                    self.settings = updated
                 return {'ok': True}
             self._version(body)
             if route == '/api/pin':
@@ -372,7 +418,8 @@ class CleanerService:
             raise APIError(409, 'The selection overlaps an excluded location.')
         return chosen
 
-    def _execute(self, chosen, permanent, body=None):
+    def _execute(self, chosen, permanent, body=None, candidate_check=None):
+        """Revalidate selected items, execute guarded cleanup, and publish results and history."""
         if self._ghosts:
             self._ghosts.check_selection(chosen, permanent, body or {})
         if any(i.path and any(self._under(i.path, pin) or self._under(pin, i.path) for pin in self.scanner.pinned) for i in chosen):
@@ -384,7 +431,8 @@ class CleanerService:
             results.append({'id': item.id, 'name': item.name, 'path': item.path,
                             'action': item.action, 'ok': ok, 'message': _message,
                             'size': item.size})
-        freed, roots, failures = execute(chosen, permanent=permanent, log=logs.append, tick=tick)
+        freed, roots, failures = execute(chosen, permanent=permanent, log=logs.append, tick=tick,
+                                        candidate_check=candidate_check)
         with self.lock, self.scanner.lock:
             def removed(path):
                 return any(self._under(path, p) for p in done if p.startswith('/'))
@@ -396,5 +444,6 @@ class CleanerService:
                 self.analyzer.apps[:] = [a for a in self.analyzer.apps if not removed(a.path)]
             self.revision += 1
         warning = self._ghosts.removed(done) if self._ghosts else ''
+        self.notify('Cleanup', 'Completed' if not failures else 'Cleanup completed with errors.')
         return {'freed': freed, 'processed_bytes': freed, 'results': results,
                 'root': roots, 'warning': warning, 'fails': [(i.name, message) for i, message in failures], 'log': logs}

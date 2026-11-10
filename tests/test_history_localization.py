@@ -174,38 +174,13 @@ def test_language_pack_rejects_code_traversal_and_unknown_private_data(home):
     assert localization.load_pack("fr")["messages"]["Settings"] == "Options"
 
 
-def test_translation_needs_consent_and_sends_only_catalog(home, monkeypatch):
-    monkeypatch.setattr(localization, "catalog", lambda: ["Settings", "Restore"])
-    with pytest.raises(APIError, match="Confirm"):
-        localization.generate("af", "fixture-key")
-    with pytest.raises(APIError, match="API key"):
-        localization.generate("af", confirmed=True)
-    request_seen = []
-
-    class Reply:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            pass
-
-        def read(self, n):
-            return b'{"data":{"translations":[{"translatedText":"Instellings"},{"translatedText":"Herstel"}]}}'
-
-    def open_request(request, timeout):
-        request_seen.append(request)
-        return Reply()
-
-    monkeypatch.setattr(
-        localization.urllib.request,
-        "build_opener",
-        lambda *args: SimpleNamespace(open=open_request),
-    )
-    result = localization.generate("af", "fixture-key", confirmed=True)
-    assert result["translated"] == 2
-    assert request_seen[0].full_url == "https://translation.googleapis.com/language/translate/v2"
-    assert "fixture-key" not in (localization.pack_directory() / "af.json").read_text()
-    assert localization.load_pack("af")["messages"]["Restore"] == "Herstel"
+def test_localization_is_offline(home, monkeypatch):
+    """Ensure locale metadata advertises offline packs without cloud credentials."""
+    import urllib.request
+    monkeypatch.setattr(urllib.request, 'urlopen', Mock(side_effect=AssertionError('Unexpected network')))
+    assert localization.metadata()['provider'] == 'offline'
+    assert not hasattr(localization, 'generate')
+    assert localization.load_pack('fr')['messages']['Settings']
 
 
 def test_dismissed_ghost_stays_excluded_after_rescan(home, monkeypatch):

@@ -1007,7 +1007,7 @@ input:disabled {
   height:4px;
   border-radius:4px;
   overflow:hidden;
-  background:#333333
+  background:var(--line)
 }
 .bar i {
   height:100%;
@@ -2306,8 +2306,12 @@ dialog.is-closing::backdrop { animation: backdrop-out .18s ease-in both; }
 .brew-toolbar .search { flex:1; min-width:0 }
 .brew-toolbar > select,.brew-toolbar > .custom-select { max-width:240px }
 .brew-package-list { border-top:1px solid var(--line) }
-.brew-package-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(100px,160px) 120px auto; align-items:center; gap:24px; padding:23px 0; border-bottom:1px solid var(--line) }
-.brew-package-row > div:first-child { min-width:0 }
+.brew-package-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(100px,160px) 120px; align-items:center; gap:8px 24px; padding:23px 0; border-bottom:1px solid var(--line) }
+.brew-package-summary { min-width:0; }
+.brew-package-summary p { margin-top:0; }
+.brew-package-heading { grid-column:1/-1; display:flex; align-items:baseline; justify-content:space-between; gap:14px; min-width:0; }
+.brew-package-heading .brew-why { margin-inline-start:auto; min-height:0; padding:0; flex-shrink:0; font-size:12px; font-weight:500; color:var(--muted); }
+.brew-package-heading .brew-why:hover { color:var(--accent); }
 .brew-package-row p { color:var(--muted); font-size:12px; margin-top:5px; overflow-wrap:anywhere }
 .brew-package-link { background:transparent; border:0; padding:0; text-align:left; font-size:14px; font-weight:600; color:var(--text); overflow-wrap:anywhere; min-width:0 }
 .brew-package-link:hover { color:#e1c698; text-decoration:underline; text-underline-offset:4px }
@@ -2372,14 +2376,13 @@ dialog.is-closing::backdrop { animation: backdrop-out .18s ease-in both; }
 .disk-native { display:flex; justify-content:space-between; align-items:center; gap:24px }
 .disk-native .button { margin-top:0; flex-shrink:0 }
 @media(max-width:1000px) {
-  .brew-package-row { grid-template-columns:minmax(0,1fr) 105px 95px; gap:16px }
-  .brew-package-row > .button { display:none }
+  .brew-package-row { grid-template-columns:minmax(0,1fr) 105px 95px; gap:8px 16px }
 }
 @media(max-width:650px) {
   .brew-toolbar { flex-direction:column }
   .brew-toolbar > .custom-select,.brew-toolbar > select { max-width:none }
-  .brew-package-row { grid-template-columns:minmax(0,1fr) 85px; gap:12px }
-  .brew-package-row > div:first-child { grid-column:1/-1 }
+  .brew-package-row { grid-template-columns:minmax(0,1fr) 85px; gap:8px 12px }
+  .brew-package-summary { grid-column:1/-1 }
   .brew-version { grid-column:1 }
   .brew-size { grid-column:2 }
   .brew-nav { gap:4px }

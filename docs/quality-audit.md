@@ -1,8 +1,14 @@
 # Quality audit — 2026-11-07
 
-The current 3.5.0 pass removes Care Center, preserves shared cleanup recovery and language functionality, fixes the Ghost Sort border and visible mascot blinks, centers empty states, and repairs fullscreen close/reopen handling. Version 3.5.0 remains unreleased and above main/PyPI 3.2.0. This report describes tested behavior, not a guarantee that every macOS configuration is defect-free.
+The current 3.5.0 pass removes Care Center, preserves shared cleanup recovery and language functionality, fixes the Ghost Sort border and visible mascot blinks, centers empty states, and repairs fullscreen close/reopen handling. Version 3.5.0 was published above main/PyPI 3.2.0, and 3.6.0 prepares the subsequent automation release. This report describes tested behavior, not a guarantee that every macOS configuration is defect-free.
 
-## Current verification
+## Pending automation verification
+
+The subsequent automation update passes **383 Python tests**, including real disposable-cache Trash/restore, recent nested-file protection, running-app exclusion, busy deferral, persistent deadlines, shutdown serialization, notification opt-in, and mocked GitHub release errors. Updated support and workspace browser suites pass, including **128 layout/theme/language combinations**. All 42 packs cover **1,990 messages** with no missing entries or damaged protected tokens. A read-only live GitHub check returned the current stable release correctly. Swift compilation and lifecycle checks pass. An isolated native AppKit acceptance run also verifies the light RGB values, real close/reopen visibility, accessory/regular activation policies, and retained menu bar item. The WebKit support flow passes notification permission, test-message, and completion-message bridge checks using a simulated OS notification handler; actual OS banner delivery is a manual permission/Focus acceptance check. All 42 language selections and 24 WCAG audits pass.
+
+See [the pending feature behavior](automation.md). Native notification banners still depend on the user's macOS authorization and Focus settings. The earlier audit below records the preceding feature pass; cloud translation generation and safe-item selection have since been replaced by offline packs and dedicated safe cleanup.
+
+## Earlier verification
 
 - **370 Python tests passed**, including real temporary-file deletion/restore, protected paths, stale selections, Ghost exclusions, language validation, and version policy.
 - **Nine browser flows** cover workspace navigation, deletion/restore, Toolkit, Homebrew, shared history/language controls, Ghost Files, localization, accessibility, and loading states.

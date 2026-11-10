@@ -1,7 +1,6 @@
-"""Compatibility entry point for the locale audit/generator.
+"""Compatibility entry point for the offline locale audit and merge tool.
 
-Do not pad missing translations with English: that masks incomplete coverage.
-Use --generate with MDC_TRANSLATE_API_KEY to fill actual translations.
+Use --merge with an AI-authored JSON pack, then --check to validate coverage.
 """
 from complete_locales import main
 

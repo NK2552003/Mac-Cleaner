@@ -1,8 +1,9 @@
 import AppKit
 import WebKit
 import Darwin
+import UserNotifications
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate, NSWindowDelegate, WKScriptMessageHandler {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate, NSWindowDelegate, WKScriptMessageHandler, UNUserNotificationCenterDelegate {
     private var window: NSWindow!
     private var webView: WKWebView!
     private var chrome: WindowChrome!
@@ -17,8 +18,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var statusTimer: Timer?
     private var spaceMenuItem: NSMenuItem?
     private var pressureMenuItem: NSMenuItem?
+    private var cleanupStatusMenuItem: NSMenuItem?
     private var cleanMenuItem: NSMenuItem?
     private var translations: [String: String] = [:]
+    private var initialLight = false
     private var menuSources: [ObjectIdentifier: String] = [:]
 
     private func localized(_ source: String) -> String { translations[source] ?? source }
@@ -27,7 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let support = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Mac Deep Cleaner")
         guard let data = try? Data(contentsOf: support.appendingPathComponent("settings.json")),
               let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let language = settings["language"] as? String,
+              let _ = settings["theme"] else { return }
+        initialLight = settings["theme"] as? String == "light"
+        guard let language = settings["language"] as? String,
               language.range(of: "^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8}){0,3}$", options: .regularExpression) != nil,
               language != "en" else { return }
         let variants = language.contains("-") ? [String(language.split(separator: "-")[0]), language] : [language]
@@ -61,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         loadNativeLanguage()
+        UNUserNotificationCenter.current().delegate = self
         setupMenu()
         window = CleanerWindow(contentRect: NSRect(x: 0, y: 0, width: 1320, height: 880),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
@@ -99,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         userContent.add(self, name: "themeChange")
         userContent.add(self, name: "languageChange")
+        userContent.add(self, name: "notifications")
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -106,8 +113,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let container = WorkspaceContentView(frame: window.contentView!.bounds, webView: webView)
         window.contentView = container
         chrome = container.chrome
+        updateTheme(initialLight)
         let starting = localized("Starting Mac Deep Cleaner…").replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
-        webView.loadHTMLString("<body style='background:#181818;color:#f5f5f5;font:15px -apple-system;display:grid;place-items:center;height:90vh'>\(starting)</body>", baseURL: nil)
+        webView.loadHTMLString("<body style='background:\(initialLight ? "#eef1f5" : "#252525");color:\(initialLight ? "#1d2734" : "#f5f5f5");font:15px -apple-system;display:grid;place-items:center;height:90vh'>\(starting)</body>", baseURL: nil)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         setupStatusItem()
@@ -128,17 +136,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         menu.addItem(.separator())
         let open = menu.addItem(withTitle: "Open Mac Deep Cleaner", action: #selector(showWorkspace), keyEquivalent: "")
         open.target = self
-        cleanMenuItem = menu.addItem(withTitle: "Select safe items", action: #selector(menuSafeClean), keyEquivalent: "")
+        cleanMenuItem = menu.addItem(withTitle: "One-click safe cleanup", action: #selector(menuSafeClean), keyEquivalent: "")
         cleanMenuItem?.target = self
         cleanMenuItem?.isEnabled = false
+        cleanupStatusMenuItem = menu.addItem(withTitle: "Safe cleanup", action: nil, keyEquivalent: "")
+        cleanupStatusMenuItem?.isEnabled = false
         let history = menu.addItem(withTitle: "Cleanup history", action: #selector(showHistory), keyEquivalent: "")
         history.target = self
+        let settings = menu.addItem(withTitle: "Settings", action: #selector(showSettings), keyEquivalent: "")
+        settings.target = self
+        let updates = menu.addItem(withTitle: "Check for updates", action: #selector(checkUpdates), keyEquivalent: "")
+        updates.target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Mac Deep Cleaner", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
         item.menu = menu
         translateMenu(menu)
         refreshStatus()
-        statusTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.refreshStatus() }
+        statusTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.refreshStatus() }
     }
 
     private func refreshStatus() {
@@ -155,6 +169,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let label = success ? ([1: "Normal", 2: "Warning", 4: "Critical"][Int(pressure)] ?? "Unknown") : "Unavailable"
         pressureMenuItem?.title = localized("Memory pressure: {state}").replacingOccurrences(of: "{state}", with: localized(label))
         if opened {
+            webView.evaluateJavaScript("typeof BackgroundUI !== 'undefined' && BackgroundUI.poll(); void 0", completionHandler: nil)
+            notificationStatus(enable: false)
+            webView.evaluateJavaScript("typeof BackgroundUI !== 'undefined' ? BackgroundUI.menuStatus() : ''") { [weak self] result, _ in
+                if let title = result as? String, !title.isEmpty { self?.cleanupStatusMenuItem?.title = title }
+            }
             webView.evaluateJavaScript("typeof canSelect === 'function' && canSelect()") { [weak self] result, _ in
                 self?.cleanMenuItem?.isEnabled = (result as? Bool) == true
             }
@@ -163,6 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     @objc private func showWorkspace() {
         presentation.requestShow()
+        NSApp.setActivationPolicy(.regular)
         if window.isMiniaturized { window.deminiaturize(nil) }
         NSApp.unhide(nil)
         window.makeKeyAndOrderFront(nil)
@@ -175,8 +195,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         webView.evaluateJavaScript("typeof HistoryUI !== 'undefined' && HistoryUI.open()", completionHandler: nil)
     }
 
-    @objc private func menuSafeClean() {
+    @objc private func showSettings() {
         showWorkspace()
+        webView.evaluateJavaScript("typeof navigate === 'function' && navigate('settings'); void 0", completionHandler: nil)
+    }
+
+    @objc private func checkUpdates() {
+        showWorkspace()
+        webView.evaluateJavaScript("window.MDCNative?.checkUpdates(); void 0", completionHandler: nil)
+    }
+
+    @objc private func menuSafeClean() {
         cleanMenuItem?.isEnabled = false
         webView.evaluateJavaScript("window.MDCNative?.safeClean(); void 0", completionHandler: nil)
     }
@@ -188,10 +217,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     private func setupMenu() {
         let main = NSMenu()
-        let appItem = NSMenuItem()
+        let appItem = NSMenuItem(title: "Mac Deep Cleaner", action: nil, keyEquivalent: "")
         main.addItem(appItem)
-        let appMenu = NSMenu()
+        let appMenu = NSMenu(title: "Mac Deep Cleaner")
         appMenu.addItem(withTitle: "About Mac Deep Cleaner", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        let updates = appMenu.addItem(withTitle: "Check for updates", action: #selector(checkUpdates), keyEquivalent: "")
+        updates.target = self
+        let settings = appMenu.addItem(withTitle: "Settings", action: #selector(showSettings), keyEquivalent: ",")
+        settings.target = self
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit Mac Deep Cleaner", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
@@ -273,6 +306,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame,
+              let url = message.frameInfo.request.url,
+              url.scheme == "http", url.host == "127.0.0.1", url.port == origin?.port else { return }
+        if message.name == "notifications", let payload = message.body as? [String: Any] {
+            switch payload["action"] as? String {
+            case "authorize":
+                UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] _, _ in
+                    self?.notificationStatus(enable: true)
+                }
+            case "settings":
+                if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") { NSWorkspace.shared.open(url) }
+            case "test", "deliver":
+                let content = UNMutableNotificationContent()
+                content.title = String((payload["title"] as? String ?? "Mac Deep Cleaner").prefix(200))
+                content.body = String((payload["body"] as? String ?? "").prefix(1000))
+                content.sound = .default
+                let identifier = "mdc-" + (payload["id"] as? String ?? UUID().uuidString)
+                UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil)) { [weak self] error in
+                    if error != nil { self?.notificationStatus(enable: false) }
+                }
+            default: break
+            }
+        }
         if message.name == "languageChange", message.frameInfo.isMainFrame,
            let payload = message.body as? [String: Any],
            let messages = payload["messages"] as? [String: String] {
@@ -288,11 +344,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
+    private func notificationStatus(enable: Bool) {
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
+            let status: String
+            switch settings.authorizationStatus {
+            case .authorized, .provisional: status = "Enabled"
+            case .denied: status = "Disabled in System Settings"
+            default: status = "Off"
+            }
+            DispatchQueue.main.async {
+                self?.webView?.callAsyncJavaScript("if (typeof BackgroundUI !== 'undefined') await BackgroundUI.authorization(status, enable)", arguments: ["status": status, "enable": enable], in: nil, in: .page, completionHandler: nil)
+            }
+        }
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound, .list])
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        DispatchQueue.main.async { self.showSettings() }
+        completionHandler()
+    }
+
     func updateTheme(_ isLight: Bool) {
         window.appearance = NSAppearance(named: isLight ? .aqua : .darkAqua)
         window.backgroundColor = isLight
-            ? NSColor(srgbRed: 0xda/255.0, green: 0xda/255.0, blue: 0xda/255.0, alpha: 1)
+            ? NSColor(srgbRed: 0xee/255.0, green: 0xf1/255.0, blue: 0xf5/255.0, alpha: 1)
             : NSColor(srgbRed: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0, alpha: 1)
+        webView.underPageBackgroundColor = window.backgroundColor
         (window.contentView as? WorkspaceContentView)?.updateTheme(isLight: isLight)
     }
 
@@ -337,7 +419,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private func applyPresentation(_ action: WindowPresentation.Action) {
         switch action {
         case .none: break
-        case .hide: window.orderOut(nil)
+        case .hide:
+            window.orderOut(nil)
+            NSApp.setActivationPolicy(.accessory)
         case .exitFullscreen: window.toggleFullScreen(nil)
         case .show: showWorkspace()
         }
@@ -379,19 +463,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard opened, !terminating else { return .terminateNow }
-        webView.evaluateJavaScript("typeof busy !== 'undefined' && (busy || Boolean(S.busy) || (typeof ToolkitUI !== 'undefined' && ToolkitUI.isRunning()) || Boolean(window.GhostUI?.isRunning()) || (typeof HistoryUI !== 'undefined' && HistoryUI.isRunning()) || (typeof I18n !== 'undefined' && I18n.isRunning()))") { value, _ in
-            if (value as? Bool) == true {
-                let alert = NSAlert()
-                alert.messageText = self.localized("An operation is still running")
-                alert.informativeText = self.localized("Wait for the current operation to finish before quitting.")
-                alert.addButton(withTitle: self.localized("Keep running"))
-                alert.runModal()
-                sender.reply(toApplicationShouldTerminate: false)
-            } else {
-                sender.reply(toApplicationShouldTerminate: true)
+        webView.callAsyncJavaScript("if (typeof busy !== 'undefined' && (busy || ToolkitUI.isRunning() || Boolean(window.GhostUI?.isRunning()) || HistoryUI.isRunning() || I18n.isRunning())) return true; return !(await api('/api/prepare-quit', {})).can_quit;", arguments: [:], in: nil, in: .page) { result in
+            switch result {
+            case .success(let value): self.finishQuitCheck(sender, safe: (value as? Bool) == false)
+            case .failure:
+                self.checkEngineCanQuit { safe in self.finishQuitCheck(sender, safe: safe) }
             }
         }
         return .terminateLater
+    }
+
+    /// Recover from a failed web view using the engine's authenticated operation guard.
+    private func checkEngineCanQuit(completion: @escaping (Bool) -> Void) {
+        guard process?.isRunning == true else { completion(true); return }
+        guard let launchURL = origin, let port = launchURL.port,
+              let token = URLComponents(url: launchURL, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "t" })?.value,
+              let endpoint = URL(string: "http://127.0.0.1:\(port)/api/prepare-quit") else {
+            completion(false)
+            return
+        }
+        var request = URLRequest(url: endpoint, timeoutInterval: 5)
+        request.httpMethod = "POST"
+        request.httpBody = Data("{}".utf8)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("http://127.0.0.1:\(port)", forHTTPHeaderField: "Origin")
+        request.setValue(token, forHTTPHeaderField: "X-MDC-Token")
+        request.setValue("mdc_\(port)=\(token)", forHTTPHeaderField: "Cookie")
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            let payload = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let approved = error == nil && (response as? HTTPURLResponse)?.statusCode == 200 && payload?["can_quit"] as? Bool == true
+            DispatchQueue.main.async { completion(approved || self.process?.isRunning != true) }
+        }.resume()
+    }
+
+    /// Finish a quit request only after the engine confirms no operation is active.
+    private func finishQuitCheck(_ sender: NSApplication, safe: Bool) {
+        if !safe {
+            let alert = NSAlert()
+            alert.messageText = localized("An operation is still running")
+            alert.informativeText = localized("Wait for the current operation to finish before quitting.")
+            alert.addButton(withTitle: localized("Keep running"))
+            alert.runModal()
+        }
+        sender.reply(toApplicationShouldTerminate: safe)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
